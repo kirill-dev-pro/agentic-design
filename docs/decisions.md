@@ -586,3 +586,23 @@ has no list of fonts.
 - `tools/font_instances.py` is no longer needed.
 - CFF2 variable fonts and woff2 are not covered.
 
+## 31. Agents get a guide, batches and a linter
+
+**Problem.** Agents rebuilt their picture of a document from `get_document`. On big files
+that is a lot of JSON. Several related edits became many calls and many undo steps. Nothing
+told an agent which conventions the file follows, or what a reviewer would flag.
+
+**Decision.**
+
+- `get_guide` is markdown written for the open document: pages, theme axes, variables
+  grouped by prefix, components, libraries, fonts (missing ones flagged) and how to work
+  with the tools.
+- `batch` applies create, update, delete, move and set_variables operations as one step.
+  The first failure restores the document as it was.
+- An undo step now snapshots the header as well as the layers, so variables, themes, pages
+  and imports undo too. They did not before.
+- `find_nodes` searches by name, type, text, component, variable or subtree.
+- `lint` reports hard-coded colours (naming the variable with that value), missing fonts
+  (once per family), text taller than its box, layers cut off by clipping frames, broken
+  refs, values off whole pixels and empty text.
+

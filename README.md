@@ -132,6 +132,9 @@ components named Button, Card, Input, …, `Page.tsx` for the current page).
 
 ## MCP tools
 
+`get_guide` (what the document holds and how its parts are named; the place to start),
+`batch` (several edits as one undo step, all or nothing), `find_nodes`, `lint` (hard-coded
+colours, missing fonts, text that does not fit, layers cut off, broken refs, off-pixel values),
 `get_document` (with `ids` for subtrees and `depth` for big files), `get_selection`,
 `get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
 (`.pen` nodes, nested `children`), `update_nodes`, `delete_nodes`, `reorder`, `select`,

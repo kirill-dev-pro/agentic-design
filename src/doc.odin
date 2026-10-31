@@ -795,16 +795,40 @@ vars_clear :: proc(doc: ^Document) {
 	clear(&doc.vars)
 }
 
-doc_snapshot :: proc(doc: ^Document) -> []Node {
-	out := make([]Node, len(doc.nodes))
-	for n, i in doc.nodes do out[i] = node_clone(n)
+// An undo step: the layers and the document's header (variables, themes, pages, imports).
+Snapshot :: struct {
+	nodes:    []Node,
+	header:   []Prop,
+	lib_vars: string,
+}
+
+doc_snapshot :: proc(doc: ^Document) -> Snapshot {
+	out := Snapshot{nodes = make([]Node, len(doc.nodes)), header = make([]Prop, len(doc.header)), lib_vars = strings.clone(doc.lib_vars)}
+	for n, i in doc.nodes do out.nodes[i] = node_clone(n)
+	for p, i in doc.header do out.header[i] = Prop{strings.clone(p.key), strings.clone(p.raw)}
 	return out
 }
 
-doc_restore :: proc(doc: ^Document, snap: []Node) {
+doc_restore :: proc(doc: ^Document, snap: Snapshot) {
 	for &n in doc.nodes do node_free(&n)
 	clear(&doc.nodes)
-	for n in snap do append(&doc.nodes, node_clone(n))
+	for n in snap.nodes do append(&doc.nodes, node_clone(n))
+	header_changed := len(snap.header) != len(doc.header) || snap.lib_vars != doc.lib_vars
+	if !header_changed {
+		for p, i in snap.header do if p.key != doc.header[i].key || p.raw != doc.header[i].raw do header_changed = true
+	}
+	if header_changed {
+		for p in doc.header {
+			delete(p.key)
+			delete(p.raw)
+		}
+		clear(&doc.header)
+		for p in snap.header do append(&doc.header, Prop{strings.clone(p.key), strings.clone(p.raw)})
+		delete(doc.lib_vars)
+		doc.lib_vars = strings.clone(snap.lib_vars)
+		doc_resolve_vars(doc)
+		for &n in doc.nodes do node_refresh(doc, &n)
+	}
 	doc_bump(doc)
 }
 

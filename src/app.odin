@@ -79,8 +79,8 @@ App :: struct {
 	hover:         int,
 	drag:          Drag,
 	editing:       int,
-	undo_stack:    [dynamic][]Node,
-	redo_stack:    [dynamic][]Node,
+	undo_stack:    [dynamic]Snapshot,
+	redo_stack:    [dynamic]Snapshot,
 	screen:        [2]f32,
 	dpr:           f32,
 	mouse:         [2]f32,
@@ -133,8 +133,10 @@ app_main :: proc(path: string) {
 	update_title()
 	server_start()
 	onboarding_maybe_start()
+	install_exit_handlers()
+	app_log("start: %s (port %d%s)", app.file_path, server_port(), ", opened by an agent" if pf.no_focus else "")
 
-	for !platform_should_close() {
+	for !platform_should_close() && exit_signal == {} {
 		free_all(context.temp_allocator)
 		font_atlas_trim(app.vg)
 		platform_poll()
@@ -178,6 +180,8 @@ app_main :: proc(path: string) {
 			f64(app.vg.fs.width),
 		}
 	}
+	if exit_signal != {} do app_log("exit: signal %v", exit_signal)
+	else do app_log("exit: window closed")
 	if app.dirty do save_document(app.file_path)
 	for &t in app.tabs do if t.dirty && t.path != "" {
 		data := doc_serialize(&t.doc)
@@ -344,6 +348,11 @@ save_document :: proc(path: string) -> bool {
 // ---------------------------------------------------------------- undo
 
 push_undo :: proc() {
+	if undo_suppressed {
+		// inside a batch: its first snapshot is the one undo step
+		mark_dirty()
+		return
+	}
 	append(&app.undo_stack, doc_snapshot(&app.doc))
 	if len(app.undo_stack) > 200 {
 		free_snapshot(app.undo_stack[0])
@@ -354,9 +363,15 @@ push_undo :: proc() {
 	mark_dirty()
 }
 
-free_snapshot :: proc(snap: []Node) {
-	for &n in snap do node_free(&n)
-	delete(snap)
+free_snapshot :: proc(snap: Snapshot) {
+	for &n in snap.nodes do node_free(&n)
+	delete(snap.nodes)
+	for p in snap.header {
+		delete(p.key)
+		delete(p.raw)
+	}
+	delete(snap.header)
+	delete(snap.lib_vars)
 }
 
 undo :: proc() {

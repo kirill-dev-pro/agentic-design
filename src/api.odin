@@ -35,6 +35,14 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 		api_get_document(&b, params, true)
 	case "get_variables":
 		api_get_variables(&b)
+	case "batch":
+		e = api_batch(&b, params)
+	case "find_nodes":
+		e = api_find_nodes(&b, params)
+	case "get_guide":
+		api_get_guide(&b)
+	case "lint":
+		e = api_lint(&b, params)
 	case "set_libraries":
 		e = api_set_libraries(&b, params)
 	case "get_styles":
