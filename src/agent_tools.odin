@@ -238,7 +238,7 @@ api_get_guide :: proc(b: ^strings.Builder) {
 	comps := make([dynamic]string, context.temp_allocator)
 	for &n in doc.nodes do if n.reusable && !n.imported do append(&comps, fmt.tprintf("%s (%s)", node_label(&n), n.id))
 	if len(comps) > 0 {
-		fmt.sbprintf(&g, "\n## Components (%d)\nInsert as {\"type\": \"ref\", \"ref\": \"<id>\"}; override parts with \"descendants\": {\"<child id>\": {properties}}.\n", len(comps))
+		fmt.sbprintf(&g, "\n## Components (%d)\nInsert as {{\"type\": \"ref\", \"ref\": \"<id>\"}}; override parts with \"descendants\": {{\"<child id>\": {{properties}}}}.\n", len(comps))
 		for c in comps[:min(len(comps), 80)] do fmt.sbprintf(&g, "- %s\n", c)
 		if len(comps) > 80 do fmt.sbprintf(&g, "- … %d more (find_nodes can search them)\n", len(comps) - 80)
 	}
@@ -373,8 +373,10 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		// off whole pixels (set values, not the result of a layout)
 		frac :: proc(v: f32) -> bool {return abs(v - math.round(v)) >= 0.01}
 		off := make([dynamic]string, context.temp_allocator)
-		if prop_index(&n, "x") >= 0 && frac(n.pos.x) do append(&off, fmt.tprintf("x %s", num_text(n.pos.x)))
-		if prop_index(&n, "y") >= 0 && frac(n.pos.y) do append(&off, fmt.tprintf("y %s", num_text(n.pos.y)))
+		// x and y mean nothing inside a flex layout
+		placed := !in_flow(doc, &n)
+		if placed && prop_index(&n, "x") >= 0 && frac(n.pos.x) do append(&off, fmt.tprintf("x %s", num_text(n.pos.x)))
+		if placed && prop_index(&n, "y") >= 0 && frac(n.pos.y) do append(&off, fmt.tprintf("y %s", num_text(n.pos.y)))
 		if n.width.mode == .Fixed && n.width.has_value && frac(n.width.value) && n.kind != .Path do append(&off, fmt.tprintf("width %s", num_text(n.width.value)))
 		if n.height.mode == .Fixed && n.height.has_value && frac(n.height.value) && n.kind != .Path do append(&off, fmt.tprintf("height %s", num_text(n.height.value)))
 		if len(off) > 0 do issue(b, &count, limit, &n, "fractional", fmt.tprintf("not on whole pixels: %s", strings.join(off[:], ", ", context.temp_allocator)))
@@ -386,3 +388,103 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	fmt.sbprintf(b, `],"count":%d}}`, count)
 	return ""
 }
+
+// ---------------------------------------------------------------- rename_references
+
+// Points references at other names in every layer and variable: variables ("$old" →
+// "$new"), instance refs (an instance moved to "alias:id" also gets its descendant keys
+// prefixed "alias:", as pen.dev names the parts of a library component), or, with
+// `library`, every variable and component that the imported library also has.
+api_rename_references :: proc(b: ^strings.Builder, params: json.Object) -> string {
+	doc := &app.doc
+	vars := make(map[string]string, 16, context.temp_allocator)
+	refs := make(map[string]string, 16, context.temp_allocator)
+	if vm, ok := params["variables"].(json.Object); ok {
+		for k, v in vm do vars[strings.trim_prefix(k, "$")] = strings.trim_prefix(string(v.(json.String) or_else ""), "$")
+	}
+	if rm, ok := params["refs"].(json.Object); ok {
+		for k, v in rm do refs[k] = string(v.(json.String) or_else "")
+	}
+	if alias, ok := params["library"].(json.String); ok {
+		if string(alias) not_in doc_imports(doc) do return fmt.tprintf("no imported library \"%s\"", alias)
+		prefix := fmt.tprintf("%s:", alias)
+		for &n in doc.nodes do if n.imported && strings.has_prefix(n.id, prefix) do refs[n.id[len(prefix):]] = n.id
+		for name in doc.var_defs do if strings.has_prefix(name, prefix) do vars[name[len(prefix):]] = name
+	}
+	if len(vars) == 0 && len(refs) == 0 do return "pass variables, refs or library"
+	push_undo()
+	R :: struct {
+		vars, refs: ^map[string]string,
+		changes:    int,
+	}
+	r := R{&vars, &refs, 0}
+	rewrite :: proc(r: ^R, v: json.Value) -> json.Value {
+		#partial switch x in v {
+		case json.Object:
+			out := make(json.Object, len(x), context.temp_allocator)
+			old_ref := string(x["ref"].(json.String) or_else "")
+			new_ref, renamed := r.refs[old_ref]
+			// "c-btn" → "ui:c-btn": the parts are "ui:<child>" too
+			key_prefix := new_ref[:len(new_ref) - len(old_ref)] if renamed && strings.has_suffix(new_ref, old_ref) else ""
+			for k, val in x {
+				switch {
+				case k == "ref" && renamed:
+					out[k] = json.String(new_ref)
+					r.changes += 1
+				case k == "descendants" && key_prefix != "":
+					d, _ := val.(json.Object)
+					m := make(json.Object, len(d), context.temp_allocator)
+					for path, ov in d {
+						parts := strings.split(path, "/", context.temp_allocator)
+						for &p in parts do if !strings.has_prefix(p, key_prefix) do p = fmt.tprintf("%s%s", key_prefix, p)
+						m[strings.join(parts, "/", context.temp_allocator)] = rewrite(r, ov)
+					}
+					out[k] = m
+					r.changes += 1
+				case:
+					out[k] = rewrite(r, val)
+				}
+			}
+			return out
+		case json.Array:
+			out := make(json.Array, len(x), context.temp_allocator)
+			for item, i in x do out[i] = rewrite(r, item)
+			return out
+		case json.String:
+			if strings.has_prefix(string(x), "$") {
+				if to, ok := r.vars[string(x)[1:]]; ok {
+					r.changes += 1
+					return json.String(fmt.tprintf("$%s", to))
+				}
+			}
+		}
+		return v
+	}
+	layers := 0
+	for &n in doc.nodes {
+		if n.imported do continue
+		obj := make(json.Object, len(n.props), context.temp_allocator)
+		for p in n.props {
+			if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do obj[p.key] = v
+		}
+		before := r.changes
+		out := rewrite(&r, obj).(json.Object)
+		if r.changes == before do continue
+		layers += 1
+		for k, v in out {
+			a := strings.builder_make(context.temp_allocator)
+			c := strings.builder_make(context.temp_allocator)
+			write_json_value(&a, obj[k])
+			write_json_value(&c, v)
+			if strings.to_string(a) != strings.to_string(c) do node_set(doc, &n, k, v)
+		}
+	}
+	// variables that point at renamed ones
+	defs := doc_variables(doc)
+	before := r.changes
+	new_defs := rewrite(&r, defs).(json.Object)
+	if r.changes > before do doc_write_variables(doc, new_defs)
+	fmt.sbprintf(b, `{{"layers":%d,"variables":%d}}`, layers, r.changes - before if r.changes > before else 0)
+	return ""
+}
+

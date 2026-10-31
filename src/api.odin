@@ -43,6 +43,8 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 		api_get_guide(&b)
 	case "lint":
 		e = api_lint(&b, params)
+	case "rename_references":
+		e = api_rename_references(&b, params)
 	case "set_libraries":
 		e = api_set_libraries(&b, params)
 	case "get_styles":
@@ -147,6 +149,13 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 			scale = f32(params["scale"].(json.Float) or_else 2),
 			view  = params["view"].(json.Boolean) or_else false,
 			path  = strings.clone(string(params["path"].(json.String) or_else ""), context.temp_allocator),
+		}
+		if th, has := params["theme"].(json.Object); has {
+			for k, v in th {
+				if shot.themes == len(shot.theme) do break
+				shot.theme[shot.themes] = {strings.clone(k, context.temp_allocator), strings.clone(string(v.(json.String) or_else ""), context.temp_allocator)}
+				shot.themes += 1
+			}
 		}
 		if f, has := params["format"].(json.String); has {
 			ok: bool
@@ -400,6 +409,8 @@ Shot :: struct {
 	view:   bool, // capture the window as shown, after the regular frame
 	format: Export_Format,
 	path:   string, // write the image here instead of returning it
+	theme:  [8][2]string, // theme values to render with (axis, value), whatever the window shows
+	themes: int,
 }
 
 shot: Shot
@@ -449,6 +460,20 @@ render_screenshot :: proc() {
 	}
 	pad: f32 = 0 if target != nil else 20
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
+	// another theme just for this image: switch, draw, switch back
+	saved_theme := make(map[string]string, 4, context.temp_allocator)
+	if shot.themes > 0 {
+		for k, v in app.theme do saved_theme[k] = v
+		for t in shot.theme[:shot.themes] do app.theme[t[0]] = t[1]
+		doc_retheme(&app.doc)
+		layout_document(&app.doc)
+	}
+	defer if shot.themes > 0 {
+		clear(&app.theme)
+		for k, v in saved_theme do app.theme[k] = v
+		doc_retheme(&app.doc)
+		layout_document(&app.doc)
+	}
 	pixels, ow, oh, rok := render_region(r, shot.scale, target, {1, 1, 1, 1})
 	if !rok {
 		finish_request(req, api_error("node too small to capture"))
@@ -646,7 +671,8 @@ api_set_variables :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	vars, has_vars := params["variables"].(json.Object)
 	show, has_show := params["show"].(json.Object)
 	if !has_themes && !has_vars && !has_show do return "pass themes, variables or show"
-	push_undo()
+	// showing another theme does not change the document
+	if has_themes || has_vars do push_undo()
 	if has_themes {
 		_ = doc_theme_axes(doc)
 		theme_axes_free(&doc.theme_axes)
@@ -683,7 +709,7 @@ api_set_variables :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		}
 	}
 	doc_retheme(doc)
-	mark_dirty()
+	if has_themes || has_vars do mark_dirty()
 	fmt.sbprintf(b, `{{"variables":%d,"themes":%d}}`, len(doc_variables(doc)), len(doc_theme_axes(doc)))
 	return ""
 }

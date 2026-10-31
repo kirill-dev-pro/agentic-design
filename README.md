@@ -43,7 +43,9 @@ this app does not.
 
 Design notes, decisions and the test recipe are in [`docs/`](docs/README.md); what broke
 while using the app for real work is logged in [`docs/dogfooding.md`](docs/dogfooding.md).
-`designs/sample-screens.pen` is a full design system built that way.
+`designs/sample.lib.pen` is a full design system built that way (tokens, foundations,
+28 components), and `designs/sample-screens.pen` holds the product's screens, importing it
+as a library.
 
 ## Build and run
 
@@ -133,7 +135,8 @@ components named Button, Card, Input, …, `Page.tsx` for the current page).
 ## MCP tools
 
 `get_guide` (what the document holds and how its parts are named; the place to start),
-`batch` (several edits as one undo step, all or nothing), `find_nodes`, `lint` (hard-coded
+`batch` (several edits as one undo step, all or nothing), `find_nodes`, `rename_references`
+(repoint variables and refs; with `library`, move a file onto an imported library), `lint` (hard-coded
 colours, missing fonts, text that does not fit, layers cut off, broken refs, off-pixel values),
 `get_document` (with `ids` for subtrees and `depth` for big files), `get_selection`,
 `get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
@@ -141,7 +144,8 @@ colours, missing fonts, text that does not fit, layers cut off, broken refs, off
 `zoom_to_fit`, `screenshot` (a node, the canvas, or the whole window with `view: true`),
 `undo`, `redo`, `save`, `open`, `set_variables` (variables, theme axes and the shown theme),
 `set_pages`, `set_libraries` (import other .pen files as libraries), `export_code` (`html` or
-`react`). `screenshot` also writes JPEG, WEBP or PDF files (`format`, `path`).
+`react`). `screenshot` also writes JPEG, WEBP or PDF files (`format`, `path`) and renders
+in a given theme (`theme`) whatever the window shows.
 
 The first time the app opens, an onboarding walks through the app and connects agents.
 It detects Claude Code, Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf,
