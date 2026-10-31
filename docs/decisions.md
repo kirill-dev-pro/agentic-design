@@ -677,3 +677,41 @@ whole core: about 9 s of CPU in 10 s.
 
 **Consequences.** An idle window uses about 1% of a core. A request is answered within a
 few milliseconds.
+
+## 35. Agents have cursors on the canvas, as in pen.dev
+
+**Problem.** An agent's changes appeared out of nowhere. Nothing showed who was working,
+or where. Other people on the canvas will need the same.
+
+**Decision.**
+
+- The MCP proxy sends the client's `clientInfo` with each request. The window keeps a
+  cursor per agent session, named and coloured after the client.
+- The layers a request touches are found by comparing the document before and after it
+  (a hash of each layer's properties and parent). Methods need no bookkeeping of their own.
+  The cursor visits up to six of them in turn, 0.45 s apart. Each flashes as the cursor
+  gets there.
+- Motion, flash and glow follow pen.dev's code (AgentCursorMotion, addFlash,
+  renderGeneratingEffects):
+  - exponential approach and a slow sway at rest;
+  - a ring closing in for 0.2 s, holding 0.4 s and fading for 0.3 s, with a sweep of colour
+    on new layers;
+  - two soft lights circling in `placeholder` frames.
+  It differs in four ways:
+  - the approach is a little quicker;
+  - the cursor stays 15 s rather than 5, since agents think between calls;
+  - deleted layers fold away;
+  - a cursor out of view waits at the canvas edge.
+- `presence` on the control socket places anyone else's cursor, for a multiplayer link
+  later.
+- None of it is drawn into screenshots, exports or thumbnails.
+
+**Consequences.**
+
+- Animation costs frames. They are drawn only while something moves: at the display rate
+  for travel and flashes, 20 fps for a resting cursor, none once it has faded. The frame
+  rate is capped at the display's refresh even for input, since a covered window gets no
+  vsync.
+- Only pointer moves that macOS sends to the window count as input. The pointer position
+  read each frame changes when the mouse moves over other apps. Before this, that kept an
+  open window drawing at full rate whenever the mouse moved anywhere.

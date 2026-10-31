@@ -45,6 +45,8 @@ Platform :: struct {
 	cursors:        [Cursor]glfw.CursorHandle,
 	cursor:         Cursor,
 	first_frame:    bool,
+	refresh:        f64, // the display's frames per second (frames are never drawn faster)
+	pointer_moved:  bool, // macOS reported the pointer moving over the window, or entering or leaving it
 }
 
 pf: Platform
@@ -74,11 +76,15 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 	if quiet do platform_order_back()
 	glfw.MakeContextCurrent(pf.window)
 	glfw.SwapInterval(1)
+	pf.refresh = 60
+	if mode := glfw.GetVideoMode(glfw.GetPrimaryMonitor()); mode != nil && mode.refresh_rate > 0 do pf.refresh = f64(mode.refresh_rate)
 	glfw.SetKeyCallback(pf.window, key_callback)
 	glfw.SetCharCallback(pf.window, char_callback)
 	glfw.SetDropCallback(pf.window, drop_callback)
 	glfw.SetMouseButtonCallback(pf.window, mouse_button_callback)
 	glfw.SetScrollCallback(pf.window, scroll_callback)
+	glfw.SetCursorPosCallback(pf.window, proc "c" (window: glfw.WindowHandle, x, y: f64) {pf.pointer_moved = true})
+	glfw.SetCursorEnterCallback(pf.window, proc "c" (window: glfw.WindowHandle, entered: c.int) {pf.pointer_moved = true})
 	// live resize: draw at every size step instead of letting macOS stretch the last frame
 	glfw.SetFramebufferSizeCallback(pf.window, framebuffer_size_callback)
 	glfw.SetWindowRefreshCallback(pf.window, window_refresh_callback)
@@ -159,6 +165,7 @@ platform_poll :: proc(wait: f64 = 0) {
 	for k in pf.synthetic_keys do pf.key_down[k] = false
 	clear(&pf.synthetic_keys)
 	pf.mouse_prev = pf.mouse
+	pf.pointer_moved = false
 	pf.polling = true
 	if wait > 0 do glfw.WaitEventsTimeout(wait)
 	else do glfw.PollEvents()
@@ -176,7 +183,10 @@ platform_poll :: proc(wait: f64 = 0) {
 // Whether anything came in since the last frame: a key, a click, the pointer moving,
 // scrolling, a gesture, typing or a dropped file (or a button still held).
 platform_had_input :: proc() -> bool {
-	if pf.mouse != pf.mouse_prev || pf.wheel != {} || pf.scroll != {} || pf.magnify != 0 || pf.smart do return true
+	// the pointer is read every frame wherever it is (over other apps too); only the moves
+	// macOS sends to this window count
+	if pf.pointer_moved || (pf.synthetic && pf.mouse != pf.mouse_prev) do return true
+	if pf.wheel != {} || pf.scroll != {} || pf.magnify != 0 || pf.smart do return true
 	if len(pf.chars) > 0 || len(pf.dropped) > 0 do return true
 	for b in pf.button_down do if b do return true
 	for b in pf.button_pressed do if b do return true

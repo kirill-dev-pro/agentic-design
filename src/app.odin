@@ -140,7 +140,15 @@ app_main :: proc(path: string) {
 	for !platform_should_close() && exit_signal == {} {
 		free_all(context.temp_allocator)
 		font_atlas_trim(app.vg)
-		platform_poll(idle_wait())
+		wait := idle_wait()
+		if wait == 0 {
+			// full rate, but never faster than the display: vsync does not hold back a
+			// window covered by others, and pointer events can come faster than frames
+			if rest := frame_started + 1 / pf.refresh - glfw.GetTime(); rest > 0.0005 do time.sleep(time.Duration(rest * 1e9))
+		}
+		platform_poll(wait)
+		frame_started = glfw.GetTime()
+		frames_drawn += 1
 		if platform_had_input() do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
 		fb := frame_size()
 		if added := fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
@@ -168,6 +176,7 @@ app_main :: proc(path: string) {
 		autosave()
 		t2 := time.tick_now()
 
+		presence_tick(glfw.GetTime())
 		if shot_pending() do render_screenshot()
 		thumbs_render()
 		export_render()
@@ -276,9 +285,17 @@ FONT_ATLAS_MAX :: 2048
 ACTIVE_AFTER_INPUT :: 0.5 // seconds of full frame rate after the last input
 
 active_until: f64
+frame_started: f64
+frames_drawn: int // since the last `perf` request
 
 idle_wait :: proc() -> f64 {
-	if glfw.GetTime() < active_until || shot.req != nil || len(thumb_queue) > 0 || export_pending || copy_png_pending || app.needs_layout do return 0
+	now := glfw.GetTime()
+	if now < active_until || shot.req != nil || len(thumb_queue) > 0 || export_pending || copy_png_pending || app.needs_layout do return 0
+	// agents' cursors and flashes (presence.odin): paced, since a covered window gets no vsync
+	if busy, fast := presence_animating(now); busy {
+		step := 1 / pf.refresh if fast else 1.0 / 20
+		return max(frame_started + step - now, 0.001)
+	}
 	into := time.now()._nsec % 500_000_000 // carets blink on every half second
 	return f64(500_000_000 - into) / 1e9 + 0.002
 }
@@ -997,6 +1014,7 @@ draw_canvas :: proc() {
 	blur_active = false
 	cull_rect = {}
 	nvg.Restore(vg)
+	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
 
 	// titles of top-level frames
 	nvg.FontFace(vg, "ui")
@@ -1106,6 +1124,7 @@ draw_canvas :: proc() {
 		nvg.StrokeWidth(vg, 1)
 		nvg.Stroke(vg)
 	}
+	draw_cursors(vg)
 	nvg.Restore(vg)
 }
 

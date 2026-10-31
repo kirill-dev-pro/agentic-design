@@ -19,10 +19,20 @@ import stbiw "vendor:stb/image"
 // Nodes are exchanged in the .pen format itself: the same objects and
 // properties as in the file, with x/y relative to the parent.
 
+// An agent's request also moves its cursor and flashes what it touched (presence.odin):
+// the layers are compared before and after the requests that change them.
 api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 	root, err := json.parse_string(req.body, .JSON, false, context.temp_allocator)
 	if err != nil do return api_error("invalid JSON request"), false
 	obj, _ := root.(json.Object)
+	before: map[int]Node_Sig
+	if presence_wants_signature(obj) do before = doc_signature(&app.doc)
+	response, deferred = api_dispatch_request(req, obj)
+	presence_after_request(obj, before, deferred || strings.has_prefix(response, `{"ok":true`))
+	return
+}
+
+api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: string, deferred: bool) {
 	method := string(obj["method"].(json.String) or_else "")
 	params, _ := obj["params"].(json.Object)
 
@@ -71,9 +81,11 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 		fmt.sbprintf(&b, `{{"open":%v,"step":%d}}`, onboarding.open, onboarding.step)
 	case "set_pages":
 		e = api_set_pages(&b, params)
+	case "presence":
+		e = api_presence(&b, params)
 	case "perf":
-		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), ghost_rebuilds, measure_calls, text_measures)
-		ghost_rebuilds, measure_calls, text_measures = 0, 0, 0
+		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d,"frames":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), ghost_rebuilds, measure_calls, text_measures, frames_drawn)
+		ghost_rebuilds, measure_calls, text_measures, frames_drawn = 0, 0, 0, 0
 	case "input":
 		// Synthetic mouse/keyboard events for driving the interface from tests.
 		inject_input(params)

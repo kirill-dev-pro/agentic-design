@@ -155,6 +155,22 @@ VS Code and Kiro, and registers the MCP server with each one in a click. It is a
 `get_document` returns the tree as stored in the file plus `bounds` — the absolute box of
 every node after layout — so the agent can see where things ended up.
 
+## Agents on the canvas
+
+Each agent working through MCP has a cursor with its name on the canvas, as in pen.dev
+(Claude in clay, Codex in green, and so on; the proxy names it from the client's
+`clientInfo`). The cursor glides to each layer a request creates, changes or deletes, in
+turn, and the layer flashes in the agent's colour as it gets there. New layers get a sweep
+of colour, and deleted ones fold away where they were. A capture flashes too. Frames marked
+`placeholder` glow while an agent works on them. A cursor outside the view waits at the
+edge, pointing the way, and fades 15 s after the agent's last call. Settings → Agent cursors
+turns all of it off.
+
+The control socket's `presence` request sets a cursor for anyone else, for a future
+multiplayer link: `{"id", "name", "color", "x", "y", "kind": "person"}`, or `"leave": true`.
+A socket request with an `"agent": {"id", "client"}` field next to `method` acts as that
+agent. Tests use it to drive the cursors.
+
 ## Testing without a mouse
 
 The control socket (`127.0.0.1:4410`, newline-delimited JSON) has an `input` method that
@@ -178,6 +194,7 @@ backtrace if it crashes. The full recipe is in [docs/testing.md](docs/testing.md
 | `src/widgets.odin` | the widget library: buttons, fields, menus, color picker, dialogs, tooltips |
 | `src/ui.odin` | tab bar, sidebar, tool strip and inspector built from the widgets |
 | `src/server.odin` | local control socket (requests run on the main thread) |
+| `src/presence.odin` | agents' and other people's cursors, flashes on what agents touch, placeholder glow |
 | `src/api.odin` | control API and screenshots |
 | `src/mcp.odin` | stdio MCP server |
 | `src/tabs.odin` | tabs, recent files, thumbnails |

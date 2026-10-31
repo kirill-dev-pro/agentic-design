@@ -7,6 +7,7 @@ import "core:fmt"
 import "core:net"
 import "core:os"
 import "core:strings"
+import "core:sys/posix"
 import "core:time"
 
 // `agentic-design mcp`: an MCP server over stdio. It forwards tool calls to the running
@@ -53,6 +54,9 @@ TOOLS_JSON :: `[
 {"name":"export_code","description":"Generate code for the current page: 'html' gives index.html + styles.css (variables as CSS custom properties, themes as [data-theme] blocks); 'react' gives components.tsx (one function per component, props from instance overrides, shadcn/ui for components named Button, Card, Input, ...), Page.tsx and globals.css with Tailwind classes. Returns the file contents; with dir, also writes them there.","inputSchema":{"type":"object","properties":{"format":{"type":"string","enum":["html","react"]},"dir":{"type":"string"}}}}
 ]`
 
+// The MCP client this proxy serves (its `clientInfo`), sent along with every request.
+mcp_client, mcp_client_title: string
+
 mcp_main :: proc() {
 	posix_ignore_sigpipe()
 	reader: bufio.Reader
@@ -94,6 +98,11 @@ mcp_handle :: proc(line: string) {
 	fmt.sbprintf(&b, `{{"jsonrpc":"2.0","id":%s,`, id)
 	switch method {
 	case "initialize":
+		// who is calling: requests carry it, so the window shows the agent's cursor
+		if info, ok := params["clientInfo"].(json.Object); ok {
+			mcp_client = strings.clone(string(info["name"].(json.String) or_else ""))
+			mcp_client_title = strings.clone(string(info["title"].(json.String) or_else ""))
+		}
 		version := string(params["protocolVersion"].(json.String) or_else "2025-06-18")
 		fmt.sbprintf(&b, `"result":{{"protocolVersion":"%s","capabilities":{{"tools":{{}}}},"serverInfo":{{"name":"agentic-design","version":"0.2.0"}},"instructions":`, version)
 		json_write_string(&b, MCP_INSTRUCTIONS)
@@ -126,7 +135,13 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 		json_write_string(b, msg)
 		strings.write_string(b, "}]}")
 	}
-	request := fmt.tprintf(`{{"method":"%s","params":%s}}`, name, args_json)
+	agent := strings.builder_make(context.temp_allocator)
+	fmt.sbprintf(&agent, `{{"id":"%d","client":`, posix.getpid())
+	json_write_string(&agent, mcp_client)
+	strings.write_string(&agent, `,"title":`)
+	json_write_string(&agent, mcp_client_title)
+	strings.write_string(&agent, "}")
+	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s}}`, name, args_json, strings.to_string(agent))
 	response, ok := app_request(request)
 	if !ok {
 		tool_error(b, "Could not reach the Agentic Design window. It failed to start or is not responding.")

@@ -19,6 +19,7 @@ Settings :: struct {
 	pixel_grid:   bool, // a 1-unit grid at high zoom (⌘')
 	snap_pixels:  bool, // whole numbers for positions and sizes set by dragging
 	smart_guides: bool,
+	agent_cursors: bool, // agents' cursors, flashes and placeholder glow (presence.odin)
 }
 
 settings := Settings {
@@ -27,6 +28,7 @@ settings := Settings {
 	pixel_grid   = true,
 	snap_pixels  = true,
 	smart_guides = true,
+	agent_cursors = true,
 }
 
 settings_open, shortcuts_open: bool
@@ -47,6 +49,7 @@ settings_load :: proc() {
 	if b, ok := obj["pixelGrid"].(json.Boolean); ok do settings.pixel_grid = bool(b)
 	if b, ok := obj["snapToPixels"].(json.Boolean); ok do settings.snap_pixels = bool(b)
 	if b, ok := obj["smartGuides"].(json.Boolean); ok do settings.smart_guides = bool(b)
+	if b, ok := obj["agentCursors"].(json.Boolean); ok do settings.agent_cursors = bool(b)
 }
 
 // Test windows keep the user's settings as they are.
@@ -55,8 +58,8 @@ settings_save :: proc() {
 	_ = os.make_directory_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v\n}}\n",
-		s.onboarded, num_text(s.nudge), num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides,
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v\n}}\n",
+		s.onboarded, num_text(s.nudge), num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors,
 	)
 	_ = os.write_entire_file(settings_path(), text)
 }
@@ -110,7 +113,7 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	saved_pass := ui.overlay_pass
 	ui.overlay_pass = true
 	defer ui.overlay_pass = saved_pass
-	sheet, open := sheet_begin(vg, "Settings", 460, 380)
+	sheet, open := sheet_begin(vg, "Settings", 460, 440)
 	if !open {
 		if ui.focus != "" do field_commit()
 		settings_open = false
@@ -132,10 +135,11 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 		name, hint: string,
 		value:      ^bool,
 	}
-	toggles := [3]Toggle {
+	toggles := [4]Toggle {
 		{"Pixel grid", "A grid of whole units at 800% and closer  ⌘'", &settings.pixel_grid},
 		{"Snap to pixels", "Dragging and resizing land on whole units", &settings.snap_pixels},
 		{"Smart guides", "Align to edges and centres of neighbours (hold ⌃ to skip)", &settings.smart_guides},
+		{"Agent cursors", "Show where agents work: their cursors, and flashes on what they change", &settings.agent_cursors},
 	}
 	for t in toggles {
 		if checkbox(vg, {x, y, w, 22}, t.name, t.value^) {
