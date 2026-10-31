@@ -33,6 +33,8 @@ draw_ui :: proc() {
 	draw_component_drag_ghost(vg)
 	components_drag_update()
 	draw_variables_table(vg)
+	draw_settings_sheet(vg)
+	draw_shortcuts_sheet(vg)
 	draw_onboarding(vg)
 	draw_status(vg)
 	widgets_end_frame(vg)
@@ -332,12 +334,66 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 			if app.doc.nodes[i].parent == uid do row(vg, &app.doc.nodes[i], depth + 1, y, rows)
 		}
 	}
+	// find layers (⌘F): a flat list of matches on this page instead of the tree
+	field(vg, 0, "layers.search", "", {16, y^, LEFT_W - 32, 28}, ui.layer_search, placeholder = "Find layers  ⌘F", icon = .Search)
+	if field_is_focused(0, "layers.search") {
+		delete(ui.layer_search)
+		ui.layer_search = strings.clone(strings.to_string(ui.buf))
+	}
+	y^ += 36
+	if needle := strings.to_lower(strings.trim_space(ui.layer_search), context.temp_allocator); needle != "" {
+		draw_layer_matches(vg, needle, y)
+		return
+	}
 	for i := len(app.doc.nodes) - 1; i >= 0; i -= 1 {
 		if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do row(vg, &app.doc.nodes[i], 0, y, &rows)
 	}
 	layers_drag(vg, rows[:])
 	if len(app.doc.nodes) == 0 {
 		label(vg, 24, y^ + ROW_H / 2, "Empty page — press F to draw a frame", TEXT_DIM)
+		y^ += ROW_H
+	}
+}
+
+// Layers on the current page whose name, text or type contains `needle`, with the frame
+// they are in. Click selects, double click also zooms to the layer.
+draw_layer_matches :: proc(vg: ^nvg.Context, needle: string, y: ^f32) {
+	count := 0
+	for &n in app.doc.nodes {
+		if !on_page(n.uid) do continue
+		hay := strings.to_lower(fmt.tprintf("%s\x00%s\x00%s", node_label(&n), n.content, n.type_name), context.temp_allocator)
+		if !strings.contains(hay, needle) do continue
+		count += 1
+		r := Rect{8, y^, LEFT_W - 16, ROW_H}
+		sel := is_selected(n.uid)
+		if sel do fill_rect(vg, r, ACTIVE_BG, 6)
+		else if in_rect(r, app.mouse) do fill_rect(vg, r, HOVER_BG, 6)
+		if n.kind == .Text do label(vg, r.x + 20, r.y + ROW_H / 2, "Aa", TEXT_DIM, 12, false, .CENTER)
+		else do draw_icon(vg, kind_icon(&n), r.x + 20, r.y + ROW_H / 2, TEXT_DIM, 14)
+		nvg.Save(vg)
+		nvg.IntersectScissor(vg, r.x, r.y, r.w - 8, r.h)
+		name := node_label(&n)
+		label(vg, r.x + 36, r.y + ROW_H / 2, name, TEXT_FG, 12)
+		if p, _ := doc_find_uid(&app.doc, n.parent); p != nil {
+			label(vg, r.x + 44 + text_width(vg, name, 12), r.y + ROW_H / 2, node_label(p), TEXT_DIM, 11)
+		}
+		nvg.Restore(vg)
+		if r.y + r.h > TAB_H + 88 && clicked(r) {
+			double := ui.tree_click_uid == n.uid && time.duration_seconds(time.since(ui.tree_click)) < 0.35
+			ui.tree_click, ui.tree_click_uid = time.now(), n.uid
+			if mod_shift() {
+				if !sel do append(&app.sel, n.uid)
+			} else {
+				clear(&app.sel)
+				append(&app.sel, n.uid)
+			}
+			if double do if b, ok := bounds_of({n.uid}); ok do zoom_to_rect(b)
+		}
+		y^ += ROW_H
+		if count >= 200 do break
+	}
+	if count == 0 {
+		label(vg, 24, y^ + ROW_H / 2, "No layers match", TEXT_DIM, 12)
 		y^ += ROW_H
 	}
 }
@@ -623,6 +679,10 @@ draw_page_section :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 	label(vg, x + 16, y^ + 8, fmt.tprintf("Listening on 127.0.0.1:%d", server_port()) if server_listening else "Server is off", TEXT_DIM)
 	y^ += 26
 	if button(vg, {x, y^, w, 30}, "Connect agents") do onboarding_start(1)
+	y^ += 38
+	half := (w - 8) / 2
+	if button(vg, {x, y^, half, 30}, "Settings  ⌘,") do settings_open = true
+	if button(vg, {x + half + 8, y^, half, 30}, "Shortcuts  ?") do shortcuts_open = true
 	y^ += 46
 
 	section(vg, x, y, "Document", fmt.tprintf("%d layers · %d variables", len(app.doc.nodes), len(app.doc.vars)))
@@ -630,7 +690,8 @@ draw_page_section :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 		"V  H  F  R  E  T   tools",
 		"Space + drag / Scroll   pan",
 		"Cmd + scroll   zoom",
-		"Cmd 0 / Cmd 1   fit / 100%",
+		"Shift 1 / Cmd 0   fit / 100%",
+		"Hold Z / Option   zoom / measure",
 		"Cmd D   duplicate",
 		"Cmd Z / Shift Cmd Z   undo / redo",
 		"Double click text   edit",
@@ -1095,7 +1156,8 @@ field_apply :: proc() {
 	text := strings.to_string(ui.buf)
 	if ui.focus_uid == 0 {
 		if variables_table_apply(ui.focus, text) do return
-		if ui.focus == "vt.search" || ui.focus == "comp.search" do return
+		if settings_field_apply(ui.focus, text) do return
+		if ui.focus == "vt.search" || ui.focus == "comp.search" || ui.focus == "layers.search" do return
 		if ui.focus == "picker.hex" || ui.focus == "picker.alpha" {
 			picker_apply_text(ui.focus, text)
 			return

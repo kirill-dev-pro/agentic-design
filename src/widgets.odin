@@ -61,6 +61,7 @@ UI :: struct {
 		active: bool,
 	},
 	comp_search:    string,
+	layer_search:   string,
 	pages_shut:     bool,
 	files:          [dynamic]string, // .pen files next to the open one
 	files_time:     time.Time,
@@ -112,7 +113,7 @@ widgets_end_frame :: proc(vg: ^nvg.Context) {
 
 // True while an overlay owns the pointer and keyboard.
 ui_modal :: proc() -> bool {
-	return ui.menu.open || ui.picker.open || ui.dialog.open || onboarding.open || vtable.open
+	return ui.menu.open || ui.picker.open || ui.dialog.open || onboarding.open || vtable.open || settings_open || shortcuts_open
 }
 
 // ---------------------------------------------------------------- primitives
@@ -231,6 +232,7 @@ Icon :: enum {
 	Distribute_V,
 	Image,
 	More,
+	Search,
 }
 
 // 24×24 outlines; only M/L/C/Q/Z commands so the SVG parser handles them.
@@ -278,6 +280,7 @@ ICON_PATHS := [Icon]string {
 	.Distribute_V  = "M4 4 H20 M4 20 H20 M8 9 H16 V15 H8 Z",
 	.Image         = "M5 3 H19 C20.1 3 21 3.9 21 5 V19 C21 20.1 20.1 21 19 21 H5 C3.9 21 3 20.1 3 19 V5 C3 3.9 3.9 3 5 3 Z M3 16 L8 11 L13 16 L16 13 L21 18 M15 8 C15 8.6 15.4 9 16 9 C16.6 9 17 8.6 17 8 C17 7.4 16.6 7 16 7 C15.4 7 15 7.4 15 8 Z",
 	.More          = "M5 12 C5 11.4 5.4 11 6 11 C6.6 11 7 11.4 7 12 C7 12.6 6.6 13 6 13 C5.4 13 5 12.6 5 12 Z M11 12 C11 11.4 11.4 11 12 11 C12.6 11 13 11.4 13 12 C13 12.6 12.6 13 12 13 C11.4 13 11 12.6 11 12 Z M17 12 C17 11.4 17.4 11 18 11 C18.6 11 19 11.4 19 12 C19 12.6 18.6 13 18 13 C17.4 13 17 12.6 17 12 Z",
+	.Search        = "M11 4 C14.9 4 18 7.1 18 11 C18 14.9 14.9 18 11 18 C7.1 18 4 14.9 4 11 C4 7.1 7.1 4 11 4 Z M16 16 L20.5 20.5",
 }
 
 draw_icon :: proc(vg: ^nvg.Context, icon: Icon, cx, cy: f32, color: nvg.Color, size: f32 = 16) {

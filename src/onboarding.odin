@@ -40,24 +40,6 @@ onboarding_maybe_start :: proc() {
 
 // ---------------------------------------------------------------- settings
 
-settings_path :: proc() -> string {
-	return fmt.tprintf("%s/settings.json", support_dir())
-}
-
-settings_onboarded :: proc() -> bool {
-	data, err := os.read_entire_file(settings_path(), context.temp_allocator)
-	if err != nil do return false
-	v, perr := json.parse_string(string(data), .JSON, false, context.temp_allocator)
-	if perr != nil do return false
-	obj, _ := v.(json.Object)
-	return obj["onboarded"].(json.Boolean) or_else false
-}
-
-settings_set_onboarded :: proc() {
-	_ = os.make_directory_all(support_dir())
-	_ = os.write_entire_file(settings_path(), "{\n  \"onboarded\": true\n}\n")
-}
-
 // ---------------------------------------------------------------- drawing helpers
 
 // Inter when it is installed (the onboarding's type), else the interface font.

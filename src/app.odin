@@ -46,6 +46,7 @@ Drag_Kind :: enum {
 	Resize,
 	Create,
 	Marquee,
+	Zoom,
 }
 
 Drag :: struct {
@@ -121,6 +122,7 @@ app_main :: proc(path: string) {
 	app.canvas_bg = CANVAS_BG
 	app.tab = -1
 	app.files_dir = strings.clone(os.dir(absolute_path(path)))
+	settings_load()
 	recents_load()
 	if path != "" && !open_in_tab(path) do set_status("Could not read %s as a .pen document", path)
 	update_title()
@@ -915,6 +917,7 @@ draw_canvas :: proc() {
 		nvg.Text(vg, p.x, p.y - 7, node_label(&n))
 	}
 
+	draw_pixel_grid(vg)
 	// hover + selection overlays
 	if app.hover != 0 && !is_selected(app.hover) && app.drag.kind == .None {
 		if n, _ := doc_find_uid(&app.doc, app.hover); n != nil do outline_node(n, 1.5)
@@ -988,19 +991,96 @@ draw_canvas :: proc() {
 			nvg.Fill(vg)
 		}
 	}
-	// marquee
-	if app.drag.kind == .Marquee && (abs(app.mouse.x - to_screen(app.drag.start_page).x) >= 0.5 || abs(app.mouse.y - to_screen(app.drag.start_page).y) >= 0.5) {
+	draw_measurements(vg)
+	// marquee, and the region of the zoom tool
+	if (app.drag.kind == .Marquee || app.drag.kind == .Zoom) && (abs(app.mouse.x - to_screen(app.drag.start_page).x) >= 0.5 || abs(app.mouse.y - to_screen(app.drag.start_page).y) >= 0.5) {
 		a := to_screen(app.drag.start_page)
 		b := app.mouse
+		col := ACCENT if app.drag.kind == .Marquee else nvg.Color{0.6, 0.6, 0.65, 1}
 		nvg.BeginPath(vg)
 		nvg.Rect(vg, min(a.x, b.x), min(a.y, b.y), abs(b.x - a.x), abs(b.y - a.y))
-		nvg.FillColor(vg, {ACCENT.r, ACCENT.g, ACCENT.b, 0.08})
+		nvg.FillColor(vg, {col.r, col.g, col.b, 0.08})
 		nvg.Fill(vg)
-		nvg.StrokeColor(vg, ACCENT)
+		nvg.StrokeColor(vg, col)
 		nvg.StrokeWidth(vg, 1)
 		nvg.Stroke(vg)
 	}
 	nvg.Restore(vg)
+}
+
+MEASURE :: nvg.Color{0.95, 0.28, 0.13, 1}
+
+// While ⌥ is held: distances from the selection to the layer under the pointer, or to the
+// edges of a layer around it (pen.dev and Figma show the same).
+draw_measurements :: proc(vg: ^nvg.Context) {
+	if !alt_down() || len(app.sel) == 0 || app.drag.kind != .None || !in_rect(app.canvas, app.mouse) do return
+	a, ok := bounds_of(app.sel[:])
+	if !ok do return
+	target := hit_test(to_page(app.mouse))
+	if target == 0 || is_selected(target) {
+		// over the selection itself: measure to its parent
+		n, _ := doc_find_uid(&app.doc, app.sel[0])
+		if n == nil || n.parent == 0 do return
+		target = n.parent
+	}
+	tn, _ := doc_find_uid(&app.doc, target)
+	if tn == nil do return
+	b := node_page_box(tn)
+	// the other box, outlined
+	p0, p1 := to_screen({b[0], b[1]}), to_screen({b[0] + b[2], b[1] + b[3]})
+	nvg.BeginPath(vg)
+	nvg.Rect(vg, p0.x + 0.5, p0.y + 0.5, p1.x - p0.x, p1.y - p0.y)
+	nvg.StrokeColor(vg, MEASURE)
+	nvg.StrokeWidth(vg, 1)
+	nvg.Stroke(vg)
+	// one axis at a time: a gap between the boxes, or the insets of one inside the other
+	for axis in 0 ..< 2 {
+		o := 1 - axis
+		alo, ahi := a[axis], a[axis] + a[axis + 2]
+		blo, bhi := b[axis], b[axis] + b[axis + 2]
+		// where across the other axis the line runs: the middle of the overlap, or of the selection
+		lo, hi := max(a[o], b[o]), min(a[o] + a[o + 2], b[o] + b[o + 2])
+		across := (lo + hi) / 2 if lo < hi else a[o] + a[o + 2] / 2
+		switch {
+		case ahi <= blo: measure_line(vg, axis, ahi, blo, across)
+		case bhi <= alo: measure_line(vg, axis, bhi, alo, across)
+		case blo <= alo && ahi <= bhi:
+			measure_line(vg, axis, blo, alo, across)
+			measure_line(vg, axis, ahi, bhi, across)
+		case alo <= blo && bhi <= ahi:
+			measure_line(vg, axis, alo, blo, across)
+			measure_line(vg, axis, bhi, ahi, across)
+		}
+	}
+}
+
+// A distance along `axis` (0: x, 1: y) from `from` to `to`, drawn at `across`, with its label.
+measure_line :: proc(vg: ^nvg.Context, axis: int, from, to, across: f32) {
+	if to - from < 0.01 do return
+	p, q: [2]f32
+	p[axis], p[1 - axis] = from, across
+	q[axis], q[1 - axis] = to, across
+	sp, sq := to_screen(p), to_screen(q)
+	nvg.BeginPath(vg)
+	nvg.MoveTo(vg, math.round(sp.x) + 0.5, math.round(sp.y) + 0.5)
+	nvg.LineTo(vg, math.round(sq.x) + 0.5, math.round(sq.y) + 0.5)
+	nvg.StrokeColor(vg, MEASURE)
+	nvg.StrokeWidth(vg, 1)
+	nvg.Stroke(vg)
+	text := num_text(to - from)
+	nvg.FontFace(vg, "ui")
+	nvg.FontSize(vg, 11)
+	tw := nvg.TextBounds(vg, 0, 0, text) + 10
+	m := (sp + sq) / 2
+	if axis == 1 do m.x += tw / 2 + 4
+	else do m.y += 12
+	nvg.BeginPath(vg)
+	nvg.RoundedRect(vg, m.x - tw / 2, m.y - 9, tw, 18, 4)
+	nvg.FillColor(vg, MEASURE)
+	nvg.Fill(vg)
+	nvg.TextAlign(vg, .CENTER, .MIDDLE)
+	nvg.FillColor(vg, {1, 1, 1, 1})
+	nvg.Text(vg, m.x, m.y, text)
 }
 
 size_label :: proc(spec: Size_Spec, computed: f32) -> string {

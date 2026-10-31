@@ -501,6 +501,10 @@ inject_input :: proc(params: json.Object) {
 		case "down": return glfw.KEY_DOWN
 		case "cmd": return glfw.KEY_LEFT_SUPER
 		case "shift": return glfw.KEY_LEFT_SHIFT
+		case "alt": return glfw.KEY_LEFT_ALT
+		case "/": return glfw.KEY_SLASH
+		case "'": return glfw.KEY_APOSTROPHE
+		case ",": return glfw.KEY_COMMA
 		case "=": return glfw.KEY_EQUAL
 		case "-": return glfw.KEY_MINUS
 		case "]": return glfw.KEY_RIGHT_BRACKET
@@ -520,6 +524,13 @@ inject_input :: proc(params: json.Object) {
 				append(&pf.synthetic_keys, k)
 			}
 		}
+	}
+	// keys held across frames until "unhold" (for ⌥ measuring, the Z zoom tool)
+	if keys, ok := params["hold"].(json.Array); ok {
+		for kv in keys do if k := key_code(string(kv.(json.String) or_else "")); k >= 0 do pf.key_down[k] = true
+	}
+	if keys, ok := params["unhold"].(json.Array); ok {
+		for kv in keys do if k := key_code(string(kv.(json.String) or_else "")); k >= 0 do pf.key_down[k] = false
 	}
 	if keys, ok := params["keys"].(json.Array); ok {
 		for kv in keys {

@@ -32,6 +32,7 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	label(vg, x0, TAB_H + 48, "Files" if dash_files else "Recents", TEXT_FG, 24)
 	if button(vg, {app.screen.x - 48 - 96, TAB_H + 34, 96, 28}, "+ New file") do new_document()
 	if button(vg, {app.screen.x - 48 - 96 - 8 - 132, TAB_H + 34, 132, 28}, "Connect agents") do onboarding_start(1)
+	if button(vg, {app.screen.x - 48 - 96 - 8 - 132 - 8 - 96, TAB_H + 34, 96, 28}, "Settings") do settings_open = true
 
 	// cards
 	entries := dashboard_entries()

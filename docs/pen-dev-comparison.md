@@ -19,13 +19,13 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Feature | pen.dev | Before | Now | Status |
 | --- | --- | --- | --- | --- |
 | Pan and zoom | space-drag, two fingers, pinch, ⌘-scroll | same, plus smart zoom on two-finger double tap | same | done |
-| Zoom shortcuts | ⌘0 100%, ⇧1 fit all, ⇧2 selection, ⌘± | ⌘0 fit, ⌘1 100%, ⌘± | adds ⇧1 and ⇧2 | done (⌘0/⌘1 differ) |
-| Zoom tool | hold Z: click to zoom, drag a region | — | — | missing |
+| Zoom shortcuts | ⌘0 100%, ⇧1 fit all, ⇧2 selection, ⌘± | ⌘0 fit, ⌘1 100%, ⌘± | ⇧1, ⇧2; ⌘0 is 100% | done |
+| Zoom tool | hold Z: click to zoom, drag a region | — | hold Z: click in, ⌥-click out, drag a region | done |
 | Selection colours | blue; magenta for a component origin, violet for an instance | blue | blue / magenta / violet | done |
 | Smart guides | edge and centre snapping | yes | yes | done |
-| Measurements | distances to the hovered element | — | — | missing |
-| Pixel grid and snap toggles | Settings, ⌘' | — | — | missing |
-| Settings: nudge amounts, scroll-to-zoom | Settings → General | — | — | missing |
+| Measurements | distances to the hovered element | — | hold ⌥: gaps to the layer under the pointer, or insets within the parent | done |
+| Pixel grid and snap toggles | Settings, ⌘' | — | pixel grid from 800% (⌘'), snap to pixels, smart guides on/off | done |
+| Settings: nudge amounts, scroll-to-zoom | Settings → General | — | Settings sheet (⌘,): nudge and big nudge, the toggles above, onboarding again | partial (scroll always pans) |
 | Performance | "120 fps" | 2–5 ms per frame on reddit-ui; off-screen culling | same | done |
 
 ## Tools
@@ -46,7 +46,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Click, shift-click, marquee | yes | yes | yes | done |
 | ⌘A select all | yes | yes (all pages) | yes | done |
 | Enter / ⇧Enter | children / parent | Enter edits text | Enter: children (text: edit); ⇧Enter: parent | done |
-| ⌘-click deep select, ⌘-drag nested marquee | yes | — | — | missing |
+| Click levels, ⌘-click deep select, ⌘-drag nested marquee | yes | click took the deepest layer | click picks the layer at the working level, double click goes one level in, ⌘-click the deepest; a marquee started in a frame picks its layers, ⌘ the innermost | done |
 | Esc | clears the selection | yes | yes | done |
 
 ## Layers panel
@@ -56,7 +56,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Tree with type icons, instance and component colour | yes | icons, component names | same | done |
 | Rename (double click), hide (eye) | yes | yes | yes | done |
 | Drag to reorder or move into a container | yes | — | yes: drop above, below, or into a frame or group | done |
-| Find layers (search) | toolbar | — | — | missing |
+| Find layers (search) | toolbar | — | search field over the tree (⌘F): name, text or type, with the parent shown | done |
 | Instance internals in the tree | shown in violet | slot content only | same | partial |
 | Lock | — | — | — | — (pen.dev has none either) |
 
@@ -131,7 +131,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | ⇧⌥A remove flex | yes | added |
 | ⌘⇧C copy as PNG, ⌥⌘C copy as HTML | yes | missing |
 | ⌘⇧R paste to replace | yes | missing |
-| ? shortcut sheet | yes | missing |
+| ? shortcut sheet | yes | added |
 
 ## Agents
 
@@ -144,12 +144,12 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 ## Still missing, by value
 
 1. **Pen tool and path editing.** Drawing and editing vectors.
-2. **Measurements and a zoom tool.** Hover distances; Z to zoom.
+2. ~~Measurements and a zoom tool.~~ Done.
 3. **Per-document custom fonts and on-demand variable fonts.**
 4. **Gradient stop editing and on-canvas handles.** Plus mesh gradients and blend modes.
 5. **Blur effects.** Layer blur and background blur need render targets.
 6. **More export formats.** JPEG, WEBP and PDF; copy as PNG or HTML.
-7. **Find layers, ⌘-click deep select, a shortcut sheet, settings.**
+7. ~~Find layers, ⌘-click deep select, a shortcut sheet, settings.~~ Done.
 8. **Libraries.** Components shared across files.
 9. **Resize handles on turned layers.** Clicks, outlines and the marquee follow rotation and flips; resizing a turned layer works from the inspector only.
 

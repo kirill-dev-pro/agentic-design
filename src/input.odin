@@ -43,11 +43,14 @@ handle_input :: proc() {
 	else if ui.focus == "" do handle_shortcuts()
 
 	app.hover = 0
-	if over_canvas && app.drag.kind == .None do app.hover = hit_test(page)
+	if over_canvas && app.drag.kind == .None {
+		app.hover = click_target(hit_test(page), mod_cmd())
+		if frame_body(app.hover, page) do app.hover = 0
+	}
 
 	context_menu_apply()
 	if over_canvas && mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) && app.drag.kind == .None {
-		if hit := hit_test(page); hit != 0 && !is_selected(hit) {
+		if hit := click_target(hit_test(page), mod_cmd()); hit != 0 && !is_selected(hit) && !frame_body(hit, page) {
 			clear(&app.sel)
 			append(&app.sel, hit)
 		}
@@ -68,6 +71,8 @@ handle_input :: proc() {
 		}
 		if mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE) || key_down(glfw.KEY_SPACE) || app.tool == .Hand {
 			app.drag.kind = .Pan
+		} else if zoom_tool_held() {
+			app.drag.kind = .Zoom
 		} else if app.editing == 0 {
 			mouse_down_tool(page)
 		}
@@ -112,6 +117,7 @@ update_cursor :: proc(over_canvas: bool) {
 	if over_canvas {
 		switch {
 		case app.drag.kind == .Pan || key_down(glfw.KEY_SPACE) || app.tool == .Hand: cursor = .Hand
+		case app.drag.kind == .Zoom || zoom_tool_held(): cursor = .Crosshair
 		case app.tool == .Text || app.editing != 0: cursor = .IBeam
 		case app.tool != .Select: cursor = .Crosshair
 		case handle_under_mouse() >= 0: cursor = .Hand
@@ -124,6 +130,16 @@ update_cursor :: proc(over_canvas: bool) {
 	platform_set_cursor(cursor)
 }
 
+alt_down :: proc() -> bool {
+	return key_down(glfw.KEY_LEFT_ALT) || key_down(glfw.KEY_RIGHT_ALT)
+}
+
+// Holding Z turns the pointer into a zoom tool (pen.dev): click zooms in, ⌥-click out,
+// dragging zooms to the region.
+zoom_tool_held :: proc() -> bool {
+	return key_down(glfw.KEY_Z) && !mod_cmd() && app.editing == 0 && ui.focus == ""
+}
+
 handle_under_mouse :: proc() -> int {
 	if len(app.sel) != 1 || app.editing != 0 do return -1
 	n, _ := doc_find_uid(&app.doc, app.sel[0])
@@ -133,6 +149,52 @@ handle_under_mouse :: proc() -> int {
 		if abs(app.mouse.x - p.x) <= 6 && abs(app.mouse.y - p.y) <= 6 do return h
 	}
 	return -1
+}
+
+// What a click on `hit` (the deepest layer under the pointer) selects, as in pen.dev and
+// Figma: a selected layer under the pointer stays selected (so a selected container drags
+// by its content); next to a selected layer, the layer at that level; otherwise the child
+// of a top-level frame, or the top-level layer itself. `deep` (⌘) takes the deepest.
+click_target :: proc(hit: int, deep: bool) -> int {
+	if hit == 0 || deep do return hit
+	chain := make([dynamic]int, context.temp_allocator)
+	for cur := hit; cur != 0 && len(chain) < MAX_DEPTH; {
+		append(&chain, cur)
+		n, _ := doc_find_uid(&app.doc, cur)
+		if n == nil do break
+		cur = n.parent
+	}
+	for uid in chain do if is_selected(uid) do return uid
+	for s in app.sel {
+		sn, _ := doc_find_uid(&app.doc, s)
+		if sn == nil || sn.parent == 0 do continue
+		for uid in chain {
+			if n, _ := doc_find_uid(&app.doc, uid); n != nil && n.parent == sn.parent do return uid
+		}
+	}
+	if len(chain) >= 2 {
+		if top, _ := doc_find_uid(&app.doc, chain[len(chain) - 1]); top != nil && top.kind == .Frame do return chain[len(chain) - 2]
+	}
+	return chain[len(chain) - 1]
+}
+
+// The empty body of a top-level frame that has layers in it: pressing there starts a
+// marquee over its layers instead of picking the frame up (its title moves it).
+frame_body :: proc(uid: int, page: [2]f32) -> bool {
+	n, _ := doc_find_uid(&app.doc, uid)
+	if n == nil || n.parent != 0 || n.kind != .Frame || is_selected(uid) || page.y < n.y do return false
+	return len(children_of(&app.doc, uid)) > 0
+}
+
+// The child of `ancestor` on the way down to `uid`, or 0.
+child_toward :: proc(uid, ancestor: int) -> int {
+	for cur := uid; cur != 0; {
+		n, _ := doc_find_uid(&app.doc, cur)
+		if n == nil do return 0
+		if n.parent == ancestor do return cur
+		cur = n.parent
+	}
+	return 0
 }
 
 // Top-most node under the point. Children win over their container.
@@ -206,19 +268,27 @@ mouse_down_tool :: proc(page: [2]f32) {
 			app.drag.orig = {n.x, n.y, n.w, n.h}
 			return
 		}
-		hit := hit_test(page)
-		// double click on text starts editing
+		deepest := hit_test(page)
+		hit := click_target(deepest, mod_cmd())
 		now := time.now()
 		double := time.duration_seconds(time.diff(app.last_click, now)) < 0.35 && abs(app.mouse.x - app.last_click_p.x) < 4 && abs(app.mouse.y - app.last_click_p.y) < 4
 		app.last_click, app.last_click_p = now, app.mouse
-		if double && hit != 0 {
+		if double && deepest != 0 {
+			// double click: text is edited, a title renames its frame, an instance opens its
+			// component, anything else selects the layer one level further in
+			if n, _ := doc_find_uid(&app.doc, deepest); n != nil && n.kind == .Text {
+				start_text_editing(deepest)
+				return
+			}
 			if n, _ := doc_find_uid(&app.doc, hit); n != nil {
-				if n.kind == .Text {
-					start_text_editing(hit)
+				if page.y < n.y {
+					start_rename(hit, true)
 					return
 				}
-				if page.y < n.y { // the title above a top-level frame
-					start_rename(hit, true)
+				if inner := child_toward(deepest, hit); inner != 0 {
+					clear(&app.sel)
+					append(&app.sel, inner)
+					app.drag.kind = .Move
 					return
 				}
 				if n.kind == .Ref {
@@ -227,9 +297,10 @@ mouse_down_tool :: proc(page: [2]f32) {
 				}
 			}
 		}
-		if hit == 0 {
+		if hit == 0 || frame_body(hit, page) {
 			if !mod_shift() do clear(&app.sel)
 			app.drag.kind = .Marquee
+			app.drag.target = hit // the frame whose layers the marquee picks (0: the page)
 			return
 		}
 		if mod_shift() {
@@ -284,7 +355,7 @@ set_box :: proc(n: ^Node, x, y, w, h: f32) {
 drag_update :: proc(page: [2]f32) {
 	d := &app.drag
 	switch d.kind {
-	case .None, .Marquee:
+	case .None, .Marquee, .Zoom:
 	case .Pan:
 		app.cam -= mouse_delta() / app.zoom
 	case .Move:
@@ -323,6 +394,7 @@ drag_update :: proc(page: [2]f32) {
 			n, _ := doc_find_uid(&app.doc, uid)
 			if n == nil do continue
 			target := app.move_start[i] + delta
+			target = {snap_px(target.x), snap_px(target.y)}
 			doc_move(&app.doc, uid, target.x - n.x, target.y - n.y)
 		}
 		mark_dirty()
@@ -365,6 +437,7 @@ drag_update :: proc(page: [2]f32) {
 		if n.kind == .Text && (d.handle == 1 || d.handle == 5 || d.handle == 0 || d.handle == 2 || d.handle == 4 || d.handle == 6) && n.growth != .Fixed_Width_Height {
 			node_set_string(&app.doc, n, "textGrowth", "fixed-width-height")
 		}
+		x0, y0, x1, y1 = snap_px(x0), snap_px(y0), snap_px(x1), snap_px(y1)
 		set_box(n, min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
 		mark_dirty()
 	case .Create:
@@ -379,6 +452,7 @@ drag_update :: proc(page: [2]f32) {
 			sn := snap_box(box, {n.uid}, {b.x < a.x, false, b.x >= a.x}, {b.y < a.y, false, b.y >= a.y})
 			b += sn
 		}
+		a, b = {snap_px(a.x), snap_px(a.y)}, {snap_px(b.x), snap_px(b.y)}
 		set_box(n, min(a.x, b.x), min(a.y, b.y), abs(b.x - a.x), abs(b.y - a.y))
 	}
 	d.last_page = page
@@ -409,14 +483,36 @@ drag_end :: proc(page: [2]f32) {
 		r := [4]f32{min(a.x, b.x), min(a.y, b.y), abs(b.x - a.x), abs(b.y - a.y)}
 		if r[2] < 2 && r[3] < 2 do break
 		if !mod_shift() do clear(&app.sel)
-		for uid in app.draw_order {
-			n, _ := doc_find_uid(&app.doc, uid)
-			if n == nil do continue
-			nb := node_page_box(n)
-			if nb[0] >= r[0] && nb[1] >= r[1] && nb[0] + nb[2] <= r[0] + r[2] && nb[1] + nb[3] <= r[1] + r[3] && !is_selected(uid) {
-				if n.parent != 0 && is_selected(n.parent) do continue
-				append(&app.sel, uid)
-			}
+		marquee_select(r, d.target, mod_cmd())
+	case .Zoom:
+		a, b := d.start_page, page
+		if abs(app.mouse.x - d.start_mouse.x) + abs(app.mouse.y - d.start_mouse.y) < 4 {
+			zoom_at(app.mouse, 0.5 if alt_down() else 2)
+		} else {
+			zoom_to_rect({min(a.x, b.x), min(a.y, b.y), abs(b.x - a.x), abs(b.y - a.y)})
+		}
+	}
+}
+
+// Selects by marquee. On the page: top-level layers fully inside it. Started in a frame:
+// that frame's layers it touches. With ⌘: the innermost layers it touches.
+marquee_select :: proc(r: [4]f32, scope: int, deep: bool) {
+	touches :: proc(nb, r: [4]f32) -> bool {
+		return nb[0] < r[0] + r[2] && nb[0] + nb[2] > r[0] && nb[1] < r[1] + r[3] && nb[1] + nb[3] > r[1]
+	}
+	for uid in app.draw_order {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil || is_selected(uid) do continue
+		nb := node_page_box(n)
+		switch {
+		case deep:
+			if scope != 0 && !is_descendant(&app.doc, uid, scope) do continue
+			if len(children_of(&app.doc, uid)) > 0 && n.kind != .Ref do continue
+			if touches(nb, r) do append(&app.sel, uid)
+		case scope != 0:
+			if n.parent == scope && touches(nb, r) do append(&app.sel, uid)
+		case:
+			if n.parent == 0 && nb[0] >= r[0] && nb[1] >= r[1] && nb[0] + nb[2] <= r[0] + r[2] && nb[1] + nb[3] <= r[1] + r[3] do append(&app.sel, uid)
 		}
 	}
 }
@@ -452,15 +548,22 @@ handle_shortcuts :: proc() {
 			push_undo()
 			for uid in app.sel do move_in_siblings(uid, -1)
 		case key_pressed(glfw.KEY_W): close_tab(app.tab)
+		case key_pressed(glfw.KEY_COMMA): settings_open = true
+		case key_pressed(glfw.KEY_APOSTROPHE):
+			settings.pixel_grid = !settings.pixel_grid
+			settings_save()
+			set_status("Pixel grid %s", "on" if settings.pixel_grid else "off")
+		case key_pressed(glfw.KEY_F):
+			ui.side_tab = 0
+			field_focus(0, "layers.search", ui.layer_search)
 		case key_pressed(glfw.KEY_N): new_document()
 		case key_pressed(glfw.KEY_E) && shift: export_request()
 		case key_pressed(glfw.KEY_A):
 			clear(&app.sel)
 			append(&app.sel, ..all_uids(true))
-		case key_pressed(glfw.KEY_0):
-			if r, ok := bounds_of(all_uids(true)); ok do zoom_to_rect(r)
-		case key_pressed(glfw.KEY_1):
-			app.zoom = 1
+		case key_pressed(glfw.KEY_0), key_pressed(glfw.KEY_1):
+			// 100% around the middle of the view (⌘0 as in pen.dev)
+			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1 / app.zoom)
 		case key_hit(glfw.KEY_EQUAL):
 			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1.25)
 		case key_hit(glfw.KEY_MINUS):
@@ -484,6 +587,10 @@ handle_shortcuts :: proc() {
 	}
 	if alt && shift && key_pressed(glfw.KEY_A) {
 		remove_flex_selection()
+		return
+	}
+	if shift && key_pressed(glfw.KEY_SLASH) {
+		shortcuts_open = true
 		return
 	}
 	if shift {
@@ -549,7 +656,7 @@ handle_shortcuts :: proc() {
 		}
 	}
 	nudge := [2]f32{}
-	step: f32 = 10 if shift else 1
+	step := settings.nudge_big if shift else settings.nudge
 	if key_hit(glfw.KEY_LEFT) do nudge.x -= step
 	if key_hit(glfw.KEY_RIGHT) do nudge.x += step
 	if key_hit(glfw.KEY_UP) do nudge.y -= step
@@ -663,7 +770,7 @@ Guide :: struct {
 // `xs`/`ys` say which of the box's left/centre/right (top/centre/bottom) may snap.
 snap_box :: proc(box: Rect, moving: []int, xs, ys: [3]bool) -> (delta: [2]f32) {
 	clear(&app.guides)
-	if key_down(glfw.KEY_LEFT_CONTROL) || key_down(glfw.KEY_RIGHT_CONTROL) do return
+	if !settings.smart_guides || key_down(glfw.KEY_LEFT_CONTROL) || key_down(glfw.KEY_RIGHT_CONTROL) do return
 	parent := 0
 	if len(moving) > 0 {
 		if n, _ := doc_find_uid(&app.doc, moving[0]); n != nil do parent = n.parent

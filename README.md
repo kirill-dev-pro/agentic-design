@@ -75,7 +75,10 @@ use the image tool to place them; they are copied into `images/` next to the doc
 | Two-finger scroll, Space + drag, middle drag | pan |
 | Pinch, Cmd + scroll, Cmd = / Cmd − | zoom |
 | Two-finger double tap | zoom to what is under the pointer / fit all |
-| Cmd 0 / Cmd 1 | fit all / 100% |
+| Shift 1 / Cmd 0 | fit all / 100% |
+| Hold Z / hold Option | zoom tool (click, Option-click, drag) / measure distances |
+| Cmd F, ?, Cmd , | find layers, shortcut sheet, settings |
+| Cmd ' | pixel grid |
 | Shift + drag | keep proportions |
 | Double click text, Enter | edit text (Esc to finish) |
 | Cmd D, Backspace, arrows | duplicate, delete, nudge |
@@ -83,6 +86,7 @@ use the image tool to place them; they are copied into `images/` next to the doc
 | Option A D W S H V | align left, right, top, bottom, centre, middle |
 | Shift H / Shift V, Shift 1 / Shift 2 | flip; zoom to fit / to selection |
 | Enter / Shift Enter | select children / parent (Enter on text edits it) |
+| Click / double click / Cmd click | layer at the working level / one level in / deepest layer |
 | Cmd Option K / Cmd Option X | create component / detach instance |
 | Cmd G / Shift Cmd G / Option Cmd G / Shift A | group / ungroup / frame selection / auto layout |
 | Cmd R | rename |
