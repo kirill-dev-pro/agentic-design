@@ -183,7 +183,7 @@ backtrace if it crashes. The full recipe is in [docs/testing.md](docs/testing.md
 | `src/tabs.odin` | tabs, recent files, thumbnails |
 | `src/dashboard.odin` | the dashboard view |
 | `src/edit.odin` | grouping, alignment, clipboard, context menu |
-| `src/fonts.odin` | installed font lookup by family and weight |
+| `src/fonts.odin`, `assets/fonts` | fonts by family and weight: the document's `fonts` list, installed fonts, built-in Noto Sans for missing families (OFL) |
 | `src/inspector.odin`, `src/paint.odin` | inspector sections modelled on pen.dev; fills, gradients and effects drawing |
 | `src/components_panel.odin`, `src/variables_table.odin` | the Components tab; the variables table |
 | `src/onboarding.odin`, `src/agents.odin` | the onboarding sheet; agent client detection and MCP registration |

@@ -23,3 +23,6 @@ dev-2026-10. Kept in the repository so the following fixes can be applied:
 - fontstash: the font size maps to the em square (`ScaleForMappingEmToPixels`), as in CSS,
   Figma and pen.dev; ascender, descender and line height are relative to the em. Upstream
   used `ScaleForPixelHeight`, which drew every font smaller by (ascent − descent) / em.
+- nanovg: `TextBreakLines` also breaks a line after a hyphen between letters
+  ("Sample-|specific"), as Skia's ICU line breaker does in pen.dev; not before a digit
+  ("-5" stays whole).

@@ -14,7 +14,8 @@ import "core:strings"
 //               is the model): pages, themes, variables, components, libraries, fonts
 //   lint        what a reviewer would flag: hard-coded colours that have a variable, missing
 //               fonts, text that does not fit its box, layers cut off by a clipping frame,
-//               broken refs, positions and sizes off whole pixels, empty text
+//               broken refs, positions and sizes off whole pixels, empty text, frames
+//               fitting their content around a child that fills them (collapsed-size)
 
 undo_suppressed: bool // inside a batch: the batch's own snapshot is the undo step
 
@@ -260,9 +261,9 @@ api_get_guide :: proc(b: ^strings.Builder) {
 	if len(used) > 0 {
 		strings.write_string(&g, "\n## Fonts\n")
 		for fam, count in used {
-			state := "installed"
+			state := "in the document's fonts"
 			if fam == "(default)" do state = "Arial"
-			else if family_find(fam) == nil do state = "MISSING: drawn with the system font (SF Pro), as pen.dev does; install it or put it in a fonts folder next to the file"
+			else if font_source(fam) != .Document do state = fmt.tprintf("NOT IN THE DOCUMENT: %s", font_state(fam))
 			fmt.sbprintf(&g, "- %s: %d text layers, %s\n", fam, count, state)
 		}
 	}
@@ -348,7 +349,7 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		#partial switch n.kind {
 		case .Text:
 			if strings.trim_space(n.content) == "" do issue(b, &count, limit, &n, "empty-text", "text layer without text")
-			if n.font_family != "" && family_find(n.font_family) == nil {
+			if n.font_family != "" && font_source(n.font_family) != .Document {
 				m, seen := missing[n.font_family]
 				if !seen {
 					m.first = &n
@@ -363,6 +364,24 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			}
 		case .Ref:
 			if c, _ := doc_find(doc, n.ref); c == nil do issue(b, &count, limit, &n, "broken-ref", fmt.tprintf("component \"%s\" does not exist", n.ref))
+		case .Frame:
+			// pen.dev's "Collapsed size": a frame fitting its content on an axis where a child
+			// fills it; the child gets only what the other children give the frame
+			// (layout.odin), which is rarely what was meant
+			if n.layout != .None {
+				axes := [2]string{"width", "height"}
+				specs := [2]Size_Spec{n.width, n.height}
+				for i in 0 ..< 2 {
+					if specs[i].mode != .Fit || specs[i].has_value do continue
+					for cu in children_for_layout(doc, n.uid) {
+						c, _ := doc_find_uid(doc, cu)
+						if c == nil || !c.enabled || c.abs_pos do continue
+						if ([2]Size_Spec{c.width, c.height})[i].mode != .Fill do continue
+						issue(b, &count, limit, &n, "collapsed-size", fmt.tprintf("its %s fits its content while \"%s\" fills it, so that child only gets %s px (what the others need); give this frame a %s (a number or fill_container), or the child its own", axes[i], node_label(c), num_text(([2]f32{c.w, c.h})[i]), axes[i]))
+						break
+					}
+				}
+			}
 		}
 		// cut off by a clipping frame around it
 		if p, _ := doc_find_uid(doc, n.parent); p != nil && p.clip && p.kind == .Frame {
@@ -383,7 +402,7 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	}
 	for fam in missing_order {
 		m := missing[fam]
-		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" is not installed (used by %d text layers, drawn with the system font SF Pro, as in pen.dev); install it or put it in a fonts folder next to the file", fam, m.count))
+		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" (used by %d text layers) %s", fam, m.count, font_state(fam)))
 	}
 	fmt.sbprintf(b, `],"count":%d}}`, count)
 	return ""

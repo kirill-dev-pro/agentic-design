@@ -39,6 +39,10 @@ doc_load_imports :: proc(doc: ^Document, doc_path: string) -> []Library {
 	imports := doc_imports(doc)
 	vars := make(json.Object, 16, context.temp_allocator)
 	base := filepath.dir(doc_path)
+	// the fonts the document and its libraries list (fonts_add_declared)
+	for p in doc.header do if p.key == "fonts" {
+		if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do fonts_add_declared(v, base)
+	}
 	for alias, rel in imports {
 		path := string(rel.(json.String) or_else "")
 		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
@@ -49,6 +53,7 @@ doc_load_imports :: proc(doc: ^Document, doc_path: string) -> []Library {
 		root, perr := json.parse_string(string(data), .JSON5, false, context.temp_allocator)
 		if perr != nil do continue
 		obj, _ := root.(json.Object)
+		fonts_add_declared(obj["fonts"], filepath.dir(path))
 		lib_vars, _ := obj["variables"].(json.Object)
 		names := make(map[string]bool, len(lib_vars), context.temp_allocator)
 		for name in lib_vars do names[name] = true

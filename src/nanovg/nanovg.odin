@@ -3133,6 +3133,7 @@ TextBreakLines :: proc(
 	break_width, break_max_x: f32
 	type  := Codepoint_Type.Space
 	ptype := Codepoint_Type.Space
+	pptype := Codepoint_Type.Space
 	pcodepoint: rune
 
 	if max_rows == 0 || state.fontId == -1 || len(text) == 0 {
@@ -3236,6 +3237,10 @@ TextBreakLines :: proc(
 				}
 			} else {
 				next_width := iter.nextx - row_start_x
+				// Agentic Design: a line may also break after a hyphen between letters
+				// ("Sample-|specific"), as Skia's ICU line breaker does in pen.dev
+				after_hyphen := type == .Char && ptype == .Char && pptype == .Char && (pcodepoint == '-' || pcodepoint == 0x2010 || pcodepoint == 0x2013) && !(iter.codepoint >= '0' && iter.codepoint <= '9')
+				width_before, max_before := row_width, row_max_x
 
 				// track last non-white space character
 				if type == .Char || type == .CJK {
@@ -3249,8 +3254,13 @@ TextBreakLines :: proc(
 					break_width = row_width
 					break_max_x = row_max_x
 				}
+				if after_hyphen {
+					break_end = iter.str
+					break_width = width_before
+					break_max_x = max_before
+				}
 				// track last beginning of a word
-				if ((ptype == .Space && (type == .Char || type == .CJK)) || type == .CJK) {
+				if ((ptype == .Space && (type == .Char || type == .CJK)) || type == .CJK || after_hyphen) {
 					word_start = iter.str
 					word_start_x = iter.x
 					word_min_x = q.x0
@@ -3313,6 +3323,7 @@ TextBreakLines :: proc(
 		}
 
 		pcodepoint = iter.codepoint
+		pptype = ptype
 		ptype = type
 	}
 

@@ -1,2 +1,4 @@
 build/
 .DS_Store
+# Commercial fonts a design uses (licensed per user; not for the repository)
+designs/fonts/

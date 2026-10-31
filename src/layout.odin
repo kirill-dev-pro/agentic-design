@@ -42,16 +42,6 @@ measure :: proc(doc: ^Document, n: ^Node, avail: [2]f32, depth: int) -> (f32, f3
 		case .Fit:
 		}
 	}
-	if n.kind == .Frame || n.kind == .Group {
-		// a container that fits its content but holds fill_container children
-		// stretches to the space it is offered on that axis (across its own flow)
-		for cu in children_for_layout(doc, n.uid) {
-			c, _ := doc_find_uid(doc, cu)
-			if c == nil || !c.enabled || c.abs_pos do continue
-			if own.x < 0 && avail.x >= 0 && n.layout != .Horizontal && c.width.mode == .Fill do own.x = avail.x
-			if own.y < 0 && avail.y >= 0 && n.layout != .Vertical && c.height.mode == .Fill do own.y = avail.y
-		}
-	}
 	content: [2]f32
 	switch n.kind {
 	case .Text:
@@ -100,12 +90,21 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 
 	main := 0 if n.layout == .Horizontal else 1
 	cross := 1 - main
-	// Two passes: children with their own size along the flow first, then the
-	// fill_container ones with their share of what is left, so that text inside them
-	// wraps (and grows) at the width they will really get.
+	// As pen.dev sizes a container that fits its content: fill_container children add
+	// nothing to it on that axis and then get what it has. Across the flow they take the
+	// width (or height) the other children give it; along the flow they share what is
+	// left, which is nothing. Its "Collapsed size" warning names the case where nothing is
+	// left at all (lint: collapsed-size).
+	// Measured in passes: children with their own size first; then, once the size
+	// across the flow is known, those that fill it; then those that fill along the flow,
+	// with their share of what is left, so that text inside them wraps (and grows) at the
+	// width it will really get.
 	kids := children_for_layout(doc, n.uid)
 	sizes := make([][2]f32, len(kids), context.temp_allocator)
-	fills: [dynamic]int
+	counted := make([]bool, len(kids), context.temp_allocator) // adds to the size along the flow
+	later: [dynamic]int // fill across the flow, which is not known yet
+	later.allocator = context.temp_allocator
+	fills: [dynamic]int // fill along the flow, which is known
 	fills.allocator = context.temp_allocator
 	used: f32
 	count := 0
@@ -113,14 +112,57 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 		c, _ := doc_find_uid(doc, cu)
 		if c == nil do continue
 		flowing := c.enabled && !c.abs_pos
-		if flowing && ([2]Size_Spec{c.width, c.height})[main].mode == .Fill && inner[main] >= 0 {
+		spec := [2]Size_Spec{c.width, c.height}
+		if flowing && spec[main].mode == .Fill && inner[main] >= 0 {
 			append(&fills, i)
 			count += 1
 			continue
 		}
-		cw, ch := measure(doc, c, inner, depth + 1)
+		if flowing && spec[cross].mode == .Fill && inner[cross] < 0 {
+			append(&later, i)
+			continue
+		}
+		avail := inner
+		if flowing && spec[main].mode == .Fill do avail[main] = 0 // in a container fitting its content
+		cw, ch := measure(doc, c, avail, depth + 1)
 		sizes[i] = {cw, ch}
-		if !flowing do continue
+		if !flowing || spec[main].mode == .Fill do continue
+		counted[i] = true
+		used += sizes[i][main]
+		count += 1
+	}
+	across := inner[cross]
+	if across < 0 {
+		// children filling along the flow have a size across it of their own: measure them
+		// once with what is left so far (again below, once everything else is known)
+		if len(fills) > 0 {
+			share := max((inner[main] - used - n.gap * f32(max(count - 1, 0))) / f32(len(fills)), 0)
+			for i in fills {
+				c, _ := doc_find_uid(doc, kids[i])
+				if ([2]Size_Spec{c.width, c.height})[cross].mode == .Fill do continue
+				avail := inner
+				avail[main] = share
+				cw, ch := measure(doc, c, avail, depth + 1)
+				sizes[i] = {cw, ch}
+			}
+		}
+		across = 0
+		for cu, i in kids {
+			c, _ := doc_find_uid(doc, cu)
+			if c == nil || !c.enabled || c.abs_pos do continue
+			if ([2]Size_Spec{c.width, c.height})[cross].mode == .Fill do continue
+			across = max(across, sizes[i][cross])
+		}
+	}
+	for i in later {
+		c, _ := doc_find_uid(doc, kids[i])
+		avail := inner
+		avail[cross] = across
+		if ([2]Size_Spec{c.width, c.height})[main].mode == .Fill do avail[main] = 0
+		cw, ch := measure(doc, c, avail, depth + 1)
+		sizes[i] = {cw, ch}
+		if ([2]Size_Spec{c.width, c.height})[main].mode == .Fill do continue
+		counted[i] = true
 		used += sizes[i][main]
 		count += 1
 	}
@@ -130,21 +172,18 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 			c, _ := doc_find_uid(doc, kids[i])
 			avail := inner
 			avail[main] = share
+			if avail[cross] < 0 do avail[cross] = across
 			cw, ch := measure(doc, c, avail, depth + 1)
 			sizes[i] = {cw, ch}
+			counted[i] = true
 		}
 	}
-	sum, biggest: f32
-	for cu, i in kids {
-		c, _ := doc_find_uid(doc, cu)
-		if c == nil || !c.enabled || c.abs_pos do continue
-		sum += sizes[i][main]
-		biggest = max(biggest, sizes[i][cross])
-	}
+	sum: f32
+	for ok, i in counted do if ok do sum += sizes[i][main]
 	if count > 1 do sum += n.gap * f32(count - 1)
 	out: [2]f32
 	out[main] = sum
-	out[cross] = biggest
+	out[cross] = across
 	out.x += pad[1] + pad[3]
 	out.y += pad[0] + pad[2]
 	return out
@@ -262,11 +301,10 @@ instance_component :: proc(doc: ^Document, inst: ^Node) -> ^Node {
 // ---------------------------------------------------------------- text
 
 // Line height as a multiple of the font size. Without `lineHeight` the font's own
-// line spacing applies ((ascender - descender + line gap) / em, like CSS "normal" and
-// pen.dev); Inter gives 1.21.
+// ascender to descender applies, without its line gap, as in pen.dev; Inter gives 1.21.
 line_height_of :: proc(n: ^Node) -> f32 {
 	if n.line_height > 0 do return n.line_height
-	face := font_face(n.font_family, n.weight, n.italic, n.font_size)
+	face := font_face(n.font_family, n.weight, n.italic)
 	if r, ok := line_ratio_cache[face]; ok do return r
 	r := f32(LINE_HEIGHT)
 	if app.vg != nil {
@@ -275,9 +313,12 @@ line_height_of :: proc(n: ^Node) -> f32 {
 		nvg.ResetTransform(vg)
 		nvg.FontFace(vg, face)
 		nvg.FontSize(vg, 100)
-		_, _, lh := nvg.TextMetrics(vg)
+		// the font's ascender to descender, without its line gap, as pen.dev sets a line
+		// (measured: Scto Grotesk A, 1000 units tall plus a 244 gap, takes 1.0; Inter 1.21,
+		// Roboto 1.17, Merriweather 1.26)
+		asc, desc, _ := nvg.TextMetrics(vg)
 		nvg.Restore(vg)
-		if lh > 0 do r = lh / 100
+		if asc - desc > 0 do r = (asc - desc) / 100
 	}
 	line_ratio_cache[strings.clone(face)] = r
 	return r
@@ -293,11 +334,11 @@ half_leading :: proc(vg: ^nvg.Context, n: ^Node) -> f32 {
 }
 
 set_font :: proc(vg: ^nvg.Context, n: ^Node) {
-	nvg.FontFace(vg, font_face(n.font_family, n.weight, n.italic, n.font_size))
+	nvg.FontFace(vg, font_face(n.font_family, n.weight, n.italic))
 	nvg.FontSize(vg, n.font_size)
 	nvg.TextAlign(vg, .LEFT, .TOP)
 	nvg.TextLineHeight(vg, line_height_of(n))
-	nvg.TextLetterSpacing(vg, n.letter_spacing + system_tracking(n))
+	nvg.TextLetterSpacing(vg, n.letter_spacing)
 }
 
 // Text metrics are measured once at document scale and cached: the size, and the line
@@ -311,7 +352,7 @@ Text_Metrics :: struct {
 text_cache: map[u64]Text_Metrics
 
 text_key :: proc(n: ^Node, wrap_w: f32) -> u64 {
-	face := font_face(n.font_family, n.weight, n.italic, n.font_size)
+	face := font_face(n.font_family, n.weight, n.italic)
 	key := hash.fnv64a(transmute([]u8)n.content)
 	key = hash.fnv64a(transmute([]u8)face, key)
 	nums := [4]f32{n.font_size, line_height_of(n), wrap_w if n.growth != .Auto else -1, n.letter_spacing}

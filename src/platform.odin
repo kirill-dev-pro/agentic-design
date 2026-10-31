@@ -145,8 +145,9 @@ scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64) {
 	pf.wheel += {f32(xoffset), f32(yoffset)}
 }
 
-// Clears the per-frame state and pumps the event queue.
-platform_poll :: proc() {
+// Clears the per-frame state and pumps the event queue; with `wait` > 0 it first sleeps
+// until an event arrives or `wait` seconds pass (the app idling, see idle_wait).
+platform_poll :: proc(wait: f64 = 0) {
 	pf.key_pressed = {}
 	pf.key_repeated = {}
 	pf.button_pressed = {}
@@ -159,7 +160,8 @@ platform_poll :: proc() {
 	clear(&pf.synthetic_keys)
 	pf.mouse_prev = pf.mouse
 	pf.polling = true
-	glfw.PollEvents()
+	if wait > 0 do glfw.WaitEventsTimeout(wait)
+	else do glfw.PollEvents()
 	pf.polling = false
 	gestures_collect()
 	x, y := glfw.GetCursorPos(pf.window)
@@ -169,6 +171,22 @@ platform_poll :: proc() {
 		pf.mouse_prev = pf.mouse
 		pf.first_frame = false
 	}
+}
+
+// Whether anything came in since the last frame: a key, a click, the pointer moving,
+// scrolling, a gesture, typing or a dropped file (or a button still held).
+platform_had_input :: proc() -> bool {
+	if pf.mouse != pf.mouse_prev || pf.wheel != {} || pf.scroll != {} || pf.magnify != 0 || pf.smart do return true
+	if len(pf.chars) > 0 || len(pf.dropped) > 0 do return true
+	for b in pf.button_down do if b do return true
+	for b in pf.button_pressed do if b do return true
+	for k in pf.key_repeated do if k do return true
+	return false
+}
+
+// Wakes the main loop from WaitEventsTimeout (safe from any thread).
+platform_wake :: proc() {
+	glfw.PostEmptyEvent()
 }
 
 platform_should_close :: proc() -> bool {

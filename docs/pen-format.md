@@ -64,12 +64,22 @@ Defaults that matter:
   use descendant keys "alias:childId". These names were taken from pen.dev's own renders.
 - The pen tool writes a `path` whose `geometry` is relative to its box, with `width` and
   `height` equal to the outline's bounds; editing keeps the outline where it is.
-- A `fontFamily` that is not installed is drawn with the system font (SF Pro, at the asked
-  weight, an optical size following the font size, and macOS's tracking), as pen.dev
-  draws it. Text without a `fontFamily` uses Arial.
-- `fontFamily` names a family installed on the machine or in a `fonts` folder next to the
-  `.pen` file (the app's own convention; the schema has no font list). Any `fontWeight` of
-  a TrueType variable font is drawn by instancing it.
+- `fonts` (header) lists font files the document brings, as pen.dev's "Add custom fonts"
+  writes it: `[{"name": "Scto Grotesk A", "url": "./fonts/SctoGroteskA-Light.ttf",
+  "weight": 300, "style": "normal"}]`. `weight` may be a range `[100, 900]` for a variable
+  font, and `axes` (`[{"tag", "start", "end"}]`) may follow. Urls are relative to the file.
+  An entry is a face of `name`, whatever the file calls itself. The lists of imported
+  libraries apply to the files importing them. pen.dev reads no installed fonts, so this
+  list is the only way a font reaches it.
+- A `fontFamily` that is not available is drawn with Noto Sans at the asked weight, as
+  pen.dev draws it (its first fallback font). Text without a `fontFamily` uses Arial.
+- A bold (600+) asked of a family whose closest face is lighter is thickened (Skia's
+  FreeType embolden: size / 24, same advances). 500 from a Light face stays Light.
+- Without `lineHeight`, a line is the font's ascender to descender, without its line gap.
+- A frame fitting its content ignores `fill_container` children on that axis; they get
+  what the other children give it (pen.dev's "Collapsed size" when nothing does).
+- The app also reads installed fonts and a `fonts` folder next to the `.pen` file (its own
+  convention). Any `fontWeight` of a TrueType variable font is drawn by instancing it.
 
 ## Version differences
 

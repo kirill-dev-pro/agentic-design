@@ -5,6 +5,7 @@ import "core:c"
 import "core:encoding/base64"
 import "core:encoding/json"
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
@@ -507,7 +508,7 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^Node, bg: nvg.Color) -> (p
 	rw, rh := f32(fb.x), f32(fb.y)
 	s := clamp(scale, 0.05, 4)
 	s = min(s, rw / r[2], rh / r[3])
-	ow, oh = i32(r[2] * s), i32(r[3] * s)
+	ow, oh = i32(math.round(r[2] * s)), i32(math.round(r[3] * s)) // 191.9996 px tall is 192, as pen.dev exports it
 	if ow < 1 || oh < 1 do return
 
 	vg := app.vg

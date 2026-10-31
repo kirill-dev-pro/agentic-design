@@ -64,16 +64,18 @@ glyph_outline :: proc(font_index: int, font: ^fontstash.Font, glyph: i32) -> Gly
 }
 
 // Fills `text` with its glyph outlines, the first glyph's origin at x and the line's top
-// at y (as nvg.Text with TOP alignment), in the current font settings of `n`.
-draw_text_outlines :: proc(vg: ^nvg.Context, n: ^Node, x, y: f32, text: string) {
+// at y (as nvg.Text with TOP alignment), in the current font settings of `n`. `embolden`
+// thickens the glyphs as Skia (FreeType) does for a bold that the family lacks: the outline
+// grows by font size / 24 in all, half on each side, and the advances stay the same.
+draw_text_outlines :: proc(vg: ^nvg.Context, n: ^Node, x, y: f32, text: string, embolden := false) {
 	fs := &app.vg.fs
-	face := font_face(n.font_family, n.weight, n.italic, n.font_size)
+	face := font_face(n.font_family, n.weight, n.italic)
 	fi := fontstash.GetFontByName(fs, face)
 	if fi < 0 do return
 	font := &fs.fonts[fi]
 	scale := stbtt.ScaleForMappingEmToPixels(&font.info, n.font_size)
 	baseline := y + font.ascender * n.font_size
-	spacing := n.letter_spacing + system_tracking(n)
+	spacing := n.letter_spacing
 	pen := x
 	prev: i32 = -1
 	nvg.BeginPath(vg)
@@ -116,12 +118,23 @@ draw_text_outlines :: proc(vg: ^nvg.Context, n: ^Node, x, y: f32, text: string) 
 		prev = g if use == fi else -1
 	}
 	nvg.Fill(vg)
+	if embolden {
+		st := nvg.__getState(vg)
+		saved := st^
+		st.stroke = st.fill
+		st.strokeWidth = n.font_size / 24
+		st.lineJoin = .MITER
+		st.miterLimit = 4
+		nvg.Stroke(vg)
+		st.stroke, st.strokeWidth, st.lineJoin, st.miterLimit = saved.stroke, saved.strokeWidth, saved.lineJoin, saved.miterLimit
+	}
 }
 
-// One run of text at (x, y): bitmap glyphs normally, outlines when large on screen.
-// `halign` places it as nvg.Text would.
+// One run of text at (x, y): bitmap glyphs normally, outlines when large on screen or when
+// a missing bold is drawn by thickening a lighter face. `halign` places it as nvg.Text would.
 text_run :: proc(vg: ^nvg.Context, n: ^Node, x, y: f32, text: string, halign: nvg.AlignHorizontal = .LEFT) {
-	if !text_needs_outlines(vg, n.font_size) {
+	embolden := font_pick(n.font_family, n.weight, n.italic).embolden
+	if !embolden && !text_needs_outlines(vg, n.font_size) {
 		nvg.Text(vg, x, y, text)
 		return
 	}
@@ -130,5 +143,5 @@ text_run :: proc(vg: ^nvg.Context, n: ^Node, x, y: f32, text: string, halign: nv
 		w := nvg.TextBounds(vg, 0, 0, text)
 		left -= w / 2 if halign == .CENTER else w
 	}
-	draw_text_outlines(vg, n, left, y, text)
+	draw_text_outlines(vg, n, left, y, text, embolden)
 }

@@ -136,18 +136,23 @@ app_main :: proc(path: string) {
 	install_exit_handlers()
 	app_log("start: %s (port %d%s)", app.file_path, server_port(), ", opened by an agent" if pf.no_focus else "")
 
+	active_until = glfw.GetTime() + 1
 	for !platform_should_close() && exit_signal == {} {
 		free_all(context.temp_allocator)
 		font_atlas_trim(app.vg)
-		platform_poll()
+		platform_poll(idle_wait())
+		if platform_had_input() do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
 		fb := frame_size()
+		if added := fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
 
 		// drawing instances re-lays out their components in place, so refresh
 		// the boxes before requests read them and again before input
 		t0 := time.tick_now()
 		layout_document(&app.doc)
 		app.needs_layout = false
-		if process_requests() || app.needs_layout {
+		ran := process_requests()
+		if ran do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
+		if ran || app.needs_layout {
 			layout_document(&app.doc)
 			app.needs_layout = false
 		}
@@ -260,6 +265,23 @@ font_atlas_init :: proc(vg: ^nvg.Context) {
 }
 
 FONT_ATLAS_MAX :: 2048
+
+// The main loop draws frames back to back only while something is going on: for a moment
+// after any input or agent request, and while a screenshot, export or thumbnail waits for a
+// frame. Otherwise it sleeps until an event arrives (input, a request wakes it through
+// platform_wake), and twice a second, on the half seconds the text carets blink on, for
+// the timers (autosave, status messages, fonts installed meanwhile). Without this the
+// loop spun at hundreds of frames a second whenever macOS stopped syncing it to the
+// display (a window behind others), keeping a core busy and the laptop warm.
+ACTIVE_AFTER_INPUT :: 0.5 // seconds of full frame rate after the last input
+
+active_until: f64
+
+idle_wait :: proc() -> f64 {
+	if glfw.GetTime() < active_until || shot.req != nil || len(thumb_queue) > 0 || export_pending || copy_png_pending || app.needs_layout do return 0
+	into := time.now()._nsec % 500_000_000 // carets blink on every half second
+	return f64(500_000_000 - into) / 1e9 + 0.002
+}
 
 // Between frames: once the atlas has outgrown its budget, start over with an empty one.
 font_atlas_trim :: proc(vg: ^nvg.Context) {

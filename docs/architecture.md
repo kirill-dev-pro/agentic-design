@@ -109,8 +109,9 @@ of hidden top-level uids every frame.
 Each top-level subtree gets two passes:
 
 - **`measure`** works bottom-up. It finds intrinsic sizes from text metrics, path view boxes
-  and `fit_content` (children plus gap and padding). A fit-content container that holds
-  `fill_container` children takes the space it is offered. In a flex container, children
+  and `fit_content` (children plus gap and padding). As in pen.dev, `fill_container`
+  children add nothing to a fit-content container on that axis. They get the size its other
+  children give it across the flow, and nothing along it. In a flex container, children
   with their own size along the flow are measured first. The `fill_container` ones are
   then measured with their share of what is left, so text inside them wraps at the width
   it will get.

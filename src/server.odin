@@ -74,6 +74,7 @@ handle_client :: proc(client: net.TCP_Socket) {
 			sync.mutex_lock(&req_mutex)
 			append(&req_queue, req)
 			sync.mutex_unlock(&req_mutex)
+			platform_wake() // the main loop may be asleep (idle_wait)
 			sync.sema_wait(&req.done)
 
 			ok := send_all(client, transmute([]u8)req.response) && send_all(client, {'\n'})

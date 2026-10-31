@@ -585,6 +585,7 @@ has no list of fonts.
 
 - `tools/font_instances.py` is no longer needed.
 - CFF2 variable fonts and woff2 are not covered.
+- pen.dev reads neither folder; see #32 for the document's `fonts` list.
 
 ## 31. Agents get a guide, batches and a linter
 
@@ -606,3 +607,73 @@ told an agent which conventions the file follows, or what a reviewer would flag.
   (once per family), text taller than its box, layers cut off by clipping frames, broken
   refs, values off whole pixels and empty text.
 
+## 32. Fonts come from the document, and stand-ins follow pen.dev's renderer
+
+**Problem.** The Sample font (Scto Grotesk A) was installed on the Mac. The app picked it
+up, pen.dev did not even after a restart. pen.dev draws text with Skia compiled to
+WebAssembly and reads no installed fonts. It loads Google Fonts from its own index, plus
+the fonts a document lists (its "Add custom fonts" copies the file next to the `.pen` and
+adds an entry). Decision #30's `fonts` folder and the SF Pro stand-in (C11) were guesses.
+SF Pro had matched one badge's width by coincidence.
+
+**Decision.**
+
+- A document's `fonts` list is read: `[{"name", "url", "weight": n or [min, max],
+  "style": "normal" | "italic"}]`, with urls relative to the file. Each entry is a face of
+  `name`, whatever the file calls itself. The lists of imported libraries count too, so a
+  design system declares its fonts once. Importing a font in the app copies it into
+  `fonts/` and writes the entry, as pen.dev does.
+- A missing family is drawn with Noto Sans, the first of pen.dev's fallback fonts. The
+  same Noto Sans 2.015 files pen.dev fetches are built in (OFL, `assets/fonts`) and
+  instanced at the weight asked for. They also supply glyphs a font lacks. Measured on six
+  Larken headings: Noto Sans matches pen.dev's widths to its rounding, SF Pro is off by up
+  to 4 px.
+- A bold (600+) asked of a family whose closest face is lighter than 600 is thickened as
+  Skia's FreeType backend does: outlines grow by size / 24, advances stay. Scto Grotesk A
+  700 drawn from its Light file matches pen.dev's width (209 px) and weight; 500 stays
+  Light, as in pen.dev.
+- The default line height is the font's ascender to descender, without its line gap.
+  Measured: Scto Grotesk A gives 1.0 (its 0.244 gap ignored), Inter 1.21, Roboto 1.17 and
+  Merriweather 1.26, all as pen.dev.
+- Installed fonts and `fonts/` folders still work, and folders are watched while the app
+  runs. `lint` and `get_guide` say when a family is installed but not in the document,
+  since pen.dev and other machines will not have it.
+
+**Consequences.** Commercial font files stay out of the repository (`designs/fonts/` is
+ignored). The binary grows by 4 MB of Noto Sans.
+
+## 33. fit_content ignores children that fill it, as pen.dev does
+
+**Problem.** A frame fitting its content, with a `fill_container` child on the same axis,
+took all the space offered to it in the app. In pen.dev the child adds nothing. The frame
+is as big as its other children, and the child gets that size, or nothing along the flow.
+pen.dev warns about this as "Collapsed size". The Sample About screen had two such
+sections, which pen.dev drew 85 and 310 px wide and the app 360.
+
+**Decision.**
+
+- Layout follows pen.dev, measured on six probe frames: the child takes the width or height
+  the other children give the frame across the flow, nothing along it. `fit_content(n)`
+  still falls back to `n` when nothing else gives a size.
+- `lint` reports it as `collapsed-size`.
+- Lines also break after a hyphen between letters, as ICU does in Skia.
+
+**Consequences.** Every library page and screen of the Sample files now has pen.dev's
+size; pixel differences are antialiasing, under 1%.
+
+## 34. The main loop sleeps when nothing happens
+
+**Problem.** The loop drew frames back to back and relied on vsync to pace it. macOS stops
+syncing a window that is covered by others, so an idle window behind other apps used a
+whole core: about 9 s of CPU in 10 s.
+
+**Decision.**
+
+- Frames run at full rate for half a second after any input or agent request, and while a
+  screenshot, export or thumbnail waits for one.
+- Otherwise the loop waits for events. Requests wake it from the server thread
+  (`glfwPostEmptyEvent`). It also wakes every half second, in step with the caret blink,
+  for timers.
+
+**Consequences.** An idle window uses about 1% of a core. A request is answered within a
+few milliseconds.

@@ -814,7 +814,7 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 		shown := n.font_family if n.font_family != "" else "Default (Arial)"
 		if n.font_family != "" && cur == 0 do shown = fmt.tprintf("%s (missing)", n.font_family)
 		if dropdown(vg, {x, y^, w - 32, 28}, shown) do menu_open("font", {x, y^, w - 32, 28}, fam_items[:], cur, searchable = true, font_preview = true)
-		if lucide_button(vg, {x + w - 28, y^ + 2, 24, 24}, "file-plus", false, "Import font into the document's fonts folder (or drop a font file)") do import_font_dialog()
+		if lucide_button(vg, {x + w - 28, y^ + 2, 24, 24}, "file-plus", false, "Add a font file to the document: copied into fonts/ next to it and listed in its fonts, as pen.dev does (or drop a font file)") do import_font_dialog()
 		if pick, ok := menu_take("font"); ok {
 			push_undo()
 			if pick == 0 do node_unset(&app.doc, n, "fontFamily")
