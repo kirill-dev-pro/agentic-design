@@ -101,6 +101,7 @@ open_in_tab :: proc(path: string) -> bool {
 	if rerr != nil do return false
 	append(&app.tabs, Tab{zoom = 1, cam = {-80, -60}})
 	tab_activate(len(app.tabs) - 1)
+	fonts_add_document_dir(abs)
 	if !doc_load(&app.doc, string(data)) {
 		close_tab(app.tab)
 		return false

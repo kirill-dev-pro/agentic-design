@@ -73,7 +73,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Appearance | opacity, corner radius with per-corner toggle, eye, Clip Content | radius slider, opacity, eye, "Normal" blend label | opacity, radius with **per-corner** fields, eye, clip | done (no blend mode) |
 | Fill | list with +, eye, −; colour, gradient (linear, radial, angular, mesh), image, shader; blend mode | one fill (colour, variable or image) | **list** with +, eye, −, type menu (solid / linear / radial / angular), first and last stop colours, rotation, size | partial (no stop editing beyond the ends, mesh, shader, blend mode) |
 | Stroke | +, width, inside/center/outside | width, alignment, colour | same; new strokes are written "inner" | done (one stroke) |
-| Effects | drop shadow, inner shadow, layer blur, background blur, shader; list | one shadow | **list**: drop and inner shadows (drawn), layer and background blur (kept, not drawn) | partial |
+| Effects | drop shadow, inner shadow, layer blur, background blur, shader; list | one shadow | **list**: drop and inner shadows, layer blur and background blur, all drawn as pen.dev draws them | done (no shader effects) |
 | Typography | font, weight, size (variable binding), line height, letter spacing, align ×4, vertical ×3 | font, size, weight, align ×3, growth | adds **line height**, **letter spacing**, **justify**, **vertical align**, underline, strikethrough | done (no variable binding UI for size) |
 | Theme | per frame, add/remove | per frame | same | done |
 | Instance | Go to component, Detach | Go to component, Detach, Parameters | same | done (Parameters goes beyond pen.dev's UI) |
@@ -88,7 +88,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | HSV, hex, alpha | yes | yes | yes | done |
 | Document colours | variables | named list with search | same | done |
 | Fill type tabs (colour / gradient / image) | in the picker | — | type menu on the fill row | partial |
-| Gradient stops on the canvas | drag handles | — | — | missing |
+| Gradient stops | bar with stops, drag handles on the canvas | — | stop bar (drag a stop, click to add), a row per stop (position, colour, remove), canvas handles for the ends of a linear gradient and the centre and radii of radial and angular ones | done |
 | Eyedropper | — | — | — | — |
 
 ## Fonts
@@ -98,8 +98,8 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Font picker | search, previews | search, previews in their own face | same | done |
 | Font metrics | CSS-like | 17% too small, line height 1.2 | em size, font line height, half leading | done |
 | Kerning | yes | `kern` table only | **GPOS pair kerning** (Extension lookups included) | done |
-| Variable fonts | all weights | default instance only | static instances via `tools/font_instances.py` into the app font folder | partial (instances made by a tool, not on demand) |
-| Custom fonts per document | import ttf/otf/woff/woff2 | — | — | missing |
+| Variable fonts | all weights | default instance only | any weight on demand: TrueType variable fonts are instanced in the app (matches fontTools within 1.2 units) | done (CFF2 variable fonts keep their default) |
+| Custom fonts per document | import ttf/otf/woff/woff2 | — | a `fonts` folder next to the document, filled by the import button or by dropping font files; also `.ttc` collections and `.woff` | partial (no woff2) |
 | Missing font warning | Typography reports it | "(missing)" in the menu | same | done |
 
 ## Variables and themes
@@ -145,9 +145,9 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 
 1. **Pen tool and path editing.** Drawing and editing vectors.
 2. ~~Measurements and a zoom tool.~~ Done.
-3. **Per-document custom fonts and on-demand variable fonts.**
-4. **Gradient stop editing and on-canvas handles.** Plus mesh gradients and blend modes.
-5. **Blur effects.** Layer blur and background blur need render targets.
+3. ~~Per-document custom fonts and on-demand variable fonts.~~ Done, except woff2.
+4. ~~Gradient stop editing and on-canvas handles.~~ Done. Mesh gradients and blend modes remain.
+5. ~~Blur effects.~~ Done.
 6. **More export formats.** JPEG, WEBP and PDF; copy as PNG or HTML.
 7. ~~Find layers, ⌘-click deep select, a shortcut sheet, settings.~~ Done.
 8. **Libraries.** Components shared across files.

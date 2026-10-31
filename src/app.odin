@@ -47,6 +47,7 @@ Drag_Kind :: enum {
 	Create,
 	Marquee,
 	Zoom,
+	Gradient,
 }
 
 Drag :: struct {
@@ -164,6 +165,10 @@ app_main :: proc(path: string) {
 		thumbs_render()
 		export_render()
 
+		if app.tab >= 0 {
+			c := app.canvas
+			blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg})
+		}
 		gl.Viewport(0, 0, fb.x, fb.y)
 		bg := app.canvas_bg if app.tab >= 0 else PANEL_BG
 		gl.ClearColor(bg.r, bg.g, bg.b, 1)
@@ -510,7 +515,10 @@ node_visible :: proc(n: ^Node) -> bool {
 	if cull_rect[2] <= 0 || n.rotation != 0 || n.flip_x || n.flip_y do return true
 	m := n.stroke_width + 2
 	if n.shadow.has do m += abs(n.shadow.offset.x) + abs(n.shadow.offset.y) + n.shadow.blur + n.shadow.spread
-	for e in n.effects[:n.neffects] do if e.kind == .Drop_Shadow do m = max(m, n.stroke_width + 2 + abs(e.offset.x) + abs(e.offset.y) + e.blur + e.spread)
+	for e in n.effects[:n.neffects] {
+		if e.kind == .Drop_Shadow do m = max(m, n.stroke_width + 2 + abs(e.offset.x) + abs(e.offset.y) + e.blur + e.spread)
+		if e.kind == .Blur do m = max(m, n.stroke_width + 2 + e.blur * 1.5)
+	}
 	return n.x - m < cull_rect[0] + cull_rect[2] && n.x + n.w + m > cull_rect[0] &&
 	       n.y - m < cull_rect[1] + cull_rect[3] && n.y + n.h + m > cull_rect[1]
 }
@@ -518,6 +526,12 @@ node_visible :: proc(n: ^Node) -> bool {
 // Draws a node and, for frames and groups, its children.
 draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force := false) {
 	if (!n.enabled && !force) || depth > MAX_DEPTH do return
+	// capturing what lies behind a background blur: stop at its layer
+	if blur_stopped do return
+	if blur_stop != 0 && n.uid == blur_stop {
+		blur_stopped = true
+		return
+	}
 	// Off-screen nodes are skipped: besides the work, their glyphs would take atlas space
 	// (at high zoom a few large glyphs fill it and the rest of the text disappears).
 	// Children may overflow an unclipped container, so only leaves and clipping frames
@@ -527,6 +541,12 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		case .Group, .Ref: // children may lie outside
 		case .Frame: if n.clip do return
 		case: return
+		}
+	}
+	if blur_active && n.uid != blur_self {
+		if r, ok := blur_layer[n.uid]; ok {
+			draw_blurred_layer(vg, r, alpha)
+			return
 		}
 	}
 	doc := &app.doc
@@ -569,6 +589,7 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		draw_drop_shadows(vg, n, min(n.w, n.h) / 2)
 		nvg.BeginPath(vg)
 		nvg.Ellipse(vg, cx, cy, n.w / 2, n.h / 2)
+		fill_backdrop(vg, n)
 		fill_paints(vg, n)
 		draw_inner_shadows(vg, n, min(n.w, n.h) / 2)
 		if n.has_stroke && n.stroke_width > 0 {
@@ -696,6 +717,7 @@ draw_box :: proc(vg: ^nvg.Context, n: ^Node) {
 	draw_drop_shadows(vg, n, n.radius[0])
 	nvg.BeginPath(vg)
 	rounded_rect(vg, n.x, n.y, n.w, n.h, n.radius)
+	fill_backdrop(vg, n)
 	if n.nfills > 0 {
 		fill_paints(vg, n)
 	} else if n.has_fill {
@@ -892,10 +914,12 @@ draw_canvas :: proc() {
 	nvg.Translate(vg, -app.cam.x, -app.cam.y)
 	tl, br := to_page({c.x, c.y}), to_page({c.x + c.w, c.y + c.h})
 	cull_rect = {tl.x, tl.y, br.x - tl.x, br.y - tl.y}
+	blur_active = true
 	for cu in children_of(&app.doc, 0) {
 		if app.page_hidden[cu] do continue
 		if c, _ := doc_find_uid(&app.doc, cu); c != nil do draw_node_tree(vg, c, 1, 0)
 	}
+	blur_active = false
 	cull_rect = {}
 	nvg.Restore(vg)
 
@@ -991,6 +1015,7 @@ draw_canvas :: proc() {
 			nvg.Fill(vg)
 		}
 	}
+	draw_gradient_handles(vg)
 	draw_measurements(vg)
 	// marquee, and the region of the zoom tool
 	if (app.drag.kind == .Marquee || app.drag.kind == .Zoom) && (abs(app.mouse.x - to_screen(app.drag.start_page).x) >= 0.5 || abs(app.mouse.y - to_screen(app.drag.start_page).y) >= 0.5) {

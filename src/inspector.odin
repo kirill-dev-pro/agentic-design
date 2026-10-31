@@ -4,8 +4,10 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "vendor:glfw"
 import nvg "nanovg"
 
 // Inspector sections modelled on pen.dev's properties panel: alignment, position with
@@ -217,7 +219,8 @@ fill_items :: proc(n: ^Node) -> json.Array {
 	return out
 }
 
-// Writes the fill list back: a lone solid colour stays a plain string, as pen.dev writes it.
+// Writes the fill list back: a lone solid colour stays a plain string, as pen.dev writes
+// it, and a lone paint object stays an object unless the file had a list.
 fill_store :: proc(n: ^Node, items: json.Array) {
 	if len(items) == 0 {
 		node_unset(&app.doc, n, "fill")
@@ -226,6 +229,11 @@ fill_store :: proc(n: ^Node, items: json.Array) {
 	if len(items) == 1 {
 		if s, is_str := items[0].(json.String); is_str {
 			node_set_string(&app.doc, n, "fill", string(s))
+			return
+		}
+		cur, _ := prop_value(n, "fill")
+		if _, was_list := cur.(json.Array); !was_list {
+			node_set(&app.doc, n, "fill", items[0])
 			return
 		}
 	}
@@ -284,7 +292,10 @@ draw_fills_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 		if lucide_button(vg, kr, "chevrons-up-down", false, "Fill type") {
 			menu_open(fmt.tprintf("fillkind:%d", i), {x, y^, w, 28}, {"Solid", "Linear gradient", "Radial gradient", "Angular gradient"}, int(p.kind) if p.kind != .Image else -1)
 		}
-		if pick, ok := menu_take(fmt.tprintf("fillkind:%d", i)); ok do fill_set_kind(n, i, pick)
+		if pick, ok := menu_take(fmt.tprintf("fillkind:%d", i)); ok {
+			fill_set_kind(n, i, pick)
+			if pick > 0 do ui.grad = {uid = n.uid, fill = i}
+		}
 		if lucide_button(vg, {x + w - 26, y^ + 2, 24, 24}, "minus", false, "Remove") {
 			push_undo()
 			out := fill_items(n)
@@ -304,14 +315,11 @@ draw_fills_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 			}
 			fill_store(n, out)
 		}
+		if p.kind != .Color && p.kind != .Image && clicked(row) do ui.grad = {uid = n.uid, fill = i}
 		y^ += 32
 		if p.kind == .Linear || p.kind == .Radial || p.kind == .Angular {
 			half := (w - 8) / 2
-			if p.nstops > 0 {
-				color_row(vg, n, fmt.tprintf("fill.%d.stop.0", i), x, half, y^, p.stops[0].color)
-				color_row(vg, n, fmt.tprintf("fill.%d.stop.%d", i, p.nstops - 1), x + half + 8, half, y^, p.stops[p.nstops - 1].color)
-				y^ += 32
-			}
+			draw_gradient_stops(vg, n, i, &p, x, w, y)
 			field(vg, n.uid, fmt.tprintf("fill.%d.rotation", i), "°", {x, y^, half, 28}, num_text(p.rotation), numeric = true)
 			if p.kind != .Linear {
 				field(vg, n.uid, fmt.tprintf("fill.%d.size", i), "Size", {x + half + 8, y^, half, 28}, fmt.tprintf("%d%%", int(p.size.x * 100 + 0.5)), numeric = true)
@@ -320,6 +328,113 @@ draw_fills_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 		}
 	}
 	divider(vg, x, w, y)
+}
+
+// ---------------------------------------------------------------- gradient stops
+
+// The stops of fill i, editable: the fill list, the fill object and its colors.
+grad_colors :: proc(n: ^Node, i: int) -> (out: json.Array, o: json.Object, colors: json.Array, ok: bool) {
+	out = fill_items(n)
+	if i >= len(out) do return
+	o = fill_object(out[i])
+	colors, ok = o["colors"].(json.Array)
+	return
+}
+
+grad_store :: proc(n: ^Node, i: int, out: json.Array, o: json.Object, colors: json.Array) {
+	o := o
+	o["colors"] = colors
+	out[i] = o
+	fill_store(n, out)
+}
+
+stop_pos :: proc(c: json.Value) -> f32 {
+	co, _ := c.(json.Object)
+	return f32(co["position"].(json.Float) or_else 0)
+}
+
+stop_set_pos :: proc(c: json.Value, pos: f32) {
+	if co, ok := c.(json.Object); ok {
+		co := co
+		co["position"] = json.Float(math.round(f64(clamp(pos, 0, 1)) * 1000) / 1000)
+	}
+}
+
+// A bar showing the gradient with a marker per stop (drag to move one, click the bar to
+// add one), then a row per stop: position, colour, remove.
+draw_gradient_stops :: proc(vg: ^nvg.Context, n: ^Node, i: int, p: ^Paint, x, w: f32, y: ^f32) {
+	editing := ui.grad.uid == n.uid && ui.grad.fill == i
+	bar := Rect{x + 6, y^ + 4, w - 12, 16}
+	lp := p^
+	lp.kind = .Linear
+	nvg.BeginPath(vg)
+	nvg.RoundedRect(vg, bar.x, bar.y, bar.w, bar.h, 4)
+	nvg.FillPaint(vg, nvg.ImagePattern(bar.x, bar.y, bar.w, 1, 0, gradient_image(vg, &lp), 1))
+	nvg.Fill(vg)
+	stroke_rect(vg, bar, {1, 1, 1, 0.12}, 4)
+	// markers under the bar
+	marker_hit := -1
+	for k in 0 ..< p.nstops {
+		mx := bar.x + p.stops[k].pos * bar.w
+		m := Rect{mx - 6, bar.y + bar.h + 2, 12, 12}
+		nvg.BeginPath(vg)
+		nvg.RoundedRect(vg, m.x, m.y, m.w, m.h, 3)
+		nvg.FillColor(vg, to_nvg(p.stops[k].color))
+		nvg.Fill(vg)
+		nvg.StrokeColor(vg, ACCENT if editing && ui.grad.stop == k else nvg.Color{1, 1, 1, 0.8})
+		nvg.StrokeWidth(vg, 2 if editing && ui.grad.stop == k else 1)
+		nvg.Stroke(vg)
+		if hovered({m.x - 2, m.y - 2, m.w + 4, m.h + 4}) do marker_hit = k
+	}
+	if marker_hit >= 0 && clicked({x, bar.y, w, 34}) {
+		ui.grad = {uid = n.uid, fill = i, stop = marker_hit, dragging = true}
+		push_undo()
+	} else if clicked(bar) {
+		// a new stop where the bar was clicked, in the colour the gradient has there
+		pos := clamp((app.mouse.x - bar.x) / bar.w, 0, 1)
+		if out, o, colors, ok := grad_colors(n, i); ok && len(colors) < MAX_STOPS {
+			push_undo()
+			c := make(json.Object, context.temp_allocator)
+			c["color"] = json.String(color_hex(gradient_at(p, pos)))
+			c["position"] = json.Float(math.round(f64(pos) * 1000) / 1000)
+			k := len(colors)
+			for cv, j in colors do if stop_pos(cv) > pos {k = j; break}
+			inject_at(&colors, k, c)
+			grad_store(n, i, out, o, colors)
+			ui.grad = {uid = n.uid, fill = i, stop = k, dragging = true}
+		}
+	}
+	// a dragged marker stays between its neighbours, so the stops keep their order
+	if editing && ui.grad.dragging {
+		if !mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+			ui.grad.dragging = false
+		} else if out, o, colors, ok := grad_colors(n, i); ok && ui.grad.stop < len(colors) {
+			k := ui.grad.stop
+			lo: f32 = stop_pos(colors[k - 1]) if k > 0 else 0
+			hi: f32 = stop_pos(colors[k + 1]) if k + 1 < len(colors) else 1
+			pos := clamp((app.mouse.x - bar.x) / bar.w, lo, hi)
+			if abs(pos - stop_pos(colors[k])) > 1e-4 {
+				stop_set_pos(colors[k], pos)
+				grad_store(n, i, out, o, colors)
+			}
+		}
+	}
+	y^ += 40
+	// one row per stop
+	for k in 0 ..< p.nstops {
+		field(vg, n.uid, fmt.tprintf("fill.%d.stoppos.%d", i, k), "", {x, y^, 56, 28}, fmt.tprintf("%d%%", int(math.round(p.stops[k].pos * 100))), numeric = true)
+		color_row(vg, n, fmt.tprintf("fill.%d.stop.%d", i, k), x + 64, w - 64 - 30, y^, p.stops[k].color)
+		if p.nstops > 2 && lucide_button(vg, {x + w - 26, y^ + 2, 24, 24}, "minus", false, "Remove stop") {
+			if out, o, colors, ok := grad_colors(n, i); ok && k < len(colors) {
+				push_undo()
+				ordered_remove(&colors, k)
+				grad_store(n, i, out, o, colors)
+				ui.grad.stop = max(0, min(ui.grad.stop, len(colors) - 1))
+				return
+			}
+		}
+		y^ += 32
+	}
 }
 
 fill_set_kind :: proc(n: ^Node, i: int, kind: int) {
@@ -340,7 +455,7 @@ fill_set_kind :: proc(n: ^Node, i: int, kind: int) {
 			for s in p.stops[:p.nstops] {
 				c := make(json.Object, context.temp_allocator)
 				c["color"] = json.String(color_hex(s.color))
-				c["position"] = json.Float(f64(s.pos))
+				c["position"] = json_num(s.pos)
 				append(&colors, c)
 			}
 		} else {
@@ -559,7 +674,7 @@ inspector_field_apply :: proc(n: ^Node, key, text: string) -> bool {
 		case "radius.bl": r[3] = f
 		}
 		arr := make(json.Array, 0, 4, context.temp_allocator)
-		for v in r do append(&arr, json.Float(f64(v)))
+		for v in r do append(&arr, json_num(v))
 		node_set(&app.doc, n, "cornerRadius", arr)
 		return true
 	}
@@ -585,11 +700,19 @@ inspector_field_apply :: proc(n: ^Node, key, text: string) -> bool {
 		f, fok := strconv.parse_f32(strings.trim_suffix(t, "%"))
 		switch {
 		case len(parts) == 3 && parts[2] == "rotation" && fok:
-			o["rotation"] = json.Float(f64(f))
+			o["rotation"] = json_num(f)
+		case len(parts) == 4 && parts[2] == "stoppos" && fok:
+			// a typed position: the stops are re-sorted
+			k, _ := strconv.parse_int(parts[3])
+			colors, cok := o["colors"].(json.Array)
+			if !cok || k >= len(colors) do return true
+			stop_set_pos(colors[k], f / 100)
+			slice.sort_by(colors[:], proc(a, b: json.Value) -> bool {return stop_pos(a) < stop_pos(b)})
+			o["colors"] = colors
 		case len(parts) == 3 && parts[2] == "size" && fok:
 			s := make(json.Object, context.temp_allocator)
-			s["width"] = json.Float(f64(f / 100))
-			s["height"] = json.Float(f64(f / 100))
+			s["width"] = json_num(f / 100)
+			s["height"] = json_num(f / 100)
 			o["size"] = s
 		case:
 			return true
@@ -611,10 +734,10 @@ inspector_field_apply :: proc(n: ^Node, key, text: string) -> bool {
 		case "x", "y":
 			off, _ := o["offset"].(json.Object)
 			if off == nil do off = make(json.Object, context.temp_allocator)
-			off[parts[2]] = json.Float(f64(f))
+			off[parts[2]] = json_num(f)
 			o["offset"] = off
 		case "blur", "spread", "radius":
-			o[parts[2]] = json.Float(f64(f))
+			o[parts[2]] = json_num(f)
 		case "color":
 			hex := t if strings.has_prefix(t, "#") || strings.has_prefix(t, "$") else fmt.tprintf("#%s", t)
 			o["color"] = json.String(hex)

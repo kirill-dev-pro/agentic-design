@@ -120,7 +120,7 @@ update_cursor :: proc(over_canvas: bool) {
 		case app.drag.kind == .Zoom || zoom_tool_held(): cursor = .Crosshair
 		case app.tool == .Text || app.editing != 0: cursor = .IBeam
 		case app.tool != .Select: cursor = .Crosshair
-		case handle_under_mouse() >= 0: cursor = .Hand
+		case handle_under_mouse() >= 0 || grad_handle_under_mouse() != .None: cursor = .Hand
 		}
 	} else if ui.cursor_hint != .Default {
 		cursor = ui.cursor_hint
@@ -260,6 +260,12 @@ mouse_down_tool :: proc(page: [2]f32) {
 	switch app.tool {
 	case .Hand:
 	case .Select:
+		if gh := grad_handle_under_mouse(); gh != .None {
+			push_undo()
+			app.drag.kind = .Gradient
+			app.drag.handle = int(gh)
+			return
+		}
 		if h := handle_under_mouse(); h >= 0 {
 			n, _ := doc_find_uid(&app.doc, app.sel[0])
 			app.drag.kind = .Resize
@@ -356,6 +362,8 @@ drag_update :: proc(page: [2]f32) {
 	d := &app.drag
 	switch d.kind {
 	case .None, .Marquee, .Zoom:
+	case .Gradient:
+		grad_drag(Grad_Handle(d.handle), page)
 	case .Pan:
 		app.cam -= mouse_delta() / app.zoom
 	case .Move:

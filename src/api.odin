@@ -396,12 +396,14 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^Node, bg: nvg.Color) -> (p
 	if ow < 1 || oh < 1 do return
 
 	vg := app.vg
+	blur_prepare({xf = {s, 0, 0, s, -r[0] * s, -r[1] * s}, dpr = 1, clip = {0, 0, f32(ow), f32(oh)}, fb = {i32(rw), i32(rh)}, bg = bg})
 	gl.Viewport(0, 0, i32(rw), i32(rh))
 	gl.ClearColor(bg.r, bg.g, bg.b, 1)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	nvg.BeginFrame(vg, rw, rh, 1)
 	nvg.Scale(vg, s, s)
 	nvg.Translate(vg, -r[0], -r[1])
+	blur_active = true
 	if target != nil {
 		draw_node_tree(vg, target, 1, 0)
 	} else {
@@ -409,6 +411,7 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^Node, bg: nvg.Color) -> (p
 			if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do draw_node_tree(vg, &app.doc.nodes[i], 1, 0)
 		}
 	}
+	blur_active = false
 	nvg.EndFrame(vg)
 
 	pixels = make([]u8, int(ow * oh * 4), context.temp_allocator)

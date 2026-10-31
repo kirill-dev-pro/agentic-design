@@ -62,6 +62,11 @@ UI :: struct {
 	},
 	comp_search:    string,
 	layer_search:   string,
+	// the gradient being edited: its node, fill index, selected stop, a stop being dragged
+	grad:           struct {
+		uid, fill, stop: int,
+		dragging:        bool,
+	},
 	pages_shut:     bool,
 	files:          [dynamic]string, // .pen files next to the open one
 	files_time:     time.Time,

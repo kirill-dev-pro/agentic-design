@@ -38,7 +38,7 @@ the round-trip test fixtures.
 | Size | `width` / `height`: number, `fit_content`, `fill_container`, also with a fallback as in `fit_content(120)` |
 | Flex | `layout` (`none`, `horizontal`, `vertical`), `gap`, `padding` (n, [v,h], [t,r,b,l]), `justifyContent`, `alignItems`, `layoutPosition: absolute`, `clip` |
 | Paint | `fill` (color, `$variable`, image fill, linear / radial / angular gradients, or a list of them), `stroke`, `strokeWidth` (one number or `{top, right, bottom, left}`), `strokeAlignment`, `strokeLinecap`, `strokeLinejoin`, `cornerRadius` (n or 4 corners), `opacity` (number or `%`), `enabled` |
-| Effects | `effect`: one or a list; outer and inner shadows are drawn, `blur` and `background_blur` are kept and exported, not drawn |
+| Effects | `effect`: one or a list of outer and inner shadows, `blur` and `background_blur` |
 | Transform | `rotation` (degrees counter-clockwise), `flipX`, `flipY`, all around the top-left corner |
 | Text | `content` (a string; styled runs are not supported), `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `letterSpacing`, `underline`, `strikethrough`, `textAlign` (with `justify`), `textAlignVertical`, `textGrowth`, `lineHeight` |
 | Paths | `geometry` (SVG path data, arcs included), view box |
@@ -59,6 +59,9 @@ Defaults that matter:
   is drawn to the left of its `x` (pen.dev renders and exports it so). A shadow's `blur`
   fades over twice its value, as in CSS; a blur effect's `radius` is twice the CSS value.
 - pen.dev does not draw `underline` or `strikethrough`; the app does.
+- `fontFamily` names a family installed on the machine or in a `fonts` folder next to the
+  `.pen` file (the app's own convention; the schema has no font list). Any `fontWeight` of
+  a TrueType variable font is drawn by instancing it.
 
 ## Version differences
 

@@ -1803,6 +1803,13 @@ round2_64 :: proc(f: f32) -> f64 {
 	return math.round(f64(f) * 100) / 100
 }
 
+// An f32 as a JSON number, rounded in f64 to `digits` decimals so the file gets 12.3
+// rather than 12.300000190734863.
+json_num :: proc(f: f32, digits := 3) -> json.Value {
+	scale := math.pow(10, f64(digits))
+	return json.Float(math.round(f64(f) * scale) / scale)
+}
+
 // Number formatting for JSON: integral values as ints, others with at most 2 decimals.
 num_text :: proc(f: f32, allocator := context.temp_allocator) -> string {
 	v := round2_64(f)
