@@ -138,11 +138,7 @@ app_main :: proc(path: string) {
 		free_all(context.temp_allocator)
 		font_atlas_trim(app.vg)
 		platform_poll()
-		app.screen = platform_window_size()
-		fb := platform_framebuffer_size()
-		app.dpr = f32(fb.x) / max(app.screen.x, 1)
-		app.mouse = pf.mouse
-		app.canvas = {LEFT_W + TOOLS_W, TAB_H, app.screen.x - LEFT_W - TOOLS_W - RIGHT_W, app.screen.y - TAB_H}
+		fb := frame_size()
 
 		// drawing instances re-lays out their components in place, so refresh
 		// the boxes before requests read them and again before input
@@ -170,24 +166,7 @@ app_main :: proc(path: string) {
 		export_render()
 		copy_png_render()
 
-		if app.tab >= 0 {
-			c := app.canvas
-			blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg})
-		}
-		gl.Viewport(0, 0, fb.x, fb.y)
-		bg := app.canvas_bg if app.tab >= 0 else PANEL_BG
-		gl.ClearColor(bg.r, bg.g, bg.b, 1)
-		gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-		nvg.BeginFrame(app.vg, app.screen.x, app.screen.y, app.dpr)
-		if app.tab >= 0 do draw_canvas()
-		t3 := time.tick_now()
-		draw_ui()
-		t4 := time.tick_now()
-		nvg.EndFrame(app.vg)
-		t5 := time.tick_now()
-		if view_shot_pending() do capture_view()
-		platform_swap()
-		t6 := time.tick_now()
+		t3, t4, t5, t6 := frame_draw(fb, true)
 		app.perf = {
 			time.duration_milliseconds(time.tick_diff(t0, t1)), // layout x2 + requests
 			time.duration_milliseconds(time.tick_diff(t1, t2)), // input + layout
@@ -206,6 +185,60 @@ app_main :: proc(path: string) {
 		delete(data)
 	}
 	platform_shutdown()
+}
+
+// The window's size this frame: screen, framebuffer, pixel ratio and the canvas.
+frame_size :: proc() -> [2]i32 {
+	app.screen = platform_window_size()
+	fb := platform_framebuffer_size()
+	app.dpr = f32(fb.x) / max(app.screen.x, 1)
+	app.mouse = pf.mouse
+	app.canvas = {LEFT_W + TOOLS_W, TAB_H, app.screen.x - LEFT_W - TOOLS_W - RIGHT_W, app.screen.y - TAB_H}
+	return fb
+}
+
+drawing_frame: bool
+
+// Draws the canvas and the interface and shows them. Returns the times after the canvas,
+// the interface, the flush and the swap.
+frame_draw :: proc(fb: [2]i32, capture: bool) -> (t3, t4, t5, t6: time.Tick) {
+	drawing_frame = true
+	defer drawing_frame = false
+	if app.tab >= 0 {
+		c := app.canvas
+		blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg})
+	}
+	gl.Viewport(0, 0, fb.x, fb.y)
+	bg := app.canvas_bg if app.tab >= 0 else PANEL_BG
+	gl.ClearColor(bg.r, bg.g, bg.b, 1)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	nvg.BeginFrame(app.vg, app.screen.x, app.screen.y, app.dpr)
+	if app.tab >= 0 do draw_canvas()
+	t3 = time.tick_now()
+	draw_ui()
+	t4 = time.tick_now()
+	nvg.EndFrame(app.vg)
+	t5 = time.tick_now()
+	if capture && view_shot_pending() do capture_view()
+	platform_swap()
+	t6 = time.tick_now()
+	return
+}
+
+// While macOS resizes the window it runs its own event loop inside glfwPollEvents, so the
+// main loop stops and the system stretches the last frame to the new size. GLFW reports
+// each size step through its callbacks; they draw a frame at that size right away (no
+// input or requests: those wait for the main loop, so nothing runs twice).
+live_redraw :: proc() {
+	// only from inside the event poll: elsewhere (a size set from code) the main loop
+	// draws anyway, and the temporary memory it uses must not be freed here
+	if !pf.polling || drawing_frame || app.vg == nil do return
+	free_all(context.temp_allocator)
+	fb := frame_size()
+	if fb.x <= 0 || fb.y <= 0 do return
+	layout_document(&app.doc)
+	build_draw_order()
+	frame_draw(fb, false)
 }
 
 // Works around two bugs in Odin's fontstash/nanovg ports. When the glyph atlas fills up,

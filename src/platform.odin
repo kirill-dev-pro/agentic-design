@@ -28,6 +28,7 @@ Platform :: struct {
 	synthetic:      bool, // mouse position injected through the API (tests)
 	synthetic_pos:  [2]f32,
 	synthetic_keys: [dynamic]c.int, // keys held for one frame by the API
+	polling:        bool, // inside glfwPollEvents (where a live resize runs)
 	key_down:       [MAX_KEYS]bool,
 	key_pressed:    [MAX_KEYS]bool, // went down this frame
 	key_repeated:   [MAX_KEYS]bool, // went down or auto-repeated this frame
@@ -78,6 +79,9 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 	glfw.SetDropCallback(pf.window, drop_callback)
 	glfw.SetMouseButtonCallback(pf.window, mouse_button_callback)
 	glfw.SetScrollCallback(pf.window, scroll_callback)
+	// live resize: draw at every size step instead of letting macOS stretch the last frame
+	glfw.SetFramebufferSizeCallback(pf.window, framebuffer_size_callback)
+	glfw.SetWindowRefreshCallback(pf.window, window_refresh_callback)
 	gestures_install()
 
 	shapes := [Cursor]c.int {
@@ -96,6 +100,16 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 platform_shutdown :: proc() {
 	glfw.DestroyWindow(pf.window)
 	glfw.Terminate()
+}
+
+framebuffer_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: c.int) {
+	context = runtime.default_context()
+	live_redraw()
+}
+
+window_refresh_callback :: proc "c" (window: glfw.WindowHandle) {
+	context = runtime.default_context()
+	live_redraw()
 }
 
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
@@ -144,7 +158,9 @@ platform_poll :: proc() {
 	for k in pf.synthetic_keys do pf.key_down[k] = false
 	clear(&pf.synthetic_keys)
 	pf.mouse_prev = pf.mouse
+	pf.polling = true
 	glfw.PollEvents()
+	pf.polling = false
 	gestures_collect()
 	x, y := glfw.GetCursorPos(pf.window)
 	pf.mouse = {f32(x), f32(y)}
