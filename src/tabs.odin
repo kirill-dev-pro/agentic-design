@@ -305,6 +305,9 @@ thumbs_render :: proc() {
 				if png, pok := png_encode(pixels, w, h); pok do _ = os.write_entire_file(thumb_path(path), png)
 			}
 		}
+		// the copy grew while it was shown (imports, layout, pages): free that one, not the
+		// stale struct it was copied from
+		tmp = app.doc
 		app.doc = saved
 		app.page = saved_page
 		doc_clear(&tmp)
