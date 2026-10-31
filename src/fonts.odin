@@ -162,19 +162,62 @@ STYLE_WORDS := [?]Style_Word {
 face_memo: map[string]string // "family|weight|italic" -> face name
 
 // NanoVG font name for a family/weight/style; falls back to Arial.
-font_face :: proc(family: string, weight: int, italic: bool) -> string {
+// NanoVG font name for a family/weight/style at a size (the size matters only for the
+// system font standing in for a missing family). Unnamed text uses Arial.
+font_face :: proc(family: string, weight: int, italic: bool, size: f32 = 16) -> string {
 	if family == "" do return "sans-bold" if weight >= 600 else "sans"
-	key := fmt.tprintf("%s|%d|%v", family, weight, italic)
+	key := fmt.tprintf("%s|%d|%v|%d", family, weight, italic, opsz_bucket(size))
 	if hit, ok := face_memo[key]; ok do return hit
-	face := font_face_lookup(family, weight, italic)
+	face := font_face_lookup(family, weight, italic, size)
 	face_memo[strings.clone(key)] = face
 	return face
 }
 
-font_face_lookup :: proc(family: string, weight: int, italic: bool) -> string {
+// A family that is not installed is drawn with the system font, as pen.dev does (measured:
+// SF Pro Text matches its widths, Arial and Inter do not), at the weight asked for and an
+// optical size following the font size, as macOS sets it.
+system_faces: [2]Face // upright, italic
+system_faces_ready: bool
+
+// Optical sizes the system font is instanced at (each instance is a separate font).
+opsz_bucket :: proc(size: f32) -> int {
+	for b in ([?]int{17, 22, 28, 40, 64}) do if size <= f32(b) + (f32(b) * 0.15) do return b
+	return 96
+}
+
+system_face_name :: proc(weight: int, italic: bool, size: f32) -> (string, bool) {
+	if !system_faces_ready {
+		system_faces_ready = true
+		for path, i in ([2]string{"/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/SFNSItalic.ttf"}) {
+			infos := font_file_infos(path)
+			if len(infos) == 0 do continue
+			fi := infos[0]
+			system_faces[i] = Face{strings.clone(path), 0, fi.weight, i == 1, fi.wmin, fi.wmax, false, -1, ""}
+		}
+	}
+	face := &system_faces[1 if italic && system_faces[1].path != "" else 0]
+	if face.path == "" do return "", false
+	key := fmt.tprintf("%s#0@%d/%d", face.path, weight, opsz_bucket(size))
+	if v, ok := var_instances[key]; ok do return v.name, v.font >= 0
+	owned := strings.clone(key)
+	var_instances[owned] = {owned, -2}
+	data, ok := font_file_bytes(face)
+	if !ok do return owned, false
+	defer delete(data)
+	inst, iok := varfont_instance(data, 0, {{"wght", f32(weight)}, {"opsz", f32(opsz_bucket(size))}})
+	if !iok do return owned, false
+	h := fontstash.AddFontMem(&app.vg.fs, owned, inst, true, 0)
+	var_instances[owned] = {owned, h}
+	return owned, h >= 0
+}
+
+font_face_lookup :: proc(family: string, weight: int, italic: bool, size: f32) -> string {
 	fonts_scan()
 	fam := family_find(family) if family != "" else nil
-	if fam == nil || len(fam.faces) == 0 do return "sans-bold" if weight >= 600 else "sans"
+	if fam == nil || len(fam.faces) == 0 {
+		if name, ok := system_face_name(weight, italic, size); ok do return name
+		return "sans-bold" if weight >= 600 else "sans"
+	}
 	// the closest face; a variable font covering the weight counts as exact, after a
 	// static face of that weight
 	best := -1
@@ -465,5 +508,56 @@ import_font_files :: proc(paths: []string) {
 	fonts_scan_dir(dir)
 	fonts_sort_names()
 	set_status("Imported %d font file%s into fonts/ next to the document", count, "" if count == 1 else "s")
+}
+
+// The tracking macOS adds to SF at a size, from the font's `trak` table (the "normal"
+// track, interpolated between its sizes): what CoreText, and so pen.dev, applies to the
+// system font standing in for a missing family. Zero for other fonts.
+system_trak: struct {
+	loaded:       bool,
+	sizes, units: [dynamic]f32,
+	upm:          f32,
+}
+
+system_tracking :: proc(n: ^Node) -> f32 {
+	if n.font_family == "" || family_find(n.font_family) != nil do return 0
+	t := &system_trak
+	if !t.loaded {
+		t.loaded = true
+		data, err := os.read_entire_file("/System/Library/Fonts/SFNS.ttf", context.temp_allocator)
+		if err != nil do return 0
+		tables, ok := sfnt_tables(data, 0)
+		if !ok do return 0
+		head, trak := tables["head"], tables["trak"]
+		if len(head) < 20 || len(trak) < 12 do return 0
+		t.upm = f32(fbe16(head, 18))
+		h := fbe16(trak, 6) // horizontal track data
+		if h == 0 do return 0
+		tracks, nsizes, size_at := fbe16(trak, h), fbe16(trak, h + 2), fbe32(trak, h + 4)
+		for i in 0 ..< tracks {
+			e := h + 8 + i * 8
+			if fbe32(trak, e) != 0 do continue // the normal track has value 0
+			values := fbe16(trak, e + 6)
+			for k in 0 ..< nsizes {
+				append(&t.sizes, f32(fbe32(trak, size_at + k * 4)) / 65536)
+				v := fbe16(trak, values + k * 2)
+				append(&t.units, f32(v - 0x10000 if v >= 0x8000 else v))
+			}
+		}
+	}
+	if len(t.sizes) == 0 || t.upm == 0 do return 0
+	s := n.font_size
+	units := t.units[0]
+	if s >= t.sizes[len(t.sizes) - 1] {
+		units = t.units[len(t.units) - 1]
+	} else {
+		for k in 1 ..< len(t.sizes) do if s <= t.sizes[k] {
+			a, b := t.sizes[k - 1], t.sizes[k]
+			f := clamp((s - a) / max(b - a, 1e-3), 0, 1)
+			units = t.units[k - 1] + (t.units[k] - t.units[k - 1]) * f
+			break
+		}
+	}
+	return units * s / t.upm
 }
 

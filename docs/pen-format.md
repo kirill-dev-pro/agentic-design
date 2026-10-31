@@ -64,6 +64,9 @@ Defaults that matter:
   use descendant keys "alias:childId". These names were taken from pen.dev's own renders.
 - The pen tool writes a `path` whose `geometry` is relative to its box, with `width` and
   `height` equal to the outline's bounds; editing keeps the outline where it is.
+- A `fontFamily` that is not installed is drawn with the system font (SF Pro, at the asked
+  weight, an optical size following the font size, and macOS's tracking), as pen.dev
+  draws it. Text without a `fontFamily` uses Arial.
 - `fontFamily` names a family installed on the machine or in a `fonts` folder next to the
   `.pen` file (the app's own convention; the schema has no font list). Any `fontWeight` of
   a TrueType variable font is drawn by instancing it.

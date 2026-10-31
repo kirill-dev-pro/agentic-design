@@ -262,7 +262,7 @@ api_get_guide :: proc(b: ^strings.Builder) {
 		for fam, count in used {
 			state := "installed"
 			if fam == "(default)" do state = "Arial"
-			else if family_find(fam) == nil do state = "MISSING: drawn with Arial; install it or put it in a fonts folder next to the file"
+			else if family_find(fam) == nil do state = "MISSING: drawn with the system font (SF Pro), as pen.dev does; install it or put it in a fonts folder next to the file"
 			fmt.sbprintf(&g, "- %s: %d text layers, %s\n", fam, count, state)
 		}
 	}
@@ -383,7 +383,7 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	}
 	for fam in missing_order {
 		m := missing[fam]
-		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" is not installed (used by %d text layers, drawn with Arial); install it or put it in a fonts folder next to the file", fam, m.count))
+		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" is not installed (used by %d text layers, drawn with the system font SF Pro, as in pen.dev); install it or put it in a fonts folder next to the file", fam, m.count))
 	}
 	fmt.sbprintf(b, `],"count":%d}}`, count)
 	return ""

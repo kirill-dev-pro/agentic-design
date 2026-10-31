@@ -266,7 +266,7 @@ instance_component :: proc(doc: ^Document, inst: ^Node) -> ^Node {
 // pen.dev); Inter gives 1.21.
 line_height_of :: proc(n: ^Node) -> f32 {
 	if n.line_height > 0 do return n.line_height
-	face := font_face(n.font_family, n.weight, n.italic)
+	face := font_face(n.font_family, n.weight, n.italic, n.font_size)
 	if r, ok := line_ratio_cache[face]; ok do return r
 	r := f32(LINE_HEIGHT)
 	if app.vg != nil {
@@ -293,11 +293,11 @@ half_leading :: proc(vg: ^nvg.Context, n: ^Node) -> f32 {
 }
 
 set_font :: proc(vg: ^nvg.Context, n: ^Node) {
-	nvg.FontFace(vg, font_face(n.font_family, n.weight, n.italic))
+	nvg.FontFace(vg, font_face(n.font_family, n.weight, n.italic, n.font_size))
 	nvg.FontSize(vg, n.font_size)
 	nvg.TextAlign(vg, .LEFT, .TOP)
 	nvg.TextLineHeight(vg, line_height_of(n))
-	nvg.TextLetterSpacing(vg, n.letter_spacing)
+	nvg.TextLetterSpacing(vg, n.letter_spacing + system_tracking(n))
 }
 
 // Text metrics are measured once at document scale and cached: the size, and the line
@@ -311,7 +311,7 @@ Text_Metrics :: struct {
 text_cache: map[u64]Text_Metrics
 
 text_key :: proc(n: ^Node, wrap_w: f32) -> u64 {
-	face := font_face(n.font_family, n.weight, n.italic)
+	face := font_face(n.font_family, n.weight, n.italic, n.font_size)
 	key := hash.fnv64a(transmute([]u8)n.content)
 	key = hash.fnv64a(transmute([]u8)face, key)
 	nums := [4]f32{n.font_size, line_height_of(n), wrap_w if n.growth != .Auto else -1, n.letter_spacing}

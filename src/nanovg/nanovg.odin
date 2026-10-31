@@ -2265,12 +2265,14 @@ BezierTo :: proc(
 QuadTo :: proc(ctx: ^Context, cx, cy, x, y: f32) {
 	x0 := ctx.commandx
 	y0 := ctx.commandy
+	// Agentic Design patch: 2.0 / 3.0 (the port had 2 / 3, an integer division that is 0,
+	// so every quadratic curve was drawn as a straight line)
 	__appendCommands(ctx,
 		__cmdf(.BEZIER_TO),
-		x0 + 2 / 3 * (cx - x0),
-		y0 + 2 / 3 * (cy - y0),
-		x  + 2 / 3 * (cx - x),
-		y  + 2 / 3 * (cy - y),
+		x0 + 2.0 / 3.0 * (cx - x0),
+		y0 + 2.0 / 3.0 * (cy - y0),
+		x  + 2.0 / 3.0 * (cx - x),
+		y  + 2.0 / 3.0 * (cy - y),
 		x,
 		y,
 	)

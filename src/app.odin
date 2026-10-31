@@ -867,7 +867,7 @@ draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
 			if justify && !last && draw_justified(vg, n, y, line) {
 				if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, line, n.w)
 			} else {
-				nvg.Text(vg, anchor, y, line)
+				text_run(vg, n, anchor, y, line, halign)
 				if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, line)
 			}
 		}
@@ -889,7 +889,7 @@ draw_justified :: proc(vg: ^nvg.Context, n: ^Node, y: f32, line: string) -> bool
 	gap := (n.w - total) / f32(len(words) - 1)
 	x := n.x
 	for w, i in words {
-		nvg.Text(vg, x, y, w)
+		text_run(vg, n, x, y, w)
 		x += widths[i] + gap
 	}
 	return true
