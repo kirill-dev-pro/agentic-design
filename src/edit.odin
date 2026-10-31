@@ -1,0 +1,442 @@
+package agentic_design
+
+import "core:encoding/json"
+import "core:math"
+import "core:slice"
+import "core:strings"
+import "vendor:glfw"
+
+// Editing commands shared by shortcuts, the context menu and the inspector.
+
+// Selected nodes without those whose ancestor is also selected, in paint order.
+selection_roots :: proc() -> []int {
+	roots := make([dynamic]int, context.temp_allocator)
+	for uid in app.draw_order {
+		if !is_selected(uid) do continue
+		nested := false
+		for other in app.sel do if other != uid && is_descendant(&app.doc, uid, other) do nested = true
+		if !nested do append(&roots, uid)
+	}
+	return roots[:]
+}
+
+// Wraps the selection in a group, a plain frame, or a flex frame.
+Wrap :: enum {
+	Group,
+	Frame,
+	Auto_Layout,
+}
+
+wrap_selection :: proc(kind: Wrap) {
+	roots := selection_roots()
+	if len(roots) == 0 do return
+	r, ok := bounds_of(roots)
+	if !ok do return
+	push_undo()
+	first, _ := doc_find_uid(&app.doc, roots[0])
+	parent := first.parent
+	for uid in roots {
+		if n, _ := doc_find_uid(&app.doc, uid); n != nil && n.parent != parent do parent = 0
+	}
+
+	n: Node
+	n.parent = parent
+	ox, oy := parent_origin(&app.doc, parent)
+	switch kind {
+	case .Group:
+		node_set_raw(&n, "type", `"group"`)
+		node_set_raw(&n, "x", num_text(r[0] - ox))
+		node_set_raw(&n, "y", num_text(r[1] - oy))
+	case .Frame:
+		node_set_raw(&n, "type", `"frame"`)
+		node_set_raw(&n, "layout", `"none"`)
+		node_set_raw(&n, "x", num_text(r[0] - ox))
+		node_set_raw(&n, "y", num_text(r[1] - oy))
+		node_set_raw(&n, "width", num_text(r[2]))
+		node_set_raw(&n, "height", num_text(r[3]))
+	case .Auto_Layout:
+		node_set_raw(&n, "type", `"frame"`)
+		horizontal := r[2] >= r[3]
+		node_set_raw(&n, "layout", `"horizontal"` if horizontal else `"vertical"`)
+		node_set_raw(&n, "x", num_text(r[0] - ox))
+		node_set_raw(&n, "y", num_text(r[1] - oy))
+		// gap: average space between neighbours along the main axis
+		if len(roots) > 1 {
+			sorted := slice.clone(roots, context.temp_allocator)
+			distribute_horizontal = horizontal
+			slice.sort_by(sorted, proc(a, b: int) -> bool {
+				na, _ := doc_find_uid(&app.doc, a)
+				nb, _ := doc_find_uid(&app.doc, b)
+				return na.x < nb.x if distribute_horizontal else na.y < nb.y
+			})
+			total: f32
+			for i in 1 ..< len(sorted) {
+				a, _ := doc_find_uid(&app.doc, sorted[i - 1])
+				b, _ := doc_find_uid(&app.doc, sorted[i])
+				total += (b.x - (a.x + a.w)) if horizontal else (b.y - (a.y + a.h))
+			}
+			node_set_raw(&n, "gap", num_text(max(total / f32(len(sorted) - 1), 0)))
+			roots = sorted
+		}
+	}
+	added := doc_add(&app.doc, n)
+	new_uid := added.uid
+	layout_document(&app.doc) // the container needs its page position before members move in
+	for uid in roots {
+		doc_reparent(&app.doc, uid, new_uid)
+		doc_bring_to_front(&app.doc, uid)
+	}
+	clear(&app.sel)
+	append(&app.sel, new_uid)
+	mark_dirty()
+}
+
+// Replaces selected groups/frames by their children.
+ungroup_selection :: proc() {
+	roots := selection_roots()
+	freed := make([dynamic]int, context.temp_allocator)
+	changed := false
+	for uid in roots {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil || !(n.kind == .Group || n.kind == .Frame) do continue
+		if !changed {
+			push_undo()
+			changed = true
+		}
+		parent := n.parent
+		children := make([dynamic]int, context.temp_allocator)
+		for c in app.doc.nodes do if c.parent == uid do append(&children, c.uid)
+		for c in children {
+			doc_reparent(&app.doc, c, parent)
+			append(&freed, c)
+		}
+		// members keep the group's place in the stacking order
+		_, gi := doc_find_uid(&app.doc, uid)
+		for c in children {
+			_, gi = doc_find_uid(&app.doc, uid)
+			move_subtree(c, gi)
+		}
+		doc_delete(&app.doc, uid)
+	}
+	if changed {
+		clear(&app.sel)
+		append(&app.sel, ..freed[:])
+		mark_dirty()
+	}
+}
+
+// Moves a node and its subtree so the node sits at `index` in the flat node list.
+move_subtree :: proc(uid: int, index: int) {
+	doc_bump(&app.doc)
+	moved := make([dynamic]Node, context.temp_allocator)
+	for i := 0; i < len(app.doc.nodes); {
+		n := app.doc.nodes[i]
+		if n.uid == uid || is_descendant(&app.doc, n.uid, uid) {
+			append(&moved, n)
+			ordered_remove(&app.doc.nodes, i)
+		} else {
+			i += 1
+		}
+	}
+	at := clamp(index, 0, len(app.doc.nodes))
+	inject_at(&app.doc.nodes, at, ..moved[:])
+}
+
+send_to_back :: proc(uid: int) {
+	doc_bump(&app.doc)
+	moved := make([dynamic]Node, context.temp_allocator)
+	for i := 0; i < len(app.doc.nodes); {
+		n := app.doc.nodes[i]
+		if n.uid == uid || is_descendant(&app.doc, n.uid, uid) {
+			append(&moved, n)
+			ordered_remove(&app.doc.nodes, i)
+		} else {
+			i += 1
+		}
+	}
+	inject_at(&app.doc.nodes, 0, ..moved[:])
+}
+
+// ---------------------------------------------------------------- align
+
+Align_Op :: enum {
+	Left,
+	Center_H,
+	Right,
+	Top,
+	Center_V,
+	Bottom,
+	Distribute_H,
+	Distribute_V,
+}
+
+align_selection :: proc(op: Align_Op) {
+	roots := selection_roots()
+	if len(roots) < 2 do return
+	r, ok := bounds_of(roots)
+	if !ok do return
+	push_undo()
+	switch op {
+	case .Left, .Center_H, .Right, .Top, .Center_V, .Bottom:
+		for uid in roots {
+			n, _ := doc_find_uid(&app.doc, uid)
+			if n == nil || in_flow(&app.doc, n) do continue
+			dx, dy: f32
+			#partial switch op {
+			case .Left: dx = r[0] - n.x
+			case .Center_H: dx = r[0] + r[2] / 2 - (n.x + n.w / 2)
+			case .Right: dx = r[0] + r[2] - (n.x + n.w)
+			case .Top: dy = r[1] - n.y
+			case .Center_V: dy = r[1] + r[3] / 2 - (n.y + n.h / 2)
+			case .Bottom: dy = r[1] + r[3] - (n.y + n.h)
+			}
+			doc_move(&app.doc, uid, dx, dy)
+		}
+	case .Distribute_H, .Distribute_V:
+		horizontal := op == .Distribute_H
+		distribute_horizontal = horizontal
+		sorted := slice.clone(roots, context.temp_allocator)
+		slice.sort_by(sorted, proc(a, b: int) -> bool {
+			na, _ := doc_find_uid(&app.doc, a)
+			nb, _ := doc_find_uid(&app.doc, b)
+			return na.x < nb.x if distribute_horizontal else na.y < nb.y
+		})
+		total: f32
+		for uid in sorted {
+			n, _ := doc_find_uid(&app.doc, uid)
+			total += n.w if horizontal else n.h
+		}
+		gap := ((r[2] if horizontal else r[3]) - total) / f32(len(sorted) - 1)
+		pos := r[0] if horizontal else r[1]
+		for uid in sorted {
+			n, _ := doc_find_uid(&app.doc, uid)
+			if horizontal {
+				doc_move(&app.doc, uid, pos - n.x, 0)
+				pos += n.w + gap
+			} else {
+				doc_move(&app.doc, uid, 0, pos - n.y)
+				pos += n.h + gap
+			}
+		}
+	}
+	mark_dirty()
+}
+
+distribute_horizontal: bool
+
+// ---------------------------------------------------------------- clipboard
+
+clipboard: string // JSON array of .pen nodes
+
+copy_selection :: proc() {
+	roots := selection_roots()
+	if len(roots) == 0 do return
+	b := strings.builder_make()
+	strings.write_byte(&b, '[')
+	for uid, i in roots {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil do continue
+		if i > 0 do strings.write_byte(&b, ',')
+		write_node(&b, &app.doc, n, -1, false)
+	}
+	strings.write_byte(&b, ']')
+	delete(clipboard)
+	clipboard = strings.to_string(b)
+	glfw.SetClipboardString(pf.window, strings.clone_to_cstring(clipboard, context.temp_allocator))
+	set_status("Copied %d %s", len(roots), "layer" if len(roots) == 1 else "layers")
+}
+
+// Pastes nodes from the system clipboard when it holds .pen JSON, else from the
+// internal one, into the selected frame (or beside the selection).
+paste_clipboard :: proc() {
+	text := clipboard
+	st := strings.trim_space(string(glfw.GetClipboardString(pf.window)))
+	if strings.has_prefix(st, "[") || strings.has_prefix(st, "{") do text = st
+	if text == "" do return
+	root, err := json.parse_string(text, .JSON5, false, context.temp_allocator)
+	if err != nil do return
+	items: []json.Value
+	if arr, is_arr := root.(json.Array); is_arr do items = arr[:]
+	else do items = {root}
+
+	parent := 0
+	if len(app.sel) == 1 {
+		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil {
+			parent = n.uid if n.kind == .Frame else n.parent
+			// a copy of the selected frame goes beside it, not inside
+			for v in items {
+				if obj, is_obj := v.(json.Object); is_obj && string(obj["id"].(json.String) or_else "") == n.id do parent = n.parent
+			}
+		}
+	}
+	push_undo()
+	before := len(app.doc.nodes)
+	pasted := make([dynamic]int, context.temp_allocator)
+	for v in items {
+		uid, perr := node_from_json(&app.doc, v, parent)
+		if perr != "" do continue
+		append(&pasted, uid)
+	}
+	// fresh ids for anything that collided, and a small offset
+	for i in before ..< len(app.doc.nodes) {
+		n := &app.doc.nodes[i]
+		if n.parent == parent {
+			for p in pasted do if p == n.uid {
+				node_set_number(&app.doc, n, "x", n.pos.x + 16)
+				node_set_number(&app.doc, n, "y", n.pos.y + 16)
+			}
+		}
+	}
+	clear(&app.sel)
+	append(&app.sel, ..pasted[:])
+	mark_dirty()
+	set_status("Pasted %d %s", len(pasted), "layer" if len(pasted) == 1 else "layers")
+}
+
+// ---------------------------------------------------------------- context menu
+
+CONTEXT_ITEMS := [?]string{"Rename", "Duplicate", "Copy", "Paste", "Group", "Frame selection", "Add auto layout", "Ungroup", "Create component", "Create instance", "Bring to front", "Send to back", "Export PNG", "Delete"}
+
+context_menu_open :: proc(at: [2]f32) {
+	menu_open("context", {at.x, at.y, 0, 0}, CONTEXT_ITEMS[:])
+}
+
+context_menu_apply :: proc() {
+	pick, ok := menu_take("context")
+	if !ok do return
+	switch CONTEXT_ITEMS[pick] {
+	case "Rename":
+		if len(app.sel) == 1 do start_rename(app.sel[0], false)
+	case "Duplicate": duplicate_selection()
+	case "Copy": copy_selection()
+	case "Paste": paste_clipboard()
+	case "Group": wrap_selection(.Group)
+	case "Frame selection": wrap_selection(.Frame)
+	case "Add auto layout": wrap_selection(.Auto_Layout)
+	case "Ungroup": ungroup_selection()
+	case "Create component":
+		push_undo()
+		for uid in app.sel {
+			if n, _ := doc_find_uid(&app.doc, uid); n != nil && (n.kind == .Frame || n.kind == .Group) do node_set_bool(&app.doc, n, "reusable", true)
+		}
+	case "Create instance": create_instances()
+	case "Bring to front":
+		push_undo()
+		for uid in app.sel do doc_bring_to_front(&app.doc, uid)
+	case "Send to back":
+		push_undo()
+		for uid in app.sel do send_to_back(uid)
+	case "Export PNG": export_request()
+	case "Delete":
+		push_undo()
+		for uid in app.sel do doc_delete(&app.doc, uid)
+		clear(&app.sel)
+	}
+}
+
+// Puts the name of a node into an editable field: in the layer tree, or on the canvas title.
+start_rename :: proc(uid: int, on_canvas: bool) {
+	n, _ := doc_find_uid(&app.doc, uid)
+	if n == nil do return
+	field_focus(uid, "name", n.name)
+	ui.rename_canvas = on_canvas
+	ui.rename_tree = !on_canvas
+	ui.focus_rect = {}
+}
+
+// Adds a `ref` instance next to each selected component (making it one if needed).
+create_instances :: proc() {
+	roots := selection_roots()
+	if len(roots) == 0 do return
+	push_undo()
+	made := make([dynamic]int, context.temp_allocator)
+	for uid in roots {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil || !(n.kind == .Frame || n.kind == .Group) do continue
+		if !n.reusable do node_set_bool(&app.doc, n, "reusable", true)
+		inst: Node
+		inst.parent = n.parent
+		node_set_raw(&inst, "type", `"ref"`)
+		b := strings.builder_make(context.temp_allocator)
+		json_write_string(&b, n.id)
+		node_set_raw(&inst, "ref", strings.to_string(b))
+		node_set_raw(&inst, "x", num_text(n.pos.x + n.w + 40))
+		node_set_raw(&inst, "y", num_text(n.pos.y))
+		added := doc_add(&app.doc, inst)
+		append(&made, added.uid)
+	}
+	clear(&app.sel)
+	append(&app.sel, ..made[:])
+	mark_dirty()
+}
+
+// Moves a node one place forward (+1) or backward (-1) among its siblings.
+move_in_siblings :: proc(uid, delta: int) -> bool {
+	n, _ := doc_find_uid(&app.doc, uid)
+	if n == nil do return false
+	siblings := children_of(&app.doc, n.parent)
+	k := -1
+	for s, i in siblings do if s == uid do k = i
+	t := k + delta
+	if k < 0 || t < 0 || t >= len(siblings) do return false
+	target := siblings[t]
+	doc_bump(&app.doc)
+	moved := make([dynamic]Node, context.temp_allocator)
+	for i := 0; i < len(app.doc.nodes); {
+		m := app.doc.nodes[i]
+		if m.uid == uid || is_descendant(&app.doc, m.uid, uid) {
+			append(&moved, m)
+			ordered_remove(&app.doc.nodes, i)
+		} else {
+			i += 1
+		}
+	}
+	at := 0
+	for m, i in app.doc.nodes do if m.uid == target do at = i + (1 if delta > 0 else 0)
+	inject_at(&app.doc.nodes, at, ..moved[:])
+	doc_index(&app.doc)
+	return true
+}
+
+// Flips the selection horizontally or vertically.
+flip_selection :: proc(horizontal: bool) {
+	if len(app.sel) == 0 do return
+	push_undo()
+	key := "flipX" if horizontal else "flipY"
+	for uid in app.sel {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil do continue
+		on := n.flip_x if horizontal else n.flip_y
+		toggle_flag(n, key, on)
+	}
+}
+
+// Turns the selection into components, or components back into plain layers.
+toggle_component_selection :: proc() {
+	if len(app.sel) == 0 do return
+	push_undo()
+	for uid in app.sel {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil || n.kind == .Ref do continue
+		if n.reusable do node_unset(&app.doc, n, "reusable")
+		else do node_set_bool(&app.doc, n, "reusable", true)
+	}
+}
+
+// Removes flex layout from the selected frames, keeping where the children are.
+remove_flex_selection :: proc() {
+	push_undo()
+	for uid in app.sel {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil || n.kind != .Frame || n.layout == .None do continue
+		for cu in children_of(&app.doc, n.uid) {
+			c, _ := doc_find_uid(&app.doc, cu)
+			if c == nil do continue
+			node_set_number(&app.doc, c, "x", math.round(c.x - n.x))
+			node_set_number(&app.doc, c, "y", math.round(c.y - n.y))
+		}
+		node_set_number(&app.doc, n, "width", n.w)
+		node_set_number(&app.doc, n, "height", n.h)
+		node_set_string(&app.doc, n, "layout", "none")
+	}
+}

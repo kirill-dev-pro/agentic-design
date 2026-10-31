@@ -1,0 +1,130 @@
+# The `.pen` format in Agentic Design
+
+[pencil.design](https://pencil.design) defines the format; this app does not change it. This
+page covers what the app reads, what it adds and where versions differ.
+
+The reference is the TypeScript schema at the end of
+[the-pen-format](https://docs.pencil.dev/for-developers/the-pen-format) (document version
+`2.21` as of October 2026). Sample files and a community schema for version 2.8 are at
+[de-novo/pencil-skill](https://github.com/de-novo/pencil-skill) (`assets/*.pen`). They are
+the round-trip test fixtures.
+
+## Shape of a file
+
+```json
+{
+  "version": "2.21",
+  "themes": { "mode": ["light", "dark"] },
+  "variables": { "color-surface": { "type": "color", "value": [
+    { "value": "#FFFFFF" },
+    { "value": "#1A1A1B", "theme": { "mode": "dark" } }
+  ] } },
+  "pages": [ { "name": "Page 1", "nodes": ["home", "settings"] } ],
+  "children": [ { "type": "frame", "id": "home", "x": 0, "y": 0, "children": [] } ]
+}
+```
+
+- **Header.** Every key except `children` is kept as raw JSON and written back in this
+  order: `version`, `themes`, `variables`, then the other keys alphabetically. A file with
+  no `version` gets `2.21`.
+- **Nodes.** Each node's properties are written back in the order they were read. Positions
+  are relative to the parent.
+
+## What is understood
+
+| Area | Properties |
+| --- | --- |
+| Node types | `frame`, `group`, `rectangle`, `ellipse`, `path`, `text`, `ref`, `icon` (`library: "lucide"`, `icon`), and 2.8's `icon_font` (`iconFontFamily`, `iconFontName`). Other types are kept and drawn as placeholders. |
+| Size | `width` / `height`: number, `fit_content`, `fill_container`, also with a fallback as in `fit_content(120)` |
+| Flex | `layout` (`none`, `horizontal`, `vertical`), `gap`, `padding` (n, [v,h], [t,r,b,l]), `justifyContent`, `alignItems`, `layoutPosition: absolute`, `clip` |
+| Paint | `fill` (color, `$variable`, image fill; gradients fall back to a flat color), `stroke`, `strokeWidth` (one number or `{top, right, bottom, left}`), `strokeAlignment`, `strokeLinecap`, `strokeLinejoin`, `cornerRadius` (n or 4 corners), `opacity` (number or `%`), `enabled` |
+| Effects | the first enabled shadow in `effect` (outer drawn, inner kept) |
+| Text | `content` (a string; styled runs are not supported), `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `letterSpacing`, `underline`, `strikethrough`, `textAlign`, `textGrowth`, `lineHeight` |
+| Paths | `geometry` (SVG path data, arcs included), view box |
+| Components | `reusable`, `ref`, overrides of any property on the `ref` itself (the component root) and in `descendants`, slot frames |
+| Variables | `$name` references in any property, themed values, variables pointing to variables |
+| Themes | header `themes`, node `theme` for its subtree |
+
+Defaults that matter:
+
+- Frames default to `layout: horizontal` and fit their content; groups default to `none`.
+- The schema gives no default for `strokeAlignment`. pen.dev centres the stroke on the
+  outline (checked pixel by pixel), and so does the app. Strokes added in the inspector are
+  written as `"inner"`, as pen.dev's own files are.
+- Font size is the em size, as in CSS. Without `lineHeight`, the font's own line spacing
+  applies: (ascender − descender + line gap) / em, 1.21 for Inter. Lines sit in their line
+  box with half leading. `letterSpacing` follows every character, including the last.
+
+## Version differences
+
+| | 2.8 | 2.21 |
+| --- | --- | --- |
+| Stroke | `"stroke": {"align", "thickness", "fill"}` | `stroke: <fill>`, `strokeWidth`, `strokeAlignment` |
+| Slot | the component lists slot frames by name in its own `slot` array | the slot frame itself carries `slot` |
+
+The reader accepts both. Edits keep the form the node already uses (`Node.stroke_old`).
+
+## What the app adds
+
+- **`pages`** in the header: `[{"name": string, "nodes": [top-level ids]}]`.
+  - Top-level nodes listed under no page belong to the first page.
+  - The key is not written when the document has a single default page with no ids.
+  - Other tools are expected to keep or ignore it.
+- **Image files.** Images placed through the app are copied into `images/` next to the
+  document and referenced as `./images/<name>`.
+
+Nothing else is added. Computed boxes (`bounds`) appear only in socket and MCP answers,
+never in the file.
+
+## Instances and overrides
+
+```json
+{ "type": "ref", "id": "post-1", "ref": "post-card",
+  "descendants": { "post-title": { "content": "Hello" },
+                   "vote/count": { "content": "42" },
+                   "badge":      { "enabled": false } },
+  "children": [ { "type": "text", "id": "post-1-body", "content": "Slot content" } ] }
+```
+
+- `descendants` keys are ids inside the component, or `/` paths through nested instances.
+  The app matches an entry by the last segment of its path, so ids must be unique inside a
+  component.
+- The inspector's Parameters section edits these entries through `override_set`. It updates
+  an existing entry if there is one, and drops entries that become empty.
+- An override that carries a `type` replaces the whole node. Such entries are kept but not
+  applied.
+- **Slot content, 2.21.** pen.dev writes it as
+  `descendants: {"<slot frame id>": {"children": [...]}}`. The slot frame is an empty frame
+  marked `slot: []`. These children load as real child nodes of the instance, render in
+  that frame instead of its default children, and are written back to the same place.
+- **Slot content, 2.8.** The instance's own `children` render inside the component's slot
+  frame: the one named in the component's `slot` list, else the first frame marked as a
+  slot, else the root.
+- **Where pen.dev differs.** pen.dev reads `children` on a `ref` as an override of the
+  root's children. A 2.8 file like reddit-ui therefore shows only the slot content there,
+  without the card's header and actions.
+- Properties set on the `ref` itself override the component root: `fill`, `width`,
+  `cornerRadius`, `padding`, and so on. Identity, position, `enabled`, `opacity` and
+  `theme` stay with the instance. An instance can therefore fill its container while the
+  component has a fixed width.
+- Any property can be overridden. Content, name, colors, visibility, opacity, font size and
+  weight have a fast path. Other properties (`icon`, `padding`, `cornerRadius`, ...) are
+  written into a copy of the component node, which is then parsed again.
+
+## Themed variables
+
+A variable's `value` is either a literal or an array of `{value, theme}` entries.
+
+**Resolving a node.** For each node the app works out the theme in effect: the axis values
+shown in the Theme tab, overridden by the nearest `theme` properties above the node. It then
+picks the entry that:
+
+- has no axis value contradicting that theme, and
+- matches the most axes.
+
+An entry without `theme` is the default. A `"$other"` value is resolved through that
+variable under the same theme.
+
+**Editing a variable** in the Theme tab writes the entry whose theme equals the current
+choice on every axis, and adds that entry if it does not exist. Under the default theme it
+writes the untagged entry.

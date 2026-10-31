@@ -1,0 +1,144 @@
+{
+  "version": "2.21",
+  "pages": [{"name":"Page 1","nodes":[]},{"name":"Page 2","nodes":[]}],
+  "children": [
+    {
+      "type": "frame",
+      "id": "apple",
+      "name": "Apple card",
+      "clip": true,
+      "cornerRadius": 24,
+      "fill": "#FFF8F0",
+      "height": 356,
+      "layout": "none",
+      "width": 302,
+      "x": 0,
+      "y": 24,
+      "children": [
+        {
+          "type": "path",
+          "id": "stem",
+          "name": "Stem",
+          "fill": "#6B4226",
+          "geometry": "M157 94 C156 76 159 62 167 51 L173 54 C166 65 164 78 164 94 Z",
+          "height": 43,
+          "width": 16,
+          "x": 157,
+          "y": 27
+        },
+        {
+          "type": "path",
+          "id": "body",
+          "name": "Body",
+          "fill": "#D7261E",
+          "geometry": "M160 90 C140 75 90 75 82 125 C75 170 105 225 135 230 C148 232 155 225 160 225 C165 225 172 232 185 230 C215 225 245 170 238 125 C230 75 180 75 160 90 Z",
+          "height": 149,
+          "width": 158,
+          "x": 81,
+          "y": 57
+        },
+        {
+          "type": "path",
+          "id": "leaf",
+          "name": "Leaf",
+          "fill": "#4CAF50",
+          "geometry": "M166 70 C175 50 205 48 220 54 C210 75 182 82 166 70 Z",
+          "height": 25,
+          "width": 54,
+          "x": 166,
+          "y": 27
+        },
+        {
+          "type": "ellipse",
+          "id": "shine",
+          "name": "Highlight",
+          "fill": "#FFFFFF59",
+          "height": 42,
+          "width": 20,
+          "x": 105,
+          "y": 91
+        },
+        {
+          "type": "text",
+          "id": "caption",
+          "name": "Caption",
+          "content": "Нарисовано через MCP в нативном редакторе на Odin + GLFW + NanoVG.",
+          "fill": "#6B6B6B",
+          "fontSize": 14,
+          "textGrowth": "fixed-width",
+          "width": 256,
+          "x": 32,
+          "y": 284
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Wfg5K",
+      "clip": true,
+      "effect": {"blur":16,"color":"#002200ee","offset":{"x":0,"y":4},"shadowType":"outer","spread":0,"type":"shadow"},
+      "fill": "#FFFFFF",
+      "height": 323.01,
+      "justifyContent": "space_around",
+      "layout": "none",
+      "width": 253.8,
+      "x": -319.98,
+      "y": 94,
+      "children": [
+        {
+          "type": "rectangle",
+          "id": "APfpO",
+          "fill": "#FFA629",
+          "height": 111.23,
+          "width": 99.85,
+          "x": 128.75,
+          "y": 159.07
+        },
+        {
+          "type": "ellipse",
+          "id": "ia5sh",
+          "effect": {"blur":16,"color":"#00000040","offset":{"x":0,"y":4},"shadowType":"outer","spread":0,"type":"shadow"},
+          "fill": "#D9D9D9",
+          "height": 50.8,
+          "width": 44.46,
+          "x": 84.29,
+          "y": 133.67
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "CqcpM",
+      "name": "Caption",
+      "content": "Нарисовано через MCP в нативном редакторе на Odin + GLFW + NanoVG.",
+      "fill": "#6B6B6B",
+      "fontSize": 14,
+      "height": "fit_content",
+      "opacity": 1,
+      "textGrowth": "fixed-width",
+      "width": 256,
+      "x": -813.96,
+      "y": 243.39
+    },
+    {
+      "type": "ellipse",
+      "fill": "#D9D9D9",
+      "id": "R97uM",
+      "x": -102.29,
+      "y": 1250.83,
+      "width": 100,
+      "height": 100
+    },
+    {
+      "type": "frame",
+      "layout": "none",
+      "clip": true,
+      "fill": "#FFFFFF",
+      "id": "jEt1C",
+      "x": 98.81,
+      "y": 417.01,
+      "width": 316.05,
+      "height": 9.32
+    }
+  ]
+}
