@@ -521,3 +521,27 @@ number of stops and angular gradients too.
 - Layer blur and background blur are kept in the file but not drawn; they need render
   targets.
 - Hit-testing and the selection box ignore rotation.
+
+## 28. Code export and the canvas follow pen.dev's CSS
+
+**Problem.** Code export lagged behind the renderer, and both guessed at details the schema
+leaves open: where a flip pivots, what a blur radius means in CSS, how far a shadow fades.
+
+**Decision.**
+
+- pen.dev's own `html-css` export of the same file is the reference for every CSS value:
+  - gradient angles and stop positions,
+  - `blur(r/2)` for a blur of radius r,
+  - `box-shadow` with the file's numbers,
+  - `transform-origin: top left`.
+- The canvas draws to match: flips pivot on the top-left corner like rotation, and shadows
+  fade over twice their blur.
+- Editing commands keep a layer where it is on screen. Turning or flipping it moves its x/y.
+- Variables stay `var(--name)` in the CSS. pen.dev inlines them; we keep themes working.
+
+**Consequences.**
+
+- Files made earlier with flipped layers now draw where pen.dev draws them, which may be
+  shifted from where they used to be.
+- `get_styles` gives agents the exact CSS of any node without exporting the page.
+

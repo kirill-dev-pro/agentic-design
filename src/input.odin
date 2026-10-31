@@ -127,7 +127,7 @@ update_cursor :: proc(over_canvas: bool) {
 handle_under_mouse :: proc() -> int {
 	if len(app.sel) != 1 || app.editing != 0 do return -1
 	n, _ := doc_find_uid(&app.doc, app.sel[0])
-	if n == nil do return -1
+	if n == nil || !resizable(n) do return -1
 	for h in 0 ..< 8 {
 		p := handle_pos(n, h)
 		if abs(app.mouse.x - p.x) <= 6 && abs(app.mouse.y - p.y) <= 6 do return h
@@ -150,8 +150,11 @@ hit_test :: proc(page: [2]f32) -> int {
 	return 0
 }
 
-point_in_node :: proc(n: ^Node, p: [2]f32) -> bool {
+point_in_node :: proc(n: ^Node, p_in: [2]f32) -> bool {
 	slop := 3 / app.zoom
+	p := p_in
+	// a turned or mirrored node: test the point in the node's own frame
+	if m, tr := node_transform(n); tr do p = xform_point(xform_inverse(m), p)
 	if p.x < n.x - slop || p.y < n.y - slop || p.x > n.x + n.w + slop || p.y > n.y + n.h + slop do return false
 	if n.kind == .Ellipse {
 		c := [2]f32{n.x + n.w / 2, n.y + n.h / 2}
@@ -409,7 +412,8 @@ drag_end :: proc(page: [2]f32) {
 		for uid in app.draw_order {
 			n, _ := doc_find_uid(&app.doc, uid)
 			if n == nil do continue
-			if n.x >= r[0] && n.y >= r[1] && n.x + n.w <= r[0] + r[2] && n.y + n.h <= r[1] + r[3] && !is_selected(uid) {
+			nb := node_page_box(n)
+			if nb[0] >= r[0] && nb[1] >= r[1] && nb[0] + nb[2] <= r[0] + r[2] && nb[1] + nb[3] <= r[1] + r[3] && !is_selected(uid) {
 				if n.parent != 0 && is_selected(n.parent) do continue
 				append(&app.sel, uid)
 			}

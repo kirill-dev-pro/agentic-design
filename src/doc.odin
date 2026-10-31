@@ -101,6 +101,7 @@ Text_Align :: enum {
 	Left,
 	Center,
 	Right,
+	Justify,
 }
 
 Image_Mode :: enum {
@@ -1324,6 +1325,7 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 			switch json_str(doc, v) {
 			case "center": n.text_align = .Center
 			case "right": n.text_align = .Right
+			case "justify": n.text_align = .Justify
 			}
 		case "lineHeight":
 			n.line_height = num(doc, v) or_else 0

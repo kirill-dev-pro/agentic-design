@@ -402,12 +402,43 @@ move_in_siblings :: proc(uid, delta: int) -> bool {
 flip_selection :: proc(horizontal: bool) {
 	if len(app.sel) == 0 do return
 	push_undo()
-	key := "flipX" if horizontal else "flipY"
 	for uid in app.sel {
 		n, _ := doc_find_uid(&app.doc, uid)
 		if n == nil do continue
-		on := n.flip_x if horizontal else n.flip_y
-		toggle_flag(n, key, on)
+		transform_in_place(n, n.rotation, n.flip_x != horizontal, n.flip_y != !horizontal)
+	}
+}
+
+// Sets a layer's rotation and flips so that it stays where it is on screen. The file
+// turns and mirrors a layer around its top-left corner (pen.dev renders it so), so the
+// corner moves to keep the centre in place. A layer placed by a flex layout only changes
+// its transform.
+transform_in_place :: proc(n: ^Node, rotation: f32, flip_x, flip_y: bool) {
+	// where the centre lands relative to the corner
+	center_of :: proc(w, h, rotation: f32, flip_x, flip_y: bool) -> [2]f32 {
+		v := [2]f32{w / 2 * (-1 if flip_x else 1), h / 2 * (-1 if flip_y else 1)}
+		a := -rotation * math.PI / 180
+		return {v.x * math.cos(a) - v.y * math.sin(a), v.x * math.sin(a) + v.y * math.cos(a)}
+	}
+	rotation := math.mod(rotation, 360)
+	if rotation < 0 do rotation += 360
+	placed := true
+	if p, _ := doc_find_uid(&app.doc, n.parent); p != nil && p.layout != .None && !n.abs_pos do placed = false
+	d := center_of(n.w, n.h, n.rotation, n.flip_x, n.flip_y) - center_of(n.w, n.h, rotation, flip_x, flip_y)
+	pos := n.pos + d
+	set_flag :: proc(n: ^Node, key: string, on: bool) {
+		if on do node_set_bool(&app.doc, n, key, true)
+		else do node_unset(&app.doc, n, key)
+	}
+	if rotation != n.rotation {
+		if rotation == 0 do node_unset(&app.doc, n, "rotation")
+		else do node_set_number(&app.doc, n, "rotation", math.round(rotation * 100) / 100)
+	}
+	if flip_x != n.flip_x do set_flag(n, "flipX", flip_x)
+	if flip_y != n.flip_y do set_flag(n, "flipY", flip_y)
+	if placed && (abs(d.x) > 1e-3 || abs(d.y) > 1e-3) {
+		node_set_number(&app.doc, n, "x", math.round(pos.x * 100) / 100)
+		node_set_number(&app.doc, n, "y", math.round(pos.y * 100) / 100)
 	}
 }
 

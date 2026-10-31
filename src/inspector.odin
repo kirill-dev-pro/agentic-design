@@ -83,9 +83,9 @@ draw_position_rows :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 		if lucide_button(vg, r, icon, active, tips[i]) {
 			push_undo()
 			switch i {
-			case 0: node_set_number(&app.doc, n, "rotation", math.mod(n.rotation + 90, 360))
-			case 1: toggle_flag(n, "flipX", n.flip_x)
-			case 2: toggle_flag(n, "flipY", n.flip_y)
+			case 0: transform_in_place(n, n.rotation + 90, n.flip_x, n.flip_y)
+			case 1: transform_in_place(n, n.rotation, !n.flip_x, n.flip_y)
+			case 2: transform_in_place(n, n.rotation, n.flip_x, !n.flip_y)
 			}
 		}
 	}
@@ -561,6 +561,10 @@ inspector_field_apply :: proc(n: ^Node, key, text: string) -> bool {
 		arr := make(json.Array, 0, 4, context.temp_allocator)
 		for v in r do append(&arr, json.Float(f64(v)))
 		node_set(&app.doc, n, "cornerRadius", arr)
+		return true
+	}
+	if key == "rotation" {
+		if f, ok := strconv.parse_f32(strings.trim_suffix(t, "°")); ok do transform_in_place(n, f, n.flip_x, n.flip_y)
 		return true
 	}
 	if key == "lineHeight" {

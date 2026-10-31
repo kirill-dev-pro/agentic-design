@@ -184,6 +184,9 @@ support_dir :: proc() -> string {
 }
 
 recents_load :: proc() {
+	// test windows show no recent files, so a scripted or fuzzed run cannot open (and
+	// autosave) the user's documents from the dashboard
+	if pf.quiet do return
 	data, err := os.read_entire_file(fmt.tprintf("%s/recents.json", support_dir()), context.temp_allocator)
 	if err != nil do return
 	root, perr := json.parse_string(string(data), .JSON, false, context.temp_allocator)

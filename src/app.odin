@@ -377,11 +377,93 @@ bounds_of :: proc(uids: []int) -> (r: [4]f32, ok: bool) {
 	for uid in uids {
 		n, _ := doc_find_uid(&app.doc, uid)
 		if n == nil do continue
-		lo = {min(lo.x, n.x), min(lo.y, n.y)}
-		hi = {max(hi.x, n.x + n.w), max(hi.y, n.y + n.h)}
+		b := node_page_box(n)
+		lo = {min(lo.x, b[0]), min(lo.y, b[1])}
+		hi = {max(hi.x, b[0] + b[2]), max(hi.y, b[1] + b[3])}
 		ok = true
 	}
 	return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}, ok
+}
+
+// ---------------------------------------------------------------- transforms
+
+// An affine transform as NanoVG stores it: x' = a x + c y + e, y' = b x + d y + f.
+Xform :: [6]f32
+
+XFORM_IDENTITY :: Xform{1, 0, 0, 1, 0, 0}
+
+// a · b: b applies first.
+xform_mul :: proc(a, b: Xform) -> Xform {
+	return {
+		a[0] * b[0] + a[2] * b[1],
+		a[1] * b[0] + a[3] * b[1],
+		a[0] * b[2] + a[2] * b[3],
+		a[1] * b[2] + a[3] * b[3],
+		a[0] * b[4] + a[2] * b[5] + a[4],
+		a[1] * b[4] + a[3] * b[5] + a[5],
+	}
+}
+
+xform_inverse :: proc(m: Xform) -> Xform {
+	det := m[0] * m[3] - m[1] * m[2]
+	if abs(det) < 1e-12 do return XFORM_IDENTITY
+	a, b, c, d := m[3] / det, -m[1] / det, -m[2] / det, m[0] / det
+	return {a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])}
+}
+
+xform_point :: proc(m: Xform, p: [2]f32) -> [2]f32 {
+	return {m[0] * p.x + m[2] * p.y + m[4], m[1] * p.x + m[3] * p.y + m[5]}
+}
+
+// Where a node's untransformed page box is drawn: its own rotation and flips and those
+// of its ancestors, each around that node's top-left corner (as draw_node_tree applies
+// them).
+node_transform :: proc(n: ^Node) -> (m: Xform, transformed: bool) {
+	chain: [MAX_DEPTH]^Node
+	count := 0
+	for cur := n; cur != nil && count < MAX_DEPTH; {
+		chain[count] = cur
+		count += 1
+		if cur.parent == 0 do break
+		cur, _ = doc_find_uid(&app.doc, cur.parent)
+	}
+	m = XFORM_IDENTITY
+	for i := count - 1; i >= 0; i -= 1 {
+		a := chain[i]
+		if a.rotation == 0 && !a.flip_x && !a.flip_y do continue
+		transformed = true
+		t := -a.rotation * math.PI / 180
+		cs, sn := math.cos(t), math.sin(t)
+		sx: f32 = -1 if a.flip_x else 1
+		sy: f32 = -1 if a.flip_y else 1
+		// T(x, y) · R · S · T(-x, -y)
+		local := Xform{cs * sx, sn * sx, -sn * sy, cs * sy, 0, 0}
+		local[4] = a.x - (local[0] * a.x + local[2] * a.y)
+		local[5] = a.y - (local[1] * a.x + local[3] * a.y)
+		m = xform_mul(m, local)
+	}
+	return
+}
+
+// The corners of a node as drawn, in page coordinates (TL, TR, BR, BL).
+node_corners :: proc(n: ^Node) -> (c: [4][2]f32, transformed: bool) {
+	c = {{n.x, n.y}, {n.x + n.w, n.y}, {n.x + n.w, n.y + n.h}, {n.x, n.y + n.h}}
+	m, tr := node_transform(n)
+	if !tr do return c, false
+	for &p in c do p = xform_point(m, p)
+	return c, true
+}
+
+// The page-space box around a node as drawn.
+node_page_box :: proc(n: ^Node) -> [4]f32 {
+	c, tr := node_corners(n)
+	if !tr do return {n.x, n.y, n.w, n.h}
+	lo, hi := c[0], c[0]
+	for p in c[1:] {
+		lo = {min(lo.x, p.x), min(lo.y, p.y)}
+		hi = {max(hi.x, p.x), max(hi.y, p.y)}
+	}
+	return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}
 }
 
 all_uids :: proc(top_level_only: bool) -> []int {
@@ -423,9 +505,10 @@ cull_rect: [4]f32
 
 // True when a node's box, grown by its stroke and shadow, can be seen.
 node_visible :: proc(n: ^Node) -> bool {
-	if cull_rect[2] <= 0 || n.rotation != 0 do return true
+	if cull_rect[2] <= 0 || n.rotation != 0 || n.flip_x || n.flip_y do return true
 	m := n.stroke_width + 2
 	if n.shadow.has do m += abs(n.shadow.offset.x) + abs(n.shadow.offset.y) + n.shadow.blur + n.shadow.spread
+	for e in n.effects[:n.neffects] do if e.kind == .Drop_Shadow do m = max(m, n.stroke_width + 2 + abs(e.offset.x) + abs(e.offset.y) + e.blur + e.spread)
 	return n.x - m < cull_rect[0] + cull_rect[2] && n.x + n.w + m > cull_rect[0] &&
 	       n.y - m < cull_rect[1] + cull_rect[3] && n.y + n.h + m > cull_rect[1]
 }
@@ -449,17 +532,17 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 	nvg.Save(vg)
 	defer nvg.Restore(vg)
 	nvg.GlobalAlpha(vg, a)
-	// rotation (counter-clockwise around the top-left corner) and flips (around the
-	// centre) apply to the node and everything inside it
+	// rotation (counter-clockwise) and flips apply to the node and everything inside it,
+	// both around its top-left corner as pen.dev renders them
+	saved_cull := cull_rect
+	defer cull_rect = saved_cull
 	if n.rotation != 0 || n.flip_x || n.flip_y {
 		nvg.Translate(vg, n.x, n.y)
 		if n.rotation != 0 do nvg.Rotate(vg, -n.rotation * math.PI / 180)
-		if n.flip_x || n.flip_y {
-			nvg.Translate(vg, n.w / 2, n.h / 2)
-			nvg.Scale(vg, -1 if n.flip_x else 1, -1 if n.flip_y else 1)
-			nvg.Translate(vg, -n.w / 2, -n.h / 2)
-		}
+		if n.flip_x || n.flip_y do nvg.Scale(vg, -1 if n.flip_x else 1, -1 if n.flip_y else 1)
 		nvg.Translate(vg, -n.x, -n.y)
+		// the children land turned or mirrored, so their own boxes cannot be culled
+		cull_rect = {}
 	}
 	// NanoVG's Odin port traps on a closed path whose points all coincide, so boxes
 	// without any extent (empty fit_content frames, zero-size shapes) are not outlined.
@@ -680,7 +763,7 @@ draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
 	halign: nvg.AlignHorizontal = .LEFT
 	anchor := n.x
 	switch n.text_align {
-	case .Left:
+	case .Left, .Justify:
 	case .Center:
 		halign = .CENTER
 		anchor = n.x + n.w / 2
@@ -697,19 +780,47 @@ draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
 		free := n.h - f32(len(rows)) * n.font_size * line_height_of(n)
 		y += free / 2 if n.text_valign == .Center else free
 	}
-	for row in rows {
+	justify := n.text_align == .Justify && n.growth != .Auto
+	for row, i in rows {
 		a, b := clamp(row[0], 0, len(n.content)), clamp(row[1], 0, len(n.content))
 		if b > a {
-			nvg.Text(vg, anchor, y, n.content[a:b])
-			if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, n.content[a:b])
+			line := n.content[a:b]
+			// the last line of a paragraph keeps its natural spacing
+			last := i == len(rows) - 1 || strings.has_suffix(line, "\n") || (b < len(n.content) && n.content[b] == '\n')
+			if justify && !last && draw_justified(vg, n, y, line) {
+				if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, line, n.w)
+			} else {
+				nvg.Text(vg, anchor, y, line)
+				if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, line)
+			}
 		}
 		y += n.font_size * line_height_of(n)
 	}
 }
 
+// One line spread over the box width: the space left over goes between the words.
+// Returns false for a line with a single word, which is drawn as it is.
+draw_justified :: proc(vg: ^nvg.Context, n: ^Node, y: f32, line: string) -> bool {
+	words := strings.fields(strings.trim_space(line), context.temp_allocator)
+	if len(words) < 2 do return false
+	widths := make([]f32, len(words), context.temp_allocator)
+	total: f32
+	for w, i in words {
+		widths[i] = nvg.TextBounds(vg, 0, 0, w)
+		total += widths[i]
+	}
+	gap := (n.w - total) / f32(len(words) - 1)
+	x := n.x
+	for w, i in words {
+		nvg.Text(vg, x, y, w)
+		x += widths[i] + gap
+	}
+	return true
+}
+
 // Underline and strikethrough for one drawn line of text.
-text_decoration :: proc(vg: ^nvg.Context, n: ^Node, anchor, y: f32, halign: nvg.AlignHorizontal, line: string) {
-	w := nvg.TextBounds(vg, 0, 0, line)
+text_decoration :: proc(vg: ^nvg.Context, n: ^Node, anchor, y: f32, halign: nvg.AlignHorizontal, line: string, width: f32 = -1) {
+	w := width if width >= 0 else nvg.TextBounds(vg, 0, 0, line)
 	x := anchor
 	#partial switch halign {
 	case .CENTER: x -= w / 2
@@ -812,7 +923,7 @@ draw_canvas :: proc() {
 		if n, _ := doc_find_uid(&app.doc, uid); n != nil do outline_node(n, 1)
 	}
 	if len(app.sel) == 1 && app.editing == 0 {
-		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil {
+		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil && resizable(n) {
 			for h in 0 ..< 8 {
 				p := handle_pos(n, h)
 				nvg.BeginPath(vg)
@@ -917,6 +1028,27 @@ outline_node :: proc(n: ^Node, width: f32) {
 	a := to_screen({n.x, n.y})
 	if n.w * app.zoom < 0.5 && n.h * app.zoom < 0.5 do return // see draw_node_tree
 	nvg.BeginPath(vg)
+	if m, tr := node_transform(n); tr {
+		// turned or mirrored: outline the box (or ellipse) where it is drawn
+		steps := 48 if n.kind == .Ellipse else 4
+		for i in 0 ..< steps {
+			p: [2]f32
+			if n.kind == .Ellipse {
+				t := f32(i) / f32(steps) * 2 * math.PI
+				p = {n.x + n.w / 2 * (1 + math.cos(t)), n.y + n.h / 2 * (1 + math.sin(t))}
+			} else {
+				p = [4][2]f32{{n.x, n.y}, {n.x + n.w, n.y}, {n.x + n.w, n.y + n.h}, {n.x, n.y + n.h}}[i]
+			}
+			s := to_screen(xform_point(m, p))
+			if i == 0 do nvg.MoveTo(vg, s.x, s.y)
+			else do nvg.LineTo(vg, s.x, s.y)
+		}
+		nvg.ClosePath(vg)
+		nvg.StrokeColor(vg, selection_color(n))
+		nvg.StrokeWidth(vg, width)
+		nvg.Stroke(vg)
+		return
+	}
 	if n.kind == .Ellipse {
 		nvg.Ellipse(vg, a.x + n.w * app.zoom / 2, a.y + n.h * app.zoom / 2, n.w * app.zoom / 2, n.h * app.zoom / 2)
 	}
@@ -924,6 +1056,13 @@ outline_node :: proc(n: ^Node, width: f32) {
 	nvg.StrokeColor(vg, selection_color(n))
 	nvg.StrokeWidth(vg, width)
 	nvg.Stroke(vg)
+}
+
+// Resize handles work on the axis-aligned box; turned or mirrored layers are resized
+// from the inspector.
+resizable :: proc(n: ^Node) -> bool {
+	_, tr := node_transform(n)
+	return !tr
 }
 
 is_selected :: proc(uid: int) -> bool {

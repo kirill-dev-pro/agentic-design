@@ -119,17 +119,19 @@ can pin a theme for their subtree (the Theme row in the inspector), and instance
 under another theme re-resolve their variables.
 
 Export (inspector, top right, or the `export_code` tool): PNG, HTML + CSS (one element per
-node, variables as custom properties, `[data-theme-mode="dark"]` blocks) or React +
+node, variables as custom properties, `[data-theme-mode="dark"]` blocks; every fill and
+gradient, shadow, blur, rotation and flip, written as pen.dev writes them) or React +
 Tailwind (a function per component with props from the overrides, shadcn/ui primitives for
 components named Button, Card, Input, …, `Page.tsx` for the current page).
 
 ## MCP tools
 
-`get_document`, `get_selection`, `create_nodes` (`.pen` nodes, nested `children`),
-`update_nodes`, `delete_nodes`, `reorder`, `select`, `zoom_to_fit`, `screenshot`
-(a node, the canvas, or the whole window with `view: true`), `undo`, `redo`, `save`, `open`,
-`set_variables` (variables, theme axes and the shown theme), `set_pages`, `export_code`
-(`html` or `react`).
+`get_document` (with `ids` for subtrees and `depth` for big files), `get_selection`,
+`get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
+(`.pen` nodes, nested `children`), `update_nodes`, `delete_nodes`, `reorder`, `select`,
+`zoom_to_fit`, `screenshot` (a node, the canvas, or the whole window with `view: true`),
+`undo`, `redo`, `save`, `open`, `set_variables` (variables, theme axes and the shown theme),
+`set_pages`, `export_code` (`html` or `react`).
 
 The first time the app opens, an onboarding walks through the app and connects agents.
 It detects Claude Code, Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf,

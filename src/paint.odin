@@ -143,10 +143,13 @@ draw_drop_shadows :: proc(vg: ^nvg.Context, n: ^Node, radius: f32) {
 	}
 }
 
+// Shadows follow CSS (pen.dev renders and exports them so): the blur fades the shadow
+// over twice its value, centred on the edge of the offset, spread box. NanoVG's box
+// gradient fades over `feather`, centred the same way.
 drop_shadow :: proc(vg: ^nvg.Context, n: ^Node, offset: [2]f32, blur, spread: f32, color: Color, radius: f32) {
 	x, y := n.x + offset.x - spread, n.y + offset.y - spread
 	w, h := n.w + spread * 2, n.h + spread * 2
-	feather := max(blur, 0.5)
+	feather := max(blur * 2, 0.5)
 	paint := nvg.BoxGradient(x, y, w, h, radius + spread, feather, to_nvg(color), nvg.Color{0, 0, 0, 0})
 	nvg.BeginPath(vg)
 	nvg.Rect(vg, x - feather, y - feather, w + feather * 2, h + feather * 2)
@@ -160,10 +163,10 @@ draw_inner_shadows :: proc(vg: ^nvg.Context, n: ^Node, radius: f32) {
 	for i in 0 ..< n.neffects {
 		e := n.effects[i]
 		if !e.enabled || e.kind != .Inner_Shadow do continue
-		feather := max(e.blur, 0.5)
+		feather := max(e.blur * 2, 0.5)
 		x, y := n.x + e.offset.x + e.spread, n.y + e.offset.y + e.spread
 		w, h := n.w - e.spread * 2, n.h - e.spread * 2
-		paint := nvg.BoxGradient(x + feather / 2, y + feather / 2, w - feather, h - feather, max(radius - e.spread, 0), feather, nvg.Color{0, 0, 0, 0}, to_nvg(e.color))
+		paint := nvg.BoxGradient(x, y, w, h, max(radius - e.spread, 0), feather, nvg.Color{0, 0, 0, 0}, to_nvg(e.color))
 		nvg.FillPaint(vg, paint)
 		nvg.Fill(vg)
 	}

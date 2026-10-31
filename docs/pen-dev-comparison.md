@@ -66,7 +66,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | --- | --- | --- | --- | --- |
 | Header | name and type icon, **Create Component** | name; "Component (reusable)" checkbox | name, **Create component ⌘⌥K** or "Component origin · Make plain layer" | done |
 | Alignment | 6 buttons, single or multiple | multi-selection only | 6 buttons; one layer aligns inside its parent; ⌥A/D/W/S/H/V | done |
-| Position | X, Y, rotation, rotate 90°, flip H/V, Absolute Position | X, Y; absolute under Flex | X, Y, **rotation**, rotate 90°, **flip H/V** (⇧H/⇧V), absolute when the parent has flex | done (hit-testing ignores rotation) |
+| Position | X, Y, rotation, rotate 90°, flip H/V, Absolute Position | X, Y; absolute under Flex | X, Y, **rotation**, rotate 90°, **flip H/V** (⇧H/⇧V), absolute when the parent has flex; turning and flipping keep the layer in place; clicks, outlines and marquee follow the drawn shape | partial (no resize handles on a turned layer) |
 | Flex layout | none/vertical/horizontal, 3×3 alignment, gap or space-between/around, padding (2 or 4) | same controls | same, named "Layout" | done |
 | Dimensions | W, H, Fill Width/Height, Hug Width/Height checkboxes | W/H fields taking "fit_content" / "fill_container" text | W, H, **Fill** (in flex parents) and **Hug** checkboxes | done |
 | Text resizing | auto width, auto height, fixed size | dropdown | **3-button segmented control** | done |
@@ -78,7 +78,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Theme | per frame, add/remove | per frame | same | done |
 | Instance | Go to component, Detach | Go to component, Detach, Parameters | same | done (Parameters goes beyond pen.dev's UI) |
 | Context | notes for the agent | — | **Context** field (`context` property) | done |
-| Code | HTML + Tailwind, copy, export | Export ▾ menu (HTML + CSS, React + Tailwind) | same | done |
+| Code | HTML + Tailwind, copy, export | Export ▾ menu (HTML + CSS, React + Tailwind); one fill, first shadow | every fill and gradient, all shadows, blurs, rotation and flips, justify and vertical align, written as pen.dev writes them | done |
 | Export | per layer, scale and format (PNG, JPEG, WEBP, PDF) | PNG of the selection at 2× | **per layer, 1×–4×**, PNG | partial (PNG only) |
 
 ## Colour picker
@@ -139,7 +139,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | --- | --- | --- |
 | Connect agents | silently, 6 clients | onboarding, 9 clients, one click each |
 | Built-in chat | yes | no (the user's own agent works through MCP) |
-| MCP tools | `execute` (JS API), `get_app_state`, `browser`, `get_style`, `read_skill` | `.pen` JSON tools: get/create/update/delete, screenshot, variables, pages, export |
+| MCP tools | `execute` (JS API), `get_app_state`, `browser`, `get_style`, `read_skill` | `.pen` JSON tools: get (with `ids` and `depth`) / create / update / delete, screenshot, `get_variables`, `get_styles` (a node's CSS), variables, pages, export |
 
 ## Still missing, by value
 
@@ -151,4 +151,18 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 6. **More export formats.** JPEG, WEBP and PDF; copy as PNG or HTML.
 7. **Find layers, ⌘-click deep select, a shortcut sheet, settings.**
 8. **Libraries.** Components shared across files.
-9. **Rotation in hit-testing and in the selection box.** Plus rotated children of rotated frames.
+9. **Resize handles on turned layers.** Clicks, outlines and the marquee follow rotation and flips; resizing a turned layer works from the inspector only.
+
+## Found while comparing code export (2026-10-31)
+
+- pen.dev turns **and mirrors** a layer around its top-left corner; a flipped layer is drawn
+  to the left of (or above) its x/y. Its HTML export says the same
+  (`transform-origin: top left; transform: scaleX(-1)`). Agentic Design flipped around the
+  centre; it now draws as pen.dev does, and its flip commands move x/y so the layer stays in
+  place.
+- pen.dev exports a blur of radius r as `blur(r/2)` and shadows as CSS `box-shadow` with the
+  same numbers, and its canvas matches that. Our canvas faded shadows over half the
+  distance; it now matches both.
+- pen.dev does not draw `underline` or `strikethrough`, though the schema has them. We draw
+  them.
+

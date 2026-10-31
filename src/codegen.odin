@@ -2,6 +2,7 @@ package agentic_design
 
 import "core:encoding/json"
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
@@ -175,6 +176,197 @@ px :: proc(f: f32) -> string {
 	return fmt.tprintf("%spx", num_text(f))
 }
 
+// A colour inside a fill or effect as CSS: var(--name) when it is bound to a variable,
+// with the paint's opacity applied.
+item_color_css :: proc(v: json.Value, c: Color, opacity: f32 = 1) -> string {
+	if s, ok := v.(json.String); ok && strings.has_prefix(string(s), "$") {
+		ref := fmt.tprintf("var(--%s)", css_name(string(s)[1:]))
+		if opacity >= 1 do return ref
+		return fmt.tprintf("color-mix(in srgb, %s %s%%, transparent)", ref, num_text(opacity * 100))
+	}
+	c := c
+	c[3] = u8(f32(c[3]) * clamp(opacity, 0, 1) + 0.5)
+	return css_color(c)
+}
+
+// The raw items of a fill or effect property (a single value is a list of one).
+prop_items :: proc(n: ^Node, key: string) -> []json.Value {
+	v, ok := prop_value(n, key)
+	if !ok do return nil
+	if arr, is_arr := v.(json.Array); is_arr do return arr[:]
+	out := make([]json.Value, 1, context.temp_allocator)
+	out[0] = v
+	return out
+}
+
+// The gradient stops as CSS: colour and position, each position mapped by `at`.
+css_stops :: proc(g: ^Gen, item: json.Object, opacity: f32, at: proc(pos: f32, data: rawptr) -> f32, data: rawptr, unit := "%") -> string {
+	b := strings.builder_make(context.temp_allocator)
+	colors, _ := item["colors"].(json.Array)
+	for c, i in colors {
+		co, ok := c.(json.Object)
+		if !ok do continue
+		col := color_of(g.doc, co["color"]) or_else Color{0, 0, 0, 255}
+		pos := clamp(num(g.doc, co["position"]) or_else 0, 0, 1)
+		if i > 0 do strings.write_string(&b, ", ")
+		fmt.sbprintf(&b, "%s %s%s", item_color_css(co["color"], col, opacity), num_text(at(pos, data) * 100), unit)
+	}
+	return strings.to_string(b)
+}
+
+// One fill as a CSS background layer (an image) or, for a solid colour, the colour.
+// Gradients follow pen.dev's geometry (see paint.odin) on a w × h box.
+fill_layer_css :: proc(g: ^Gen, n: ^Node, item: json.Value) -> (css: string, kind: Paint_Kind, ok: bool) {
+	tmp: Node
+	parse_fills(g.doc, &tmp, item)
+	if tmp.nfills == 0 || !tmp.fills[0].enabled do return "", .Color, false
+	p := tmp.fills[0]
+	obj, _ := item.(json.Object)
+	identity :: proc(pos: f32, _: rawptr) -> f32 {return pos}
+	switch p.kind {
+	case .Color:
+		raw := item
+		if obj != nil do raw = obj["color"]
+		return item_color_css(raw, p.color, p.opacity), .Color, true
+	case .Image:
+		if n.image_url == "" do return "", .Image, false
+		return fmt.tprintf("url(%s) center / %s no-repeat", n.image_url, image_size_css(n)), .Image, true
+	case .Linear:
+		// the gradient line on the box, then re-expressed on CSS's line: through the
+		// centre at the same angle, as long as the box projects onto it
+		w, h := max(n.w, 0.01), max(n.h, 0.01)
+		rad := p.rotation * math.PI / 180
+		dir := [2]f32{-math.sin(rad), -math.cos(rad)}
+		a := p.center - dir * p.size.y / 2
+		b := p.center + dir * p.size.y / 2
+		Line :: struct {start, d, u: [2]f32, length, w, h: f32}
+		line := Line{start = {a.x * w, a.y * h}, d = {(b.x - a.x) * w, (b.y - a.y) * h}, w = w, h = h}
+		l := math.sqrt(line.d.x * line.d.x + line.d.y * line.d.y)
+		if l < 1e-4 do return item_color_css(nil, p.stops[p.nstops - 1].color, p.opacity), .Color, true
+		line.u = line.d / l
+		line.length = abs(w * line.u.x) + abs(h * line.u.y)
+		angle := math.atan2(line.u.x, -line.u.y) * 180 / math.PI
+		at :: proc(pos: f32, data: rawptr) -> f32 {
+			l := (^Line)(data)
+			q := l.start + l.d * pos - [2]f32{l.w / 2, l.h / 2}
+			return (q.x * l.u.x + q.y * l.u.y) / l.length + 0.5
+		}
+		return fmt.tprintf("linear-gradient(%sdeg, %s)", num_text(angle), css_stops(g, obj, p.opacity, at, &line)), .Linear, true
+	case .Radial:
+		// CSS ellipses cannot turn: the radii follow the nearest quarter turn
+		radii := fmt.tprintf("%s%% %s%%", num_text(p.size.x * 50), num_text(p.size.y * 50))
+		if int(math.round(p.rotation / 90)) %% 2 == 1 do radii = fmt.tprintf("%s %s", px(p.size.y * n.h / 2), px(p.size.x * n.w / 2))
+		return fmt.tprintf("radial-gradient(ellipse %s at %s%% %s%%, %s)", radii, num_text(p.center.x * 100), num_text(p.center.y * 100), css_stops(g, obj, p.opacity, identity, nil)), .Radial, true
+	case .Angular:
+		return fmt.tprintf("conic-gradient(from %sdeg at %s%% %s%%, %s)", num_text(-p.rotation), num_text(p.center.x * 100), num_text(p.center.y * 100), css_stops(g, obj, p.opacity, identity, nil)), .Angular, true
+	}
+	return "", .Color, false
+}
+
+image_size_css :: proc(n: ^Node) -> string {
+	return "cover" if n.image_mode == .Cover else ("contain" if n.image_mode == .Contain else "100% 100%")
+}
+
+// Every fill as CSS: a plain colour when there is one solid fill, else background
+// layers (the first fill at the bottom, as on the canvas; CSS lists the top layer first).
+fill_decls :: proc(g: ^Gen, n: ^Node, d: ^[dynamic]Decl) {
+	layers := make([dynamic]string, context.temp_allocator)
+	solids := make([dynamic]bool, context.temp_allocator)
+	for item in prop_items(n, "fill") {
+		css, kind, ok := fill_layer_css(g, n, item)
+		if !ok do continue
+		if len(layers) == 0 && kind == .Image && len(prop_items(n, "fill")) == 1 {
+			append(d, Decl{"background-image", fmt.tprintf("url(%s)", n.image_url)})
+			append(d, Decl{"background-size", image_size_css(n)})
+			append(d, Decl{"background-position", "center"})
+			return
+		}
+		append(&layers, css)
+		append(&solids, kind == .Color)
+	}
+	if len(layers) == 0 do return
+	if len(layers) == 1 && solids[0] {
+		append(d, Decl{"background", layers[0]})
+		return
+	}
+	b := strings.builder_make(context.temp_allocator)
+	#reverse for css, i in layers {
+		if i < len(layers) - 1 do strings.write_string(&b, ", ")
+		// only the bottom layer may be a plain colour
+		if solids[i] && i > 0 do fmt.sbprintf(&b, "linear-gradient(%s, %s)", css, css)
+		else do strings.write_string(&b, css)
+	}
+	append(d, Decl{"background", strings.to_string(b)})
+}
+
+// Shadows, blurs (pen.dev writes half the radius, as CSS blur takes a deviation) and,
+// for text, shadows of the glyphs.
+effect_decls :: proc(g: ^Gen, n: ^Node, d: ^[dynamic]Decl) {
+	shadows := make([dynamic]string, context.temp_allocator)
+	filters := make([dynamic]string, context.temp_allocator)
+	vector := n.kind == .Icon || n.kind == .Path
+	for item in prop_items(n, "effect") {
+		tmp: Node
+		parse_effects(g.doc, &tmp, item)
+		if tmp.neffects == 0 || !tmp.effects[0].enabled do continue
+		e := tmp.effects[0]
+		obj, _ := item.(json.Object)
+		switch e.kind {
+		case .Drop_Shadow, .Inner_Shadow:
+			col := item_color_css(obj["color"], e.color)
+			if vector {
+				// a shadow of the drawn shape, not of the box
+				if e.kind == .Drop_Shadow do append(&filters, fmt.tprintf("drop-shadow(%s %s %s %s)", px(e.offset.x), px(e.offset.y), px(e.blur / 2), col))
+			} else if n.kind == .Text {
+				if e.kind == .Drop_Shadow do append(&shadows, fmt.tprintf("%s %s %s %s", px(e.offset.x), px(e.offset.y), px(e.blur), col))
+			} else {
+				spread := fmt.tprintf(" %s", px(e.spread)) if e.spread != 0 else ""
+				append(&shadows, fmt.tprintf("%s%s %s %s%s %s", "inset " if e.kind == .Inner_Shadow else "", px(e.offset.x), px(e.offset.y), px(e.blur), spread, col))
+			}
+		case .Blur:
+			append(&filters, fmt.tprintf("blur(%s)", px(e.blur / 2)))
+		case .Background_Blur:
+			append(d, Decl{"backdrop-filter", fmt.tprintf("blur(%s)", px(e.blur / 2))})
+		}
+	}
+	if len(shadows) > 0 do append(d, Decl{"text-shadow" if n.kind == .Text else "box-shadow", strings.join(shadows[:], ", ", context.temp_allocator)})
+	if len(filters) > 0 do append(d, Decl{"filter", strings.join(filters[:], " ", context.temp_allocator)})
+}
+
+// The colour of text: its first solid fill, or every fill clipped to the glyphs when
+// one is a gradient or an image.
+text_fill_decls :: proc(g: ^Gen, n: ^Node, d: ^[dynamic]Decl) {
+	plain := true
+	first: string
+	for item in prop_items(n, "fill") {
+		css, kind, ok := fill_layer_css(g, n, item)
+		if !ok do continue
+		if kind != .Color do plain = false
+		else if first == "" do first = css
+	}
+	if plain {
+		if first != "" do append(d, Decl{"color", first})
+		return
+	}
+	fill_decls(g, n, d)
+	append(d, Decl{"background-clip", "text"})
+	append(d, Decl{"-webkit-background-clip", "text"})
+	append(d, Decl{"color", "transparent"})
+}
+
+// Rotation and flips around the top-left corner, as the file defines them.
+transform_decls :: proc(n: ^Node, d: ^[dynamic]Decl) {
+	if n.rotation == 0 && !n.flip_x && !n.flip_y do return
+	b := strings.builder_make(context.temp_allocator)
+	if n.rotation != 0 do fmt.sbprintf(&b, "rotate(%sdeg)", num_text(-n.rotation))
+	if n.flip_x || n.flip_y {
+		if n.rotation != 0 do strings.write_byte(&b, ' ')
+		fmt.sbprintf(&b, "scale(%d, %d)", -1 if n.flip_x else 1, -1 if n.flip_y else 1)
+	}
+	append(d, Decl{"transform-origin", "top left"})
+	append(d, Decl{"transform", strings.to_string(b)})
+}
+
 // Variables as custom properties, with a block per non-default theme value.
 gen_css_vars :: proc(g: ^Gen) {
 	doc := g.doc
@@ -300,15 +492,7 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 	}
 	if n.clip do add(&d, "overflow", "hidden")
 	if n.kind == .Icon && n.has_fill do add(&d, "color", color_css(n, "fill", n.fill))
-	if n.kind != .Text && n.kind != .Icon && n.kind != .Path && n.has_fill {
-		if n.image_url != "" {
-			add(&d, "background-image", fmt.tprintf("url(%s)", n.image_url))
-			add(&d, "background-size", "cover" if n.image_mode == .Cover else ("contain" if n.image_mode == .Contain else "100% 100%"))
-			add(&d, "background-position", "center")
-		} else {
-			add(&d, "background", color_css(n, "fill", n.fill))
-		}
-	}
+	if n.kind != .Text && n.kind != .Icon && n.kind != .Path do fill_decls(g, n, &d)
 	if n.kind == .Ellipse do add(&d, "border-radius", "50%")
 	else if n.radius != {} {
 		r := n.radius
@@ -325,9 +509,8 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 		else do add(&d, "border", fmt.tprintf("%s solid %s", px(n.stroke_width), color_css(n, "stroke", n.stroke)))
 	}
 	if n.opacity < 1 do add(&d, "opacity", num_text(n.opacity))
-	if s := n.shadow; s.has {
-		add(&d, "box-shadow", fmt.tprintf("%s%s %s %s %s %s", "inset " if s.inner else "", px(s.offset.x), px(s.offset.y), px(s.blur), px(s.spread), css_color(s.color)))
-	}
+	effect_decls(g, n, &d)
+	transform_decls(n, &d)
 	if n.kind == .Text {
 		fam := n.font_family if n.font_family != "" else "Arial"
 		if s := prop_string(n, "fontFamily"); strings.has_prefix(s, "$") do fam = fmt.tprintf("var(--%s)", css_name(s[1:]))
@@ -337,11 +520,18 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 		if n.weight != 400 do add(&d, "font-weight", fmt.tprintf("%d", n.weight))
 		if n.italic do add(&d, "font-style", "italic")
 		if n.letter_spacing != 0 do add(&d, "letter-spacing", px(n.letter_spacing))
-		if n.underline || n.strikethrough do add(&d, "text-decoration", "underline" if n.underline else "line-through")
+		if n.underline || n.strikethrough do add(&d, "text-decoration", "underline line-through" if n.underline && n.strikethrough else ("underline" if n.underline else "line-through"))
 		add(&d, "line-height", num_text(line_height_of(n)))
-		if n.has_fill do add(&d, "color", color_css(n, "fill", n.fill))
-		if n.text_align != .Left do add(&d, "text-align", "center" if n.text_align == .Center else "right")
+		text_fill_decls(g, n, &d)
+		aligns := [Text_Align]string{.Left = "left", .Center = "center", .Right = "right", .Justify = "justify"}
+		if n.text_align != .Left do add(&d, "text-align", aligns[n.text_align])
 		add(&d, "white-space", "pre-wrap" if n.growth != .Auto else "pre")
+		// a fixed box places its lines at the top, middle or bottom
+		if n.growth == .Fixed_Width_Height && n.text_valign != .Start {
+			add(&d, "display", "flex")
+			add(&d, "flex-direction", "column")
+			add(&d, "justify-content", "center" if n.text_valign == .Center else "flex-end")
+		}
 	}
 	return d[:]
 }
@@ -420,6 +610,7 @@ tailwind :: proc(decls: []Decl) -> string {
 	b := strings.builder_make(context.temp_allocator)
 	first := true
 	for d in decls {
+		if d.prop == "-webkit-background-clip" do continue // bg-clip-text carries the prefix
 		if !first do strings.write_byte(&b, ' ')
 		first = false
 		val, _ := strings.replace_all(d.value, " ", "_", context.temp_allocator)
@@ -448,7 +639,12 @@ tailwind :: proc(decls: []Decl) -> string {
 			case "flex-end": strings.write_string(&b, "items-end")
 			}
 		case "overflow": strings.write_string(&b, "overflow-hidden")
-		case "background": fmt.sbprintf(&b, "bg-[%s]", val)
+		case "background":
+			// a colour is bg-[…]; layers and gradients go in as the property itself
+			if strings.has_prefix(d.value, "#") || strings.has_prefix(d.value, "rgba(") || strings.has_prefix(d.value, "color-mix(") || (strings.has_prefix(d.value, "var(") && !strings.contains(d.value, ",")) do fmt.sbprintf(&b, "bg-[%s]", val)
+			else do fmt.sbprintf(&b, "[background:%s]", val)
+		case "background-clip": strings.write_string(&b, "bg-clip-text")
+		case "transform-origin": strings.write_string(&b, "origin-top-left")
 		case "background-image": fmt.sbprintf(&b, "bg-[%s]", val)
 		case "background-size": strings.write_string(&b, "bg-cover" if d.value == "cover" else "bg-contain")
 		case "background-position": strings.write_string(&b, "bg-center")
@@ -464,11 +660,13 @@ tailwind :: proc(decls: []Decl) -> string {
 		case "font-weight": fmt.sbprintf(&b, "font-[%s]", val)
 		case "font-style": strings.write_string(&b, "italic")
 		case "line-height": fmt.sbprintf(&b, "leading-[%s]", val)
-		case "color": fmt.sbprintf(&b, "text-[%s]", val)
-		case "text-align": strings.write_string(&b, "text-center" if d.value == "center" else "text-right")
+		case "color":
+			if d.value == "transparent" do strings.write_string(&b, "text-transparent")
+			else do fmt.sbprintf(&b, "text-[%s]", val)
+		case "text-align": fmt.sbprintf(&b, "text-%s", d.value)
 		case "white-space": strings.write_string(&b, "whitespace-pre-wrap" if d.value == "pre-wrap" else "whitespace-pre")
 		case "letter-spacing": fmt.sbprintf(&b, "tracking-[%s]", val)
-		case "text-decoration": strings.write_string(&b, "underline" if d.value == "underline" else "line-through")
+		case "text-decoration": strings.write_string(&b, d.value) // underline, line-through or both
 		case: fmt.sbprintf(&b, "[%s:%s]", d.prop, val) // any other property as an arbitrary one
 		}
 	}

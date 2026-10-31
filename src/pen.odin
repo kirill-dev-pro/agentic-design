@@ -287,6 +287,11 @@ write_children :: proc(b: ^strings.Builder, doc: ^Document, parent: int, indent:
 
 // Writes one node as a .pen object. `indent` < 0 writes compact JSON.
 // `api` adds the computed absolute box as "bounds".
+// For agents: how many levels of children get_document writes (-1: all). Deeper
+// containers report "childCount" instead.
+api_depth_limit := -1
+api_depth := 0
+
 write_node :: proc(b: ^strings.Builder, doc: ^Document, n: ^Node, indent: int, api: bool) {
 	strings.write_byte(b, '{')
 	inner := indent + 1 if indent >= 0 else -1
@@ -320,11 +325,15 @@ write_node :: proc(b: ^strings.Builder, doc: ^Document, n: ^Node, indent: int, a
 		write_indent(b, inner)
 		fmt.sbprintf(b, `"bounds":[%s,%s,%s,%s]`, num_text(n.x), num_text(n.y), num_text(n.w), num_text(n.h))
 	}
-	if plain > 0 || n.children_key {
+	if api && api_depth_limit >= 0 && api_depth >= api_depth_limit && plain > 0 {
+		fmt.sbprintf(b, `,"childCount":%d`, plain)
+	} else if plain > 0 || n.children_key {
 		strings.write_byte(b, ',')
 		write_indent(b, inner)
 		strings.write_string(b, `"children": [` if indent >= 0 else `"children":[`)
+		api_depth += 1
 		write_children(b, doc, n.uid, inner + 1 if inner >= 0 else -1, api)
+		api_depth -= 1
 		strings.write_byte(b, ']')
 	}
 	write_indent(b, indent)

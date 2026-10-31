@@ -37,9 +37,10 @@ the round-trip test fixtures.
 | Node types | `frame`, `group`, `rectangle`, `ellipse`, `path`, `text`, `ref`, `icon` (`library: "lucide"`, `icon`), and 2.8's `icon_font` (`iconFontFamily`, `iconFontName`). Other types are kept and drawn as placeholders. |
 | Size | `width` / `height`: number, `fit_content`, `fill_container`, also with a fallback as in `fit_content(120)` |
 | Flex | `layout` (`none`, `horizontal`, `vertical`), `gap`, `padding` (n, [v,h], [t,r,b,l]), `justifyContent`, `alignItems`, `layoutPosition: absolute`, `clip` |
-| Paint | `fill` (color, `$variable`, image fill; gradients fall back to a flat color), `stroke`, `strokeWidth` (one number or `{top, right, bottom, left}`), `strokeAlignment`, `strokeLinecap`, `strokeLinejoin`, `cornerRadius` (n or 4 corners), `opacity` (number or `%`), `enabled` |
-| Effects | the first enabled shadow in `effect` (outer drawn, inner kept) |
-| Text | `content` (a string; styled runs are not supported), `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `letterSpacing`, `underline`, `strikethrough`, `textAlign`, `textGrowth`, `lineHeight` |
+| Paint | `fill` (color, `$variable`, image fill, linear / radial / angular gradients, or a list of them), `stroke`, `strokeWidth` (one number or `{top, right, bottom, left}`), `strokeAlignment`, `strokeLinecap`, `strokeLinejoin`, `cornerRadius` (n or 4 corners), `opacity` (number or `%`), `enabled` |
+| Effects | `effect`: one or a list; outer and inner shadows are drawn, `blur` and `background_blur` are kept and exported, not drawn |
+| Transform | `rotation` (degrees counter-clockwise), `flipX`, `flipY`, all around the top-left corner |
+| Text | `content` (a string; styled runs are not supported), `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `letterSpacing`, `underline`, `strikethrough`, `textAlign` (with `justify`), `textAlignVertical`, `textGrowth`, `lineHeight` |
 | Paths | `geometry` (SVG path data, arcs included), view box |
 | Components | `reusable`, `ref`, overrides of any property on the `ref` itself (the component root) and in `descendants`, slot frames |
 | Variables | `$name` references in any property, themed values, variables pointing to variables |
@@ -54,6 +55,10 @@ Defaults that matter:
 - Font size is the em size, as in CSS. Without `lineHeight`, the font's own line spacing
   applies: (ascender − descender + line gap) / em, 1.21 for Inter. Lines sit in their line
   box with half leading. `letterSpacing` follows every character, including the last.
+- `rotation` and the flips pivot on the node's top-left corner, so a node with `flipX`
+  is drawn to the left of its `x` (pen.dev renders and exports it so). A shadow's `blur`
+  fades over twice its value, as in CSS; a blur effect's `radius` is twice the CSS value.
+- pen.dev does not draw `underline` or `strikethrough`; the app does.
 
 ## Version differences
 

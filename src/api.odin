@@ -30,9 +30,13 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 	e := ""
 	switch method {
 	case "get_document":
-		api_get_document(&b, false)
+		api_get_document(&b, params, false)
 	case "get_selection":
-		api_get_document(&b, true)
+		api_get_document(&b, params, true)
+	case "get_variables":
+		api_get_variables(&b)
+	case "get_styles":
+		e = api_get_styles(&b, params)
 	case "create_nodes":
 		e = api_create_nodes(&b, params)
 	case "update_nodes":
@@ -170,7 +174,10 @@ uids_param :: proc(params: json.Object, key: string) -> []int {
 	return out[:]
 }
 
-api_get_document :: proc(b: ^strings.Builder, selection_only: bool) {
+// The node tree for agents. `ids` picks subtrees, `depth` limits how many levels of
+// children come back, `variables` adds the variable definitions (on by default for the
+// whole document, off for the selection).
+api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_only: bool) {
 	strings.write_string(b, `{"file":`)
 	json_write_string(b, app.file_path)
 	strings.write_string(b, `,"selection":[`)
@@ -179,21 +186,79 @@ api_get_document :: proc(b: ^strings.Builder, selection_only: bool) {
 		if n, _ := doc_find_uid(&app.doc, uid); n != nil do json_write_string(b, n.id)
 		else do strings.write_string(b, "null")
 	}
-	strings.write_string(b, `],"variables":`)
-	vars := ""
-	for p in app.doc.header do if p.key == "variables" do vars = p.raw
-	strings.write_string(b, vars if vars != "" else "{}")
+	strings.write_byte(b, ']')
+	if params["variables"].(json.Boolean) or_else !selection_only {
+		strings.write_string(b, `,"variables":`)
+		write_header_value(b, "variables")
+	}
+	picked := uids_param(params, "ids")
+	api_depth_limit = int(params["depth"].(json.Float) or_else -1)
+	api_depth = 0
+	defer api_depth_limit = -1
 	strings.write_string(b, `,"children":[`)
 	first := true
 	for &n in app.doc.nodes {
 		include := n.parent == 0
 		if selection_only do include = is_selected(n.uid) && !(n.parent != 0 && is_selected(n.parent))
+		if len(picked) > 0 do include = slice.contains(picked, n.uid)
 		if !include do continue
 		if !first do strings.write_byte(b, ',')
 		first = false
 		write_node(b, &app.doc, &n, -1, true)
 	}
 	strings.write_string(b, "]}")
+}
+
+write_header_value :: proc(b: ^strings.Builder, key: string) {
+	raw := ""
+	for p in app.doc.header do if p.key == key do raw = p.raw
+	strings.write_string(b, raw if raw != "" else "{}")
+}
+
+// Variables and theme axes, with the theme shown in the window.
+api_get_variables :: proc(b: ^strings.Builder) {
+	strings.write_string(b, `{"themes":`)
+	write_header_value(b, "themes")
+	strings.write_string(b, `,"shown":{`)
+	first := true
+	for k, v in app.theme {
+		if !first do strings.write_byte(b, ',')
+		first = false
+		json_write_string(b, k)
+		strings.write_byte(b, ':')
+		json_write_string(b, v)
+	}
+	strings.write_string(b, `},"variables":`)
+	write_header_value(b, "variables")
+	strings.write_byte(b, '}')
+}
+
+// The CSS code export writes for each node, with its bounds: a quick way to implement
+// a part of the design without exporting the page.
+api_get_styles :: proc(b: ^strings.Builder, params: json.Object) -> string {
+	uids := uids_param(params, "ids")
+	if len(uids) == 0 do uids = app.sel[:]
+	if len(uids) == 0 do return "pass ids (or select nodes in the window)"
+	g := Gen{doc = &app.doc, format = .HTML}
+	strings.write_string(b, `{"nodes":[`)
+	for uid, i in uids {
+		n, _ := doc_find_uid(&app.doc, uid)
+		if n == nil do continue
+		if i > 0 do strings.write_byte(b, ',')
+		strings.write_string(b, `{"id":`)
+		json_write_string(b, n.id)
+		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s],"css":{{`, num_text(n.x), num_text(n.y), num_text(n.w), num_text(n.h))
+		parent, _ := doc_find_uid(&app.doc, n.parent)
+		for d, j in node_decls(&g, n, parent) {
+			if j > 0 do strings.write_byte(b, ',')
+			json_write_string(b, d.prop)
+			strings.write_byte(b, ':')
+			json_write_string(b, d.value)
+		}
+		strings.write_string(b, "}}")
+	}
+	strings.write_string(b, "]}")
+	return ""
 }
 
 api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
