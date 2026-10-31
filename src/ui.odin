@@ -541,10 +541,11 @@ draw_tools :: proc(vg: ^nvg.Context) {
 		icon: Icon,
 		tip:  string,
 	}
-	tools := [?]Tool_Button{{.Select, .Select, "Move  V"}, {.Hand, .Hand, "Hand  H"}, {.Frame, .Frame, "Frame  F"}, {.Rect, .Rect, "Rectangle  R"}, {.Ellipse, .Ellipse, "Ellipse  E"}, {.Text, .Text, "Text  T"}}
+	tools := [?]Tool_Button{{.Select, .Select, "Move  V"}, {.Hand, .Hand, "Hand  H"}, {.Frame, .Frame, "Frame  F"}, {.Rect, .Rect, "Rectangle  R"}, {.Ellipse, .Ellipse, "Ellipse  E"}, {.Text, .Text, "Text  T"}, {.Pen, .Pen, "Pen  P"}}
 	y := TAB_H + 8
 	for t in tools {
 		if icon_button(vg, {LEFT_W + 6, y, 32, 32}, t.icon, app.tool == t.tool, t.tip) {
+			if pen_active() do pen_finish()
 			app.tool = t.tool
 			if app.editing != 0 do finish_text_editing()
 		}
@@ -1261,14 +1262,33 @@ export_pending: bool
 
 export_scale: f32 = 2
 export_path: string
+export_format: Export_Format
+copy_png_pending: bool
 
-// Exports the selection (or everything) on the next frame: at `scale`, into `path`
-// (default ~/Downloads/<file> - <layer>.png).
-export_request :: proc(scale: f32 = 2, path := "") {
+// Exports the selection (or everything) on the next frame: at `scale`, as `format`, into
+// `path` (default ~/Downloads/<file> - <layer>.<ext>).
+export_request :: proc(scale: f32 = 2, path := "", format := Export_Format.PNG) {
 	export_pending = true
 	export_scale = scale
+	export_format = format
 	delete(export_path)
 	export_path = strings.clone(path)
+}
+
+// ⇧⌘C: the selection as a PNG (2×) on the clipboard. Runs between frames.
+copy_png_render :: proc() {
+	if !copy_png_pending do return
+	copy_png_pending = false
+	r, ok := bounds_of(app.sel[:])
+	if !ok do return
+	target: ^Node
+	if len(app.sel) == 1 do target, _ = doc_find_uid(&app.doc, app.sel[0])
+	pixels, w, h, rok := render_region(r, 2, target, {1, 1, 1, 1})
+	if !rok do return
+	png, pok := png_encode(pixels, w, h)
+	if !pok do return
+	clipboard_set(png, "public.png")
+	set_status("Copied as PNG (%d × %d)", w, h)
 }
 
 // Writes the selection (or everything) as a PNG into ~/Downloads. Runs between frames.
@@ -1290,7 +1310,7 @@ export_render :: proc() {
 		set_status("Export failed")
 		return
 	}
-	png, pok := png_encode(pixels, w, h)
+	png, pok := encode_image(pixels, w, h, export_format, export_scale)
 	if !pok {
 		set_status("Export failed")
 		return
@@ -1298,7 +1318,7 @@ export_render :: proc() {
 	home, _ := os.user_home_dir(context.temp_allocator)
 	name := file_title(app.file_path)
 	if target != nil do name = fmt.tprintf("%s - %s", name, node_label(target))
-	path := fmt.tprintf("%s/Downloads/%s.png", home, name)
+	path := fmt.tprintf("%s/Downloads/%s.%s", home, name, EXPORT_EXTENSIONS[export_format])
 	if export_path != "" do path = export_path
 	if err := os.write_entire_file(path, png); err != nil {
 		set_status("Export failed: %v", err)

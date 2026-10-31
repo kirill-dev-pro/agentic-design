@@ -894,3 +894,16 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 	}
 	if wrap_hidden do fmt.sbprintf(&g.out, "%s)}}\n", pad)
 }
+
+// The selected layers as a standalone HTML snippet with their CSS (⌥⌘C, "copy as HTML").
+html_snippet :: proc(uids: []int) -> string {
+	g := Gen{doc = &app.doc, format = .HTML}
+	g.css = strings.builder_make(context.temp_allocator)
+	g.out = strings.builder_make(context.temp_allocator)
+	gen_css_vars(&g)
+	for uid in uids {
+		if n, _ := doc_find_uid(&app.doc, uid); n != nil do gen_html_node(&g, n, 0, "", true)
+	}
+	return fmt.tprintf("<style>\n%s</style>\n%s", strings.to_string(g.css), strings.to_string(g.out))
+}
+

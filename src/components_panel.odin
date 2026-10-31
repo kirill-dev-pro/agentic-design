@@ -1,5 +1,6 @@
 package agentic_design
 
+import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
 import "core:time"
@@ -53,14 +54,15 @@ draw_components_panel :: proc(vg: ^nvg.Context, y: ^f32) {
 			nvg.Restore(vg)
 		}
 		label(vg, pv.x + pv.w + 10, y^ + 19, name, TEXT_FG, 12)
-		page := doc_pages(&app.doc)[page_of_component(&n)].name
+		page := fmt.tprintf("Library · %s", library_of(&n)) if n.imported else doc_pages(&app.doc)[page_of_component(&n)].name
 		label(vg, pv.x + pv.w + 10, y^ + 36, page, TEXT_DIM, 11)
 		if hover && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
 			double := ui.tree_click_uid == n.uid && time.duration_seconds(time.since(ui.tree_click)) < 0.35
 			ui.tree_click, ui.tree_click_uid = time.now(), n.uid
 			if double {
 				comp_drag.uid = 0
-				focus_node(n.uid)
+				if n.imported do set_status("%s comes from the library \"%s\"; edit it in that file", name, library_of(&n))
+				else do focus_node(n.uid)
 			} else {
 				comp_drag = {uid = n.uid, start = app.mouse}
 			}
@@ -74,6 +76,32 @@ draw_components_panel :: proc(vg: ^nvg.Context, y: ^f32) {
 			label(vg, x, y^ + 6, "Select a layer and press ⌘⌥K", TEXT_DIM, 11)
 			y^ += 22
 		}
+	}
+	draw_libraries(vg, x, w, y)
+}
+
+// Imported libraries: alias and file, remove, and "+" to import a .pen file.
+draw_libraries :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
+	y^ += 12
+	fill_rect(vg, {x, y^, w, 1}, PANEL_LINE)
+	y^ += 10
+	label(vg, x, y^ + 12, "Libraries", TEXT_FG, 13)
+	if lucide_button(vg, {x + w - 26, y^, 24, 24}, "plus", false, "Import a library (.lib.pen or any .pen file)") do import_library_dialog()
+	y^ += 32
+	imports := doc_imports(&app.doc)
+	if len(imports) == 0 {
+		label(vg, x, y^ + 8, "No imported libraries", TEXT_DIM, 12)
+		y^ += 24
+		return
+	}
+	for alias, rel in imports {
+		label(vg, x, y^ + 10, alias, TEXT_FG, 12)
+		label(vg, x, y^ + 27, string(rel.(json.String) or_else ""), TEXT_DIM, 11)
+		if lucide_button(vg, {x + w - 26, y^ + 6, 24, 24}, "minus", false, "Remove library") {
+			library_remove(alias)
+			return
+		}
+		y^ += 40
 	}
 }
 

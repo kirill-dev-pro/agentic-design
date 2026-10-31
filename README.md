@@ -77,6 +77,8 @@ use the image tool to place them; they are copied into `images/` next to the doc
 | Two-finger double tap | zoom to what is under the pointer / fit all |
 | Shift 1 / Cmd 0 | fit all / 100% |
 | Hold Z / hold Option | zoom tool (click, Option-click, drag) / measure distances |
+| P | pen tool (double click or Enter on a path edits its points) |
+| Shift Cmd C / Option Cmd C | copy as PNG / copy as HTML |
 | Cmd F, ?, Cmd , | find layers, shortcut sheet, settings |
 | Cmd ' | pixel grid |
 | Shift + drag | keep proportions |
@@ -135,7 +137,8 @@ components named Button, Card, Input, …, `Page.tsx` for the current page).
 (`.pen` nodes, nested `children`), `update_nodes`, `delete_nodes`, `reorder`, `select`,
 `zoom_to_fit`, `screenshot` (a node, the canvas, or the whole window with `view: true`),
 `undo`, `redo`, `save`, `open`, `set_variables` (variables, theme axes and the shown theme),
-`set_pages`, `export_code` (`html` or `react`).
+`set_pages`, `set_libraries` (import other .pen files as libraries), `export_code` (`html` or
+`react`). `screenshot` also writes JPEG, WEBP or PDF files (`format`, `path`).
 
 The first time the app opens, an onboarding walks through the app and connects agents.
 It detects Claude Code, Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf,

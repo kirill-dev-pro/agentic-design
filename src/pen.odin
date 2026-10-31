@@ -144,6 +144,21 @@ doc_resolve_vars :: proc(doc: ^Document) {
 	clear(&doc.var_defs)
 	raw := ""
 	for p in doc.header do if p.key == "variables" do raw = p.raw
+	var_defs_add(doc, raw)
+	var_defs_add(doc, doc.lib_vars)
+	// the values for the theme shown now, for the palette and the Theme tab
+	clear(&doc.resolve_theme)
+	for k, v in app.theme do doc.resolve_theme[k] = v
+	for name in doc.var_defs {
+		if v, ok := var_get(doc, name); ok {
+			if v.kind == .String do v.str = strings.clone(v.str)
+			doc.vars[strings.clone(name)] = v
+		}
+	}
+}
+
+// Parses variable definitions (a JSON object) into doc.var_defs.
+var_defs_add :: proc(doc: ^Document, raw: string) {
 	if raw != "" {
 		root, err := json.parse_string(raw, .JSON5, false, context.temp_allocator)
 		if err == nil {
@@ -208,15 +223,6 @@ doc_resolve_vars :: proc(doc: ^Document) {
 			}
 		}
 	}
-	// the values for the theme shown now, for the palette and the Theme tab
-	clear(&doc.resolve_theme)
-	for k, v in app.theme do doc.resolve_theme[k] = v
-	for name in doc.var_defs {
-		if v, ok := var_get(doc, name); ok {
-			if v.kind == .String do v.str = strings.clone(v.str)
-			doc.vars[strings.clone(name)] = v
-		}
-	}
 }
 
 // ---------------------------------------------------------------- writing
@@ -276,7 +282,7 @@ descendants_with_slots :: proc(doc: ^Document, n: ^Node, raw: string, api: bool)
 write_children :: proc(b: ^strings.Builder, doc: ^Document, parent: int, indent: int, api: bool) {
 	count := 0
 	for &n in doc.nodes {
-		if n.parent != parent || n.slot_of != "" do continue
+		if n.parent != parent || n.slot_of != "" || n.imported do continue
 		if count > 0 do strings.write_byte(b, ',')
 		write_indent(b, indent)
 		write_node(b, doc, &n, indent, api)

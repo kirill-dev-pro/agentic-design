@@ -34,7 +34,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | --- | --- | --- | --- | --- |
 | Move, hand, frame, rectangle, ellipse, text | V H A/F R O T | V H F R E T | adds O for ellipse | done |
 | Image | primitives menu | image tool, drop, place dialog | same | done |
-| Pen tool and path editing | P, point editing, cut | — | — | missing |
+| Pen tool and path editing | P, point editing, cut | — | P: corner and smooth points, close on the first point; double click a path to drag points and handles (⌥ breaks the mirror), add a point on a segment, ⌫ removes one | partial (no cut, no boolean operations) |
 | Polygon, icon picker | primitives menu | icons via the format and MCP only | same | partial (no icon picker UI) |
 | Scale tool | K, scales text, strokes, effects | — | — | missing |
 | Sticky note | N | — | — | missing |
@@ -79,7 +79,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Instance | Go to component, Detach | Go to component, Detach, Parameters | same | done (Parameters goes beyond pen.dev's UI) |
 | Context | notes for the agent | — | **Context** field (`context` property) | done |
 | Code | HTML + Tailwind, copy, export | Export ▾ menu (HTML + CSS, React + Tailwind); one fill, first shadow | every fill and gradient, all shadows, blurs, rotation and flips, justify and vertical align, written as pen.dev writes them | done |
-| Export | per layer, scale and format (PNG, JPEG, WEBP, PDF) | PNG of the selection at 2× | **per layer, 1×–4×**, PNG | partial (PNG only) |
+| Export | per layer, scale and format (PNG, JPEG, WEBP, PDF) | PNG of the selection at 2× | per layer, 1×–4×, **PNG, JPEG, WEBP, PDF**; `screenshot` writes any of them | partial (WEBP is lossless and uncompressed, PDF holds a raster) |
 
 ## Colour picker
 
@@ -119,7 +119,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | Components panel | search, click or drag onto the canvas | — | **Components tab**: previews, search, click inserts in the view, drag drops into the frame under the pointer, double click goes to the origin | done |
 | Overrides | any property | any property (this session) | same | done |
 | Slots | `descendants[slot].children` | yes (this session) | same | done |
-| Libraries | import components across files | — | — | missing |
+| Libraries | import components across files | — | `imports` read under their alias ("ui:btn", "$ui:brand", overrides "ui:label"), listed in the Components tab, import and remove there or with `set_libraries` | done |
 
 ## Editing shortcuts
 
@@ -129,7 +129,7 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 | ⌘[ / ⌘] one step, [ / ] back / front | yes | added (⌘[ / ⌘] used to go all the way) |
 | Arrows reorder inside flex | yes | added |
 | ⇧⌥A remove flex | yes | added |
-| ⌘⇧C copy as PNG, ⌥⌘C copy as HTML | yes | missing |
+| ⌘⇧C copy as PNG, ⌥⌘C copy as HTML | yes | added |
 | ⌘⇧R paste to replace | yes | missing |
 | ? shortcut sheet | yes | added |
 
@@ -143,15 +143,19 @@ is covered in [dogfooding.md](dogfooding.md), session 2.
 
 ## Still missing, by value
 
-1. **Pen tool and path editing.** Drawing and editing vectors.
+1. ~~Pen tool and path editing.~~ Done; cutting paths and boolean operations remain.
 2. ~~Measurements and a zoom tool.~~ Done.
 3. ~~Per-document custom fonts and on-demand variable fonts.~~ Done, except woff2.
 4. ~~Gradient stop editing and on-canvas handles.~~ Done. Mesh gradients and blend modes remain.
 5. ~~Blur effects.~~ Done.
-6. **More export formats.** JPEG, WEBP and PDF; copy as PNG or HTML.
+6. ~~More export formats.~~ Done; WEBP is uncompressed and PDF is a raster page.
 7. ~~Find layers, ⌘-click deep select, a shortcut sheet, settings.~~ Done.
-8. **Libraries.** Components shared across files.
+8. ~~Libraries.~~ Done.
 9. **Resize handles on turned layers.** Clicks, outlines and the marquee follow rotation and flips; resizing a turned layer works from the inspector only.
+10. **Smaller gaps.** Mesh and shader fills, blend modes, woff2, the scale tool, sticky notes, an icon picker, scroll-to-zoom as a setting, compressed WEBP and vector PDF.
+
+Styled runs inside one text are not on the list: the 2.21 format has none (`content` is a
+string), so pen.dev has none either. 2.8 files that use them still lose the styles.
 
 ## Found while comparing code export (2026-10-31)
 

@@ -545,3 +545,44 @@ leaves open: where a flip pivots, what a blur radius means in CSS, how far a sha
   shifted from where they used to be.
 - `get_styles` gives agents the exact CSS of any node without exporting the page.
 
+## 29. Libraries are read into the document under their alias
+
+**Problem.** pen.dev's `imports` maps an alias to another `.pen` file. Inside that file's
+components, pen.dev names everything after the alias: the component is "ui:btn", its
+variables are "$ui:brand", a descendant override key is "ui:label". This was found by
+rendering such files in pen.dev. The app resolves refs, overrides and variables by name
+within one document.
+
+**Decision.**
+
+- When a document opens, each library's layers and variables are added to it, renamed with
+  the alias, and the layers are flagged `imported`.
+- Imported layers are never saved, shown on a page, listed in the layer tree or returned as
+  document children to agents. Agents see them in `get_document`'s `libraries`.
+- Refs, overrides, variables and code export then work unchanged.
+
+**Consequences.**
+
+- A library changed on disk shows when the document is opened again, as in pen.dev.
+- A component edited in the document cannot be pushed back to its library; it is edited in
+  the library file.
+
+## 30. Fonts travel with the document; variable fonts are instanced in the app
+
+**Problem.** stb_truetype draws only a variable font's default instance, and the schema
+has no list of fonts.
+
+**Decision.**
+
+- A `fonts` folder next to the `.pen` file is scanned when the document opens. The import
+  button and dropping font files fill it.
+- `.ttc` collections and `.woff` files are read as well.
+- A TrueType variable font is instanced at the weight asked for (`varfont.odin`): gvar
+  deltas with IUP and avar, giving a static font in memory. The result matches fontTools
+  within about one unit.
+
+**Consequences.**
+
+- `tools/font_instances.py` is no longer needed.
+- CFF2 variable fonts and woff2 are not covered.
+

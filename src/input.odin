@@ -58,6 +58,15 @@ handle_input :: proc() {
 		return
 	}
 
+	// the pen tool and path editing take the pointer first
+	if app.tool == .Pen && !pen.drawing && over_canvas && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && !key_down(glfw.KEY_SPACE) do pen_start_drawing()
+	if pen_active() && (over_canvas || pen.drag != .None) && !key_down(glfw.KEY_SPACE) && !mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE) {
+		if pen_input(page) {
+			update_cursor(over_canvas)
+			return
+		}
+	}
+
 	// mouse down
 	if over_canvas && (mouse_pressed(glfw.MOUSE_BUTTON_LEFT) || mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE)) {
 		if app.editing != 0 {
@@ -291,6 +300,10 @@ mouse_down_tool :: proc(page: [2]f32) {
 					start_rename(hit, true)
 					return
 				}
+				if n.kind == .Path {
+					pen_start_editing(hit)
+					return
+				}
 				if inner := child_toward(deepest, hit); inner != 0 {
 					clear(&app.sel)
 					append(&app.sel, inner)
@@ -320,6 +333,7 @@ mouse_down_tool :: proc(page: [2]f32) {
 			append(&app.sel, hit)
 		}
 		app.drag.kind = .Move
+	case .Pen: // pen_input handles it
 	case .Frame, .Rect, .Ellipse:
 		kind := Node_Kind.Frame if app.tool == .Frame else (.Rectangle if app.tool == .Rect else .Ellipse)
 		push_undo()
@@ -526,6 +540,7 @@ marquee_select :: proc(r: [4]f32, scope: int, deep: bool) {
 }
 
 handle_shortcuts :: proc() {
+	if pen_keys() do return
 	cmd, shift := mod_cmd(), mod_shift()
 	alt := key_down(glfw.KEY_LEFT_ALT) || key_down(glfw.KEY_RIGHT_ALT)
 	if cmd {
@@ -545,6 +560,14 @@ handle_shortcuts :: proc() {
 		case key_pressed(glfw.KEY_S):
 			if save_document(app.file_path) do set_status("Saved")
 		case key_pressed(glfw.KEY_D): duplicate_selection()
+		case key_pressed(glfw.KEY_C) && shift:
+			if len(app.sel) > 0 do copy_png_pending = true
+		case key_pressed(glfw.KEY_C) && alt:
+			if len(app.sel) > 0 {
+				html := html_snippet(selection_roots())
+				clipboard_set(transmute([]u8)html, "public.html", html)
+				set_status("Copied as HTML")
+			}
 		case key_pressed(glfw.KEY_C): copy_selection()
 		case key_pressed(glfw.KEY_V): paste_clipboard()
 		case key_pressed(glfw.KEY_G) && shift: ungroup_selection()
@@ -639,6 +662,7 @@ handle_shortcuts :: proc() {
 	case key_pressed(glfw.KEY_R): app.tool = .Rect
 	case key_pressed(glfw.KEY_E), key_pressed(glfw.KEY_O): app.tool = .Ellipse
 	case key_pressed(glfw.KEY_T): app.tool = .Text
+	case key_pressed(glfw.KEY_P): app.tool = .Pen
 	case key_pressed(glfw.KEY_A) && shift: wrap_selection(.Auto_Layout)
 	case key_pressed(glfw.KEY_ESCAPE):
 		app.tool = .Select
@@ -647,6 +671,7 @@ handle_shortcuts :: proc() {
 		if len(app.sel) == 1 {
 			n, _ := doc_find_uid(&app.doc, app.sel[0])
 			if n != nil && n.kind == .Text do start_text_editing(n.uid)
+			else if n != nil && n.kind == .Path do pen_start_editing(n.uid)
 			else if n != nil {
 				// select the children of a container
 				kids := children_of(&app.doc, n.uid)

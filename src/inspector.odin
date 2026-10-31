@@ -641,21 +641,21 @@ draw_export_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 	half := (w - 8) / 2
 	section(vg, x, y, "Export")
 	if pick, ok := dropdown_menu(vg, "export.scale", {x, y^, half, 28}, EXPORT_SCALES[:], ui.export_scale); ok do ui.export_scale = pick
-	label(vg, x + half + 8 + 10, y^ + 14, "PNG", TEXT_FG)
-	fill_rect(vg, {x + half + 8, y^, half, 28}, {1, 1, 1, 0.03}, 6)
+	formats := [4]string{"PNG", "JPEG", "WEBP", "PDF"}
+	if pick, ok := dropdown_menu(vg, "export.format", {x + half + 8, y^, half, 28}, formats[:], ui.export_format); ok do ui.export_format = pick
 	y^ += 34
-	if button(vg, {x, y^, w, 28}, "Export layer") do export_layer(n, EXPORT_SCALE_VALUES[ui.export_scale])
+	if button(vg, {x, y^, w, 28}, "Export layer") do export_layer(n, EXPORT_SCALE_VALUES[ui.export_scale], Export_Format(ui.export_format))
 	y^ += 36
 	divider(vg, x, w, y)
 }
 
-// Writes the node as a PNG at the given scale into ~/Downloads.
-export_layer :: proc(n: ^Node, scale: f32) {
+// Writes the node at the given scale and format into ~/Downloads.
+export_layer :: proc(n: ^Node, scale: f32, format: Export_Format) {
 	home, _ := os.user_home_dir(context.temp_allocator)
 	name := css_name(node_label(n))
 	suffix := "" if scale == 1 else fmt.tprintf("@%vx", scale)
-	path := fmt.tprintf("%s/Downloads/%s%s.png", home, name, suffix)
-	export_request(scale, path)
+	path := fmt.tprintf("%s/Downloads/%s%s.%s", home, name, suffix, EXPORT_EXTENSIONS[format])
+	export_request(scale, path, format)
 }
 
 // ---------------------------------------------------------------- field keys

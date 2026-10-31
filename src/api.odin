@@ -35,6 +35,8 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 		api_get_document(&b, params, true)
 	case "get_variables":
 		api_get_variables(&b)
+	case "set_libraries":
+		e = api_set_libraries(&b, params)
 	case "get_styles":
 		e = api_get_styles(&b, params)
 	case "create_nodes":
@@ -136,6 +138,18 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 			req   = req,
 			scale = f32(params["scale"].(json.Float) or_else 2),
 			view  = params["view"].(json.Boolean) or_else false,
+			path  = strings.clone(string(params["path"].(json.String) or_else ""), context.temp_allocator),
+		}
+		if f, has := params["format"].(json.String); has {
+			ok: bool
+			if shot.format, ok = export_format_from(string(f)); !ok {
+				shot = {}
+				return api_error("format must be png, jpeg, webp or pdf"), false
+			}
+			if shot.format != .PNG && shot.path == "" {
+				shot = {}
+				return api_error("pass a path for jpeg, webp and pdf"), false
+			}
 		}
 		if id, has := params["id"].(json.String); has {
 			n, _ := doc_find(&app.doc, string(id))
@@ -191,6 +205,32 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 		strings.write_string(b, `,"variables":`)
 		write_header_value(b, "variables")
 	}
+	// imported libraries and the components they offer ("alias:id" for refs)
+	if !selection_only {
+		strings.write_string(b, `,"libraries":[`)
+		first_lib := true
+		for alias, rel in doc_imports(&app.doc) {
+			if !first_lib do strings.write_byte(b, ',')
+			first_lib = false
+			strings.write_string(b, `{"alias":`)
+			json_write_string(b, alias)
+			strings.write_string(b, `,"path":`)
+			json_write_string(b, string(rel.(json.String) or_else ""))
+			strings.write_string(b, `,"components":[`)
+			first_c := true
+			for &n in app.doc.nodes do if n.imported && n.reusable && library_of(&n) == alias {
+				if !first_c do strings.write_byte(b, ',')
+				first_c = false
+				strings.write_string(b, `{"id":`)
+				json_write_string(b, n.id)
+				strings.write_string(b, `,"name":`)
+				json_write_string(b, node_label(&n))
+				strings.write_byte(b, '}')
+			}
+			strings.write_string(b, "]}")
+		}
+		strings.write_byte(b, ']')
+	}
 	picked := uids_param(params, "ids")
 	api_depth_limit = int(params["depth"].(json.Float) or_else -1)
 	api_depth = 0
@@ -198,7 +238,7 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 	strings.write_string(b, `,"children":[`)
 	first := true
 	for &n in app.doc.nodes {
-		include := n.parent == 0
+		include := n.parent == 0 && !n.imported
 		if selection_only do include = is_selected(n.uid) && !(n.parent != 0 && is_selected(n.parent))
 		if len(picked) > 0 do include = slice.contains(picked, n.uid)
 		if !include do continue
@@ -213,6 +253,28 @@ write_header_value :: proc(b: ^strings.Builder, key: string) {
 	raw := ""
 	for p in app.doc.header do if p.key == key do raw = p.raw
 	strings.write_string(b, raw if raw != "" else "{}")
+}
+
+// Imports libraries (`add`: .pen paths) and drops them (`remove`: aliases).
+api_set_libraries :: proc(b: ^strings.Builder, params: json.Object) -> string {
+	added := make([dynamic]string, context.temp_allocator)
+	if arr, ok := params["add"].(json.Array); ok {
+		for v in arr {
+			p := absolute_path(string(v.(json.String) or_else ""))
+			if !os.exists(p) do return fmt.tprintf("no such file: %s", p)
+			if alias, aok := library_add(p); aok do append(&added, alias)
+		}
+	}
+	if arr, ok := params["remove"].(json.Array); ok {
+		for v in arr do library_remove(string(v.(json.String) or_else ""))
+	}
+	strings.write_string(b, `{"added":[`)
+	for a, i in added {
+		if i > 0 do strings.write_byte(b, ',')
+		json_write_string(b, a)
+	}
+	strings.write_string(b, "]}")
+	return ""
 }
 
 // Variables and theme axes, with the theme shown in the window.
@@ -324,10 +386,12 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 // ---------------------------------------------------------------- screenshots
 
 Shot :: struct {
-	req:   ^Request,
-	uid:   int,
-	scale: f32,
-	view:  bool, // capture the window as shown, after the regular frame
+	req:    ^Request,
+	uid:    int,
+	scale:  f32,
+	view:   bool, // capture the window as shown, after the regular frame
+	format: Export_Format,
+	path:   string, // write the image here instead of returning it
 }
 
 shot: Shot
@@ -380,6 +444,24 @@ render_screenshot :: proc() {
 	pixels, ow, oh, rok := render_region(r, shot.scale, target, {1, 1, 1, 1})
 	if !rok {
 		finish_request(req, api_error("node too small to capture"))
+		return
+	}
+	if shot.path != "" {
+		data, eok := encode_image(pixels, ow, oh, shot.format, shot.scale)
+		if !eok {
+			finish_request(req, api_error("encoding failed"))
+			return
+		}
+		path := absolute_path(shot.path)
+		if err := os.write_entire_file(path, data); err != nil {
+			finish_request(req, api_error(fmt.tprintf("could not write %s", path)))
+			return
+		}
+		b := strings.builder_make(runtime.default_allocator())
+		fmt.sbprintf(&b, `{{"ok":true,"result":{{"path":`)
+		json_write_string(&b, path)
+		fmt.sbprintf(&b, `,"format":"%s","width":%d,"height":%d,"bytes":%d}}}}`, EXPORT_EXTENSIONS[shot.format], ow, oh, len(data))
+		finish_request(req, strings.to_string(b))
 		return
 	}
 	finish_request(req, encode_png_response(pixels, ow, oh))

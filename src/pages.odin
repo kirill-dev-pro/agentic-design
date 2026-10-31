@@ -91,6 +91,8 @@ page_of_top :: proc(doc: ^Document, id: string) -> int {
 // Rebuilds the set of top-level nodes hidden by the current page; once per frame.
 pages_sync :: proc() {
 	clear(&app.page_hidden)
+	// library layers are on no page
+	for &n in app.doc.nodes do if n.parent == 0 && n.imported do app.page_hidden[n.uid] = true
 	pages := doc_pages(&app.doc)
 	if app.page >= len(pages) do app.page = len(pages) - 1
 	if app.page < 0 do app.page = 0
@@ -101,7 +103,7 @@ pages_sync :: proc() {
 	// new top-level nodes drawn while another page is shown belong to it
 	added := false
 	for &n in app.doc.nodes {
-		if n.parent != 0 do continue
+		if n.parent != 0 || n.imported do continue
 		idx := page_of_top(&app.doc, n.id)
 		if idx == 0 && app.page != 0 {
 			listed := false

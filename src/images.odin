@@ -163,6 +163,24 @@ import_font_dialog :: proc() {
 	import_font_files(paths[:])
 }
 
+// "Import library": .pen files chosen in the system panel become imported libraries.
+import_library_dialog :: proc() {
+	if pf.quiet {
+		set_status("File dialogs are disabled in quiet (test) mode; use the set_libraries tool")
+		return
+	}
+	panel := NS.OpenPanel.openPanel()
+	panel->setAllowsMultipleSelection(true)
+	panel->setCanChooseDirectories(false)
+	if panel->runModal() != .OK do return
+	urls := panel->URLs()
+	for i in 0 ..< int(urls->count()) {
+		url := urls->objectAs(NS.UInteger(i), ^NS.URL)
+		path := intrinsics.objc_send(^NS.String, url, "path")->odinString()
+		if alias, ok := library_add(path); ok do set_status("Imported %s as \"%s\"", path, alias)
+	}
+}
+
 place_image_dialog :: proc() {
 	if pf.quiet {
 		set_status("File dialogs are disabled in quiet (test) mode; drop a file instead")
@@ -180,3 +198,19 @@ place_image_dialog :: proc() {
 		if place_image(path, at) do at += {24, 24}
 	}
 }
+
+// Puts data of one type (a UTI such as "public.png" or "public.html") on the system
+// clipboard; `text` adds a plain-text version beside it.
+clipboard_set :: proc(data: []u8, uti: string, text := "") {
+	pb := intrinsics.objc_send(^NS.Pasteboard, NS.Pasteboard, "generalPasteboard")
+	if pb == nil do return
+	_ = intrinsics.objc_send(NS.Integer, pb, "clearContents")
+	d := NS.Data.alloc()->initWithBytes(data)
+	t := NS.String.alloc()->initWithOdinString(uti)
+	_ = intrinsics.objc_send(NS.BOOL, pb, "setData:forType:", d, t)
+	if text != "" {
+		s := NS.String.alloc()->initWithOdinString(text)
+		_ = intrinsics.objc_send(NS.BOOL, pb, "setString:forType:", s, NS.AT("public.utf8-plain-text"))
+	}
+}
+

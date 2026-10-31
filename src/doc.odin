@@ -193,6 +193,7 @@ Node :: struct {
 	is_slot:      bool, // frame marked as the slot of its component
 	slot_names:   [dynamic]string, // older files: slot frames named on the component root
 	page_seen:    bool, // already assigned to a page (new top-level nodes join the shown page)
+	imported:     bool, // read from an imported library (libraries.odin): never saved or shown
 	theme_set:    [dynamic][2]string, // own `theme` property as axis/value pairs
 	theme_key:    string, // theme in effect here, serialised
 	ghost:        bool, // a copy made for an instance; never saved or selected
@@ -312,6 +313,7 @@ Document :: struct {
 	axes_valid:    bool,
 	resolve_theme: map[string]string, // theme used while parsing the node being refreshed
 	building_ghosts: bool, // refreshes inside ghost expansion must not bump the version
+	lib_vars:        string, // variables of imported libraries, renamed "alias:name" (JSON)
 }
 
 // Property overrides an instance applies to one node of its component.

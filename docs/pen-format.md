@@ -59,6 +59,11 @@ Defaults that matter:
   is drawn to the left of its `x` (pen.dev renders and exports it so). A shadow's `blur`
   fades over twice its value, as in CSS; a blur effect's `radius` is twice the CSS value.
 - pen.dev does not draw `underline` or `strikethrough`; the app does.
+- `imports` (alias → relative path of another `.pen` file) are read: its components are
+  `ref`ed as "alias:id", its variables used as "$alias:name", and overrides inside them
+  use descendant keys "alias:childId". These names were taken from pen.dev's own renders.
+- The pen tool writes a `path` whose `geometry` is relative to its box, with `width` and
+  `height` equal to the outline's bounds; editing keeps the outline where it is.
 - `fontFamily` names a family installed on the machine or in a `fonts` folder next to the
   `.pen` file (the app's own convention; the schema has no font list). Any `fontWeight` of
   a TrueType variable font is drawn by instancing it.

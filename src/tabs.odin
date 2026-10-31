@@ -106,6 +106,7 @@ open_in_tab :: proc(path: string) -> bool {
 		close_tab(app.tab)
 		return false
 	}
+	doc_load_imports(&app.doc, abs)
 	app.file_path = strings.clone(abs)
 	recents_touch(abs)
 	update_title()
@@ -292,6 +293,7 @@ thumbs_render :: proc() {
 		saved := app.doc
 		saved_page := app.page
 		app.doc = tmp
+		doc_load_imports(&app.doc, path)
 		app.page = 0
 		layout_document(&app.doc)
 		pages_sync()

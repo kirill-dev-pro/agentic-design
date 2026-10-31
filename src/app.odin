@@ -37,6 +37,7 @@ Tool :: enum {
 	Rect,
 	Ellipse,
 	Text,
+	Pen,
 }
 
 Drag_Kind :: enum {
@@ -123,6 +124,9 @@ app_main :: proc(path: string) {
 	app.canvas_bg = CANVAS_BG
 	app.tab = -1
 	app.files_dir = strings.clone(os.dir(absolute_path(path)))
+	// no field takes the keyboard until the user picks one (0 would focus the first
+	// field drawn, now the layer search)
+	ui.tab_target = -1
 	settings_load()
 	recents_load()
 	if path != "" && !open_in_tab(path) do set_status("Could not read %s as a .pen document", path)
@@ -164,6 +168,7 @@ app_main :: proc(path: string) {
 		if shot_pending() do render_screenshot()
 		thumbs_render()
 		export_render()
+		copy_png_render()
 
 		if app.tab >= 0 {
 			c := app.canvas
@@ -950,7 +955,7 @@ draw_canvas :: proc() {
 		if n, _ := doc_find_uid(&app.doc, uid); n != nil do outline_node(n, 1)
 	}
 	if len(app.sel) == 1 && app.editing == 0 {
-		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil && resizable(n) {
+		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil && resizable(n) && !pen_active() {
 			for h in 0 ..< 8 {
 				p := handle_pos(n, h)
 				nvg.BeginPath(vg)
@@ -1016,6 +1021,7 @@ draw_canvas :: proc() {
 		}
 	}
 	draw_gradient_handles(vg)
+	draw_pen_overlay(vg)
 	draw_measurements(vg)
 	// marquee, and the region of the zoom tool
 	if (app.drag.kind == .Marquee || app.drag.kind == .Zoom) && (abs(app.mouse.x - to_screen(app.drag.start_page).x) >= 0.5 || abs(app.mouse.y - to_screen(app.drag.start_page).y) >= 0.5) {
