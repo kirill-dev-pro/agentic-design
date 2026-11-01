@@ -194,7 +194,7 @@ colours, missing fonts, text that does not fit, layers cut off, broken refs, off
 `get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
 (`.pen` nodes, nested `children`; an instance as `parent_id` takes slot content; an image paint's `url` may be any local file, copied into `images/`), `update_nodes`, `delete_nodes`, `reorder`, `select`,
 `zoom_to_fit`, `screenshot` (a node, the canvas, or the whole window with `view: true`),
-`undo`, `redo`, `save`, `open` (`create: true` starts a new file), `add_fonts` (font files or installed families into the document), `set_variables` (variables, theme axes and the shown theme),
+`undo`, `redo`, `save`, `open` (`create: true` starts a new file), `add_fonts` (font files or installed families into the document), `scale_nodes` (a subtree at another size, in plain .pen), `set_variables` (variables, theme axes and the shown theme),
 `set_pages`, `set_libraries` (import other .pen files as libraries; they are re-read when their files
 change), `export_code` (`html` or `react`; `ids` for one frame; a `viewport` theme axis
 becomes media queries). `screenshot` also writes JPEG, WEBP or PDF files (`format`, `path`) and renders

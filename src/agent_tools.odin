@@ -7,6 +7,7 @@ import "core:fmt"
 import "core:math"
 import "core:os"
 import "core:slice"
+import "core:strconv"
 import "core:strings"
 
 // Tools for agents beyond reading and writing nodes:
@@ -702,3 +703,131 @@ own_drawn_box :: proc(n: ^engine.Node) -> [4]f32 {
 	return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}
 }
 
+// ---------------------------------------------------------------- scale_nodes
+
+// Scales layers and everything inside them by a factor, as if the subtree were drawn
+// smaller or larger, by rewriting its numbers: sizes, positions inside it, font sizes,
+// letter spacing, gaps, padding, corner radii, stroke thickness and dashes, effect offsets,
+// blur and spread, and the same keys in instance overrides and slot content. The scaled
+// layers keep their own place. The result is plain .pen (pen.dev has no scale property),
+// one undo step. Variables ($name) are left as they are; instances keep their component's
+// inner sizes, so they are reported.
+api_scale_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
+	uids := uids_param(params, "ids")
+	if len(uids) == 0 do return "pass ids: the layers to scale"
+	factor := f64(params["factor"].(json.Float) or_else 0)
+	if factor <= 0 || factor > 100 do return "factor must be a number above 0 (0.64 makes it 64% as big)"
+	push_undo()
+	Scale_Report :: struct {
+		layers:    int,
+		variables: [dynamic]string,
+		instances: [dynamic]string,
+	}
+	report := Scale_Report{variables = make([dynamic]string, context.temp_allocator), instances = make([dynamic]string, context.temp_allocator)}
+	scale_value :: proc(v: json.Value, f: f64, key: string, report: ^Scale_Report) -> json.Value {
+		#partial switch x in v {
+		case json.Float:
+			return json.Float(x * f)
+		case json.Integer:
+			return json.Float(f64(x) * f)
+		case json.String:
+			s := string(x)
+			if strings.has_prefix(s, "$") {
+				if !slice.contains(report.variables[:], s) do append(&report.variables, s)
+				return v
+			}
+			// fit_content(120) / fill_container(80): the fallback size scales too
+			if open := strings.index_byte(s, '('); open > 0 && strings.has_suffix(s, ")") {
+				if n, ok := strconv.parse_f64(s[open + 1:len(s) - 1]); ok do return json.String(fmt.aprintf("%s(%s)", s[:open], engine.num_text(f32(n * f)), allocator = context.temp_allocator))
+			}
+			return v
+		case json.Array:
+			out := make(json.Array, len(x), context.temp_allocator)
+			for item, i in x do out[i] = scale_value(item, f, key, report)
+			return out
+		case json.Object:
+			return scale_props(x, f, false, report)
+		}
+		return v
+	}
+	// The keys of one node, override or paint/effect object that hold lengths.
+	scale_props :: proc(obj: json.Object, f: f64, keep_place: bool, report: ^Scale_Report) -> json.Object {
+		out := make(json.Object, len(obj), context.temp_allocator)
+		for k, v in obj {
+			switch k {
+			case "x", "y":
+				out[k] = v if keep_place else scale_value(v, f, k, report)
+			case "width", "height", "gap", "padding", "cornerRadius", "fontSize", "letterSpacing", "strokeWidth", "strokeDashPattern", "thickness", "dashPattern", "blur", "spread", "radius", "top", "right", "bottom", "left":
+				out[k] = scale_value(v, f, k, report)
+			case "offset", "stroke", "effect":
+				out[k] = scale_value(v, f, k, report)
+			case "descendants":
+				// overrides by id, and slot content (their children) inside them
+				if d, ok := v.(json.Object); ok {
+					nd := make(json.Object, len(d), context.temp_allocator)
+					for id, o in d {
+						if oo, ok2 := o.(json.Object); ok2 do nd[id] = scale_props(oo, f, false, report)
+						else do nd[id] = o
+					}
+					out[k] = nd
+				} else do out[k] = v
+			case "children":
+				if arr, ok := v.(json.Array); ok {
+					na := make(json.Array, len(arr), context.temp_allocator)
+					for c, i in arr {
+						if co, ok2 := c.(json.Object); ok2 do na[i] = scale_props(co, f, false, report)
+						else do na[i] = c
+					}
+					out[k] = na
+				} else do out[k] = v
+			case:
+				out[k] = v
+			}
+		}
+		return out
+	}
+	scale_node :: proc(uid: int, f: f64, keep_place: bool, report: ^Scale_Report) {
+		n, _ := engine.doc_find_uid(&app.doc, uid)
+		if n == nil || n.ghost || n.imported do return
+		report.layers += 1
+		if n.kind == .Ref && !slice.contains(report.instances[:], n.id) do append(&report.instances, n.id)
+		obj := make(json.Object, len(n.props), context.temp_allocator)
+		for p in n.props {
+			v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator)
+			if err == nil do obj[p.key] = v
+		}
+		scaled := scale_props(obj, f, keep_place, report)
+		for k, v in scaled {
+			if k == "children" do continue
+			b := strings.builder_make(context.temp_allocator)
+			engine.write_json_value(&b, v)
+			engine.node_set_raw(n, k, strings.to_string(b))
+		}
+		engine.node_refresh(&app.doc, n)
+		kids := make([dynamic]int, context.temp_allocator)
+		append(&kids, ..engine.children_of(&app.doc, uid))
+		for c in kids do scale_node(c, f, false, report)
+	}
+	for uid in uids do scale_node(uid, factor, true, &report)
+	engine.doc_bump(&app.doc)
+	mark_dirty()
+	fmt.sbprintf(b, `{{"scaled":%d`, report.layers)
+	if len(report.variables) > 0 {
+		strings.write_string(b, `,"variables_unchanged":[`)
+		for v, i in report.variables {
+			if i > 0 do strings.write_byte(b, ',')
+			engine.json_write_string(b, v)
+		}
+		strings.write_byte(b, ']')
+	}
+	if len(report.instances) > 0 {
+		strings.write_string(b, `,"instances":[`)
+		for v, i in report.instances {
+			if i > 0 do strings.write_byte(b, ',')
+			engine.json_write_string(b, v)
+		}
+		strings.write_string(b, `],"note":"instances keep their component's inner sizes: scale the component, or override its parts"`)
+	}
+	strings.write_byte(b, '}')
+	return ""
+}

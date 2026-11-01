@@ -51,6 +51,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		e = api_find_nodes(&b, params)
 	case "update":
 		e = api_update(&b, params)
+	case "scale_nodes":
+		e = api_scale_nodes(&b, params)
 	case "add_fonts":
 		e = api_add_fonts(&b, params)
 	case "get_guide":
