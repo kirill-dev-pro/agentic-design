@@ -10,7 +10,6 @@ import "core:strings"
 import "core:sync"
 import "core:time"
 import "vendor:glfw"
-import "fontstash"
 import nvg "nanovg"
 
 // Window regions: tab bar on top, sidebar + tool strip on the left, inspector on the right.
@@ -146,7 +145,7 @@ app_main :: proc(path: string) {
 	engine.current = &app.doc
 	engine.hidden = &app.page_hidden
 	engine.allocator = big_allocator()
-	font_atlas_init(app.vg)
+	engine.font_atlas_init(app.vg)
 	load_fonts(app.vg)
 	app.zoom = 1
 	app.cam = {-80, -60}
@@ -169,7 +168,7 @@ app_main :: proc(path: string) {
 	trimmed := false
 	for !platform_should_close() && exit_signal == {} {
 		free_all(context.temp_allocator)
-		font_atlas_trim(app.vg)
+		engine.font_atlas_trim(app.vg)
 		wait := idle_wait()
 		if wait > 0.1 && !trimmed {
 			// the app is going quiet: hand back what the last burst of work freed
@@ -304,22 +303,6 @@ live_redraw :: proc() {
 	frame_draw(fb, false)
 }
 
-// Works around two bugs in Odin's fontstash/nanovg ports. When the glyph atlas fills up,
-// fontstash doubles it and asks nanovg for a new texture, but nanovg uploads the old,
-// smaller pixel buffer into it (a crash inside glTexImage2D). And nothing ever resets the
-// atlas, so glyphs rasterised at every zoom level accumulate until the texture is huge.
-font_atlas_init :: proc(vg: ^nvg.Context) {
-	vg.fs.callbackResize = proc(data: rawptr, w, h: int) {
-		ctx := (^nvg.Context)(data)
-		old := ctx.fontImages[ctx.fontImageIdx]
-		// no pixels: fontstash marks the used area dirty and re-uploads it on the next flush
-		ctx.fontImages[ctx.fontImageIdx] = ctx.params.renderCreateTexture(ctx.params.userPtr, .Alpha, w, h, {}, nil)
-		if old != 0 do ctx.params.renderDeleteTexture(ctx.params.userPtr, old)
-	}
-}
-
-FONT_ATLAS_MAX :: 2048
-
 // The main loop draws frames back to back only while something is going on: for a moment
 // after any input or agent request, and while a screenshot, export or thumbnail waits for a
 // frame. Otherwise it sleeps until an event arrives (input, a request wakes it through
@@ -344,14 +327,6 @@ idle_wait :: proc() -> f64 {
 	}
 	into := time.now()._nsec % 500_000_000 // carets blink on every half second
 	return f64(500_000_000 - into) / 1e9 + 0.002
-}
-
-// Between frames: once the atlas has outgrown its budget, start over with an empty one.
-font_atlas_trim :: proc(vg: ^nvg.Context) {
-	if vg.fs.width <= FONT_ATLAS_MAX && vg.fs.height <= FONT_ATLAS_MAX do return
-	fontstash.ResetAtlas(&vg.fs, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
-	fontstash.__atlasReset(&vg.fs, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
-	vg.fs.callbackResize(vg, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
 }
 
 load_fonts :: proc(vg: ^nvg.Context) {

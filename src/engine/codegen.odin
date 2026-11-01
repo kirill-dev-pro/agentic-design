@@ -3,8 +3,6 @@ package engine
 import "core:encoding/json"
 import "core:fmt"
 import "core:math"
-import "core:os"
-import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 
@@ -94,7 +92,7 @@ export_all_fonts: bool // copy every declared font, licensed ones too
 export_url :: proc(url: string) -> string {
 	if strings.contains(url, "://") || strings.has_prefix(url, "data:") do return url
 	src := image_resolve(url)
-	rel := fmt.tprintf("images/%s", os.base(src))
+	rel := fmt.tprintf("images/%s", path_base(src))
 	if rel not_in export_assets do export_assets[strings.clone(rel)] = strings.clone(src)
 	return rel
 }
@@ -113,9 +111,9 @@ gen_font_faces :: proc(g: ^Gen) {
 			src := url
 			if !strings.contains(url, "://") {
 				path := strings.trim_prefix(url, "file://")
-				if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
-				if !os.exists(path) do continue
-				rel := fmt.tprintf("fonts/%s", os.base(path))
+				if !path_is_abs(path) do path = path_join(base, path)
+				if !file_exists(path) do continue
+				rel := fmt.tprintf("fonts/%s", path_base(path))
 				// a font licensed per user is referenced but not shipped (dogfooding D38)
 				if export_all_fonts || font_open_license(path) {
 					if rel not_in export_assets do export_assets[strings.clone(rel)] = strings.clone(path)
@@ -124,7 +122,7 @@ gen_font_faces :: proc(g: ^Gen) {
 				}
 				src = rel
 			}
-			ext := strings.to_lower(filepath.ext(src), context.temp_allocator)
+			ext := strings.to_lower(path_ext(src), context.temp_allocator)
 			format := "woff" if ext == ".woff" else ("woff2" if ext == ".woff2" else ("opentype" if ext == ".otf" else "truetype"))
 			fmt.sbprintf(&g.css, "@font-face {{\n  font-family: \"%s\";\n  src: url(\"%s\") format(\"%s\");\n", name, src, format)
 			#partial switch w in e["weight"] {
@@ -137,19 +135,19 @@ gen_font_faces :: proc(g: ^Gen) {
 			strings.write_string(&g.css, "  font-display: swap;\n}\n")
 		}
 	}
-	base := filepath.dir(current.path)
+	base := path_dir(current.path)
 	for p in g.doc.header do if p.key == "fonts" {
 		if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do write_list(g, v, base)
 	}
 	for _, rel in doc_imports(g.doc) {
 		path := string(rel.(json.String) or_else "")
-		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
-		data, err := os.read_entire_file(path, context.temp_allocator)
-		if err != nil do continue
+		if !path_is_abs(path) do path = path_join(base, path)
+		data, ok := read_file(path, context.temp_allocator)
+		if !ok do continue
 		root, perr := json.parse_string(string(data), .JSON5, false, context.temp_allocator)
 		if perr != nil do continue
 		obj, _ := root.(json.Object)
-		write_list(g, obj["fonts"], filepath.dir(path))
+		write_list(g, obj["fonts"], path_dir(path))
 	}
 }
 

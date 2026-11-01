@@ -1,3 +1,4 @@
+#+build !js
 package engine
 
 import "core:fmt"
@@ -6,8 +7,8 @@ import gl "vendor:OpenGL"
 import nvg "../nanovg"
 import nvgl "../nanovg/gl"
 
-// The OpenGL 3.2 backend (see gpu.odin). The host makes the GL context current on its
-// window (GLFW does it here) before gpu_create.
+// The OpenGL 3.2 backend (see gpu.odin), on a desktop only. The host makes the GL
+// context current on its window (GLFW does it here) before gpu_create.
 
 when RENDERER == "gl" {
 

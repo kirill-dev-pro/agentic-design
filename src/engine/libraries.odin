@@ -2,8 +2,6 @@ package engine
 
 import "core:encoding/json"
 import "core:fmt"
-import "core:os"
-import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 import "core:time"
@@ -40,22 +38,22 @@ doc_load_imports :: proc(doc: ^Document, doc_path: string) -> []Library {
 	doc.lib_vars = ""
 	imports := doc_imports(doc)
 	vars := make(json.Object, 16, context.temp_allocator)
-	base := filepath.dir(doc_path)
+	base := path_dir(doc_path)
 	// the fonts the document and its libraries list (fonts_add_declared)
 	for p in doc.header do if p.key == "fonts" {
 		if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do fonts_add_declared(v, base)
 	}
 	for alias, rel in imports {
 		path := string(rel.(json.String) or_else "")
-		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
+		if !path_is_abs(path) do path = path_join(base, path)
 		lib := Library{alias = alias, path = path}
 		defer append(&libs, lib)
-		data, err := os.read_entire_file(path, context.temp_allocator)
-		if err != nil do continue
+		data, ok := read_file(path, context.temp_allocator)
+		if !ok do continue
 		root, perr := json.parse_string(string(data), .JSON5, false, context.temp_allocator)
 		if perr != nil do continue
 		obj, _ := root.(json.Object)
-		fonts_add_declared(obj["fonts"], filepath.dir(path))
+		fonts_add_declared(obj["fonts"], path_dir(path))
 		lib_vars, _ := obj["variables"].(json.Object)
 		names := make(map[string]bool, len(lib_vars), context.temp_allocator)
 		for name in lib_vars do names[name] = true
@@ -124,7 +122,7 @@ lib_prefix :: proc(v: json.Value, alias: string, names: map[string]bool) -> json
 
 // The alias a library file gets: its name without .lib.pen / .pen, made unique.
 library_alias :: proc(doc: ^Document, path: string) -> string {
-	base := filepath.base(path)
+	base := path_base(path)
 	base = strings.trim_suffix(strings.trim_suffix(base, ".pen"), ".lib")
 	b := strings.builder_make(context.temp_allocator)
 	for r in strings.to_lower(base, context.temp_allocator) {
@@ -142,8 +140,8 @@ library_alias :: proc(doc: ^Document, path: string) -> string {
 // variables are themed on them, and a frame can only pin a value the document declares
 // (pen.dev reads the axes from the document's own header).
 library_merge_axes :: proc(doc: ^Document, path: string) {
-	data, err := os.read_entire_file(path, context.temp_allocator)
-	if err != nil do return
+	data, read := read_file(path, context.temp_allocator)
+	if !read do return
 	root, perr := json.parse_string(string(data), .JSON5, false, context.temp_allocator)
 	if perr != nil do return
 	obj, _ := root.(json.Object)

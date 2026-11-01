@@ -1,5 +1,5 @@
 // An Odin-native source port of [[ nanovg ; https://github.com/memononen/nanovg ]].
-#+build windows, linux, darwin
+#+build windows, linux, darwin, js
 package nanovg
 
 // TODO rename structs to old nanovg style!
@@ -893,20 +893,25 @@ CurrentTransform :: proc(ctx: ^Context, xform: ^Matrix) {
 
 // Creates image by loading it from the disk from specified file name.
 // Returns handle to the image.
+// (Not in WebAssembly, which has no files: stb_image is built there without stdio.)
 CreateImagePath :: proc(ctx: ^Context, filename: cstring, imageFlags: ImageFlags) -> int {
-	stbi.set_unpremultiply_on_load(1)
-	stbi.convert_iphone_png_to_rgb(1)
-	w, h, n: i32
-	img := stbi.load(filename, &w, &h, &n, 4)
-	
-	if img == nil {
+	when stbi.NO_STDIO {
 		return 0
-	}
+	} else {
+		stbi.set_unpremultiply_on_load(1)
+		stbi.convert_iphone_png_to_rgb(1)
+		w, h, n: i32
+		img := stbi.load(filename, &w, &h, &n, 4)
 
-	data  := img[:int(w) * int(h) * 4] // (asked for 4 channels; `n` is the file's own count)
-	image := CreateImageRGBA(ctx, int(w), int(h), imageFlags, data)
-	stbi.image_free(img)
-	return image
+		if img == nil {
+			return 0
+		}
+
+		data  := img[:int(w) * int(h) * 4] // (asked for 4 channels; `n` is the file's own count)
+		image := CreateImageRGBA(ctx, int(w), int(h), imageFlags, data)
+		stbi.image_free(img)
+		return image
+	}
 }
 
 // Creates image by loading it from the specified chunk of memory.

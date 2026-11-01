@@ -24,7 +24,7 @@ Network threads only queue requests. The main thread runs them between frames
 
 ## Engine and app
 
-The source is two Odin packages:
+The source is three Odin packages:
 
 - **`src/engine`** (package `engine`) works on `.pen` documents without a window. It holds
   the document model and the file format, variables, themes, pages and libraries, layout,
@@ -33,6 +33,9 @@ The source is two Odin packages:
 - **`src/`** (package `agentic_design`) is the app built around it: the window and its
   input, the interface, tabs, undo, the control socket, the MCP server and agent presence.
   It refers to engine names with the `engine.` prefix.
+- **`src/web`** (package `viewer`) is a second host: a read-only `.pen` viewer in a web
+  page, the same engine compiled to WebAssembly and drawing with the browser's WebGPU
+  ([Browser viewer](#browser-viewer-srcweb-web)).
 
 The engine imports nothing from the app. It can be compiled alone:
 `odin check src/engine -no-entry-point`. What it needs from its host is set in a few
@@ -51,6 +54,13 @@ The engine tells the app that layout must run again by bumping `layout_epoch`
 in where it is needed (`Blur_View.order`). A document carries its own `path`, so
 relative image and library paths resolve without app state. One engine serves one
 process and one thread: fonts and the glyph atlas live in the NanoVG context.
+
+Everything the engine asks of the system goes through a few procs in
+`src/engine/files.odin`: reading and mapping a file, a folder's names and times, paths.
+On a desktop (`files_native.odin`) they are `core:os`; in a browser (`files_js.odin`),
+where `core:os` does not compile, they read a table of files the page hands over. Files
+with a platform half are built by tag (`#+build !js` / `#+build js`): `files_*`,
+`gpu_wgpu_*` and `png*.odin`; `gpu_gl.odin` is desktop-only.
 
 The split exists for other hosts: a WebGPU renderer behind the same drawing calls, a
 viewer in the browser, and native apps on other platforms (decision #51).
@@ -189,7 +199,9 @@ through `src/engine/gpu.odin` (decision #52):
 One backend is compiled in: WebGPU by default (`src/engine/gpu_wgpu.odin`, on
 wgpu-native, which runs on Metal here and Vulkan or D3D12 elsewhere; decision #54),
 OpenGL with `-define:RENDERER=gl` (`src/engine/gpu_gl.odin`). No other file calls the GPU
-API. With WebGPU the GLFW window has no GL context; `src/metal_darwin.odin` gives its
+API. The WebGPU backend's desktop half (`gpu_wgpu_native.odin`: the Metal layer, creating
+the device synchronously, readback, Metal's memory) and its browser half
+(`gpu_wgpu_js.odin`: a canvas, the device through callbacks) share the rest. With WebGPU the GLFW window has no GL context; `src/metal_darwin.odin` gives its
 content view a `CAMetalLayer` tagged sRGB, the frame is drawn into one of the layer's two
 drawables and `gpu_present` shows it. When the window is not visible (behind other
 windows, a locked screen), wgpu gives no drawable and the frame goes to an offscreen
@@ -197,6 +209,29 @@ target of the window's size, so view screenshots keep working.
 
 Patched copies of NanoVG and fontstash live in `src/nanovg` and `src/fontstash`. The
 patches are listed in `src/nanovg/README.md`.
+
+## Browser viewer (`src/web`, `web/`)
+
+`tools/build_web.sh` compiles `src/web` for `js_wasm32` into `build/web/viewer.wasm` and
+copies the page (`web/index.html`, `web/viewer.js`) and Odin's JavaScript glue (`odin.js`
+from the compiler, `wgpu.js` from `src/wgpu`) next to it. The page shows the document at
+`?file=<URL path>` on its own server, or files the user drops or opens (a folder keeps a
+document's images, fonts and libraries next to it).
+
+The engine reads files as on a desktop; in the browser a read of a file the page has not
+handed over fails and queues its path (`files_wanted`). Each frame the viewer passes the
+queue to the page, which fetches the files and hands each over (`viewer_file`; one the
+server lacks as empty, listed as missing in the bar). Then the document, or its
+libraries and declared fonts, are read again (`viewer_files_done`); an image is drawn as
+soon as its file is there. So the document comes first, then its libraries, then the
+fonts and images they name, each round fetched in parallel (decision #55).
+
+The page owns the input and calls the module: `viewer_pan`, `viewer_zoom` (around a
+point), `viewer_view`, `viewer_fit`, `viewer_set_page`, `viewer_open`. The module draws
+only when something changed, in the browser's animation frame (`step`), and tells the
+page what its bar shows (`page_info`). Families that are neither listed in a document's
+`fonts` nor its libraries' are drawn with the built-in Noto Sans, as pen.dev does: a page
+has no installed fonts.
 
 ## Interface (`src/widgets.odin`, `src/ui.odin`)
 
@@ -290,7 +325,7 @@ Engine (`src/engine/`):
 | File | Role |
 | --- | --- |
 | `engine.odin` | the globals the host sets, `sorted_keys` |
-| `gpu.odin`, `gpu_gl.odin`, `gpu_wgpu.odin` | the GPU interface besides NanoVG: offscreen targets, blur pass, pixel readback; its OpenGL and WebGPU backends |
+| `gpu.odin`, `gpu_gl.odin`, `gpu_wgpu.odin` (`_native`, `_js`) | the GPU interface besides NanoVG: offscreen targets, blur pass, pixel readback; its OpenGL and WebGPU backends, WebGPU in a desktop and a browser half |
 | `doc.odin` | node model, props, parsing, indexes, instances, overrides, undo snapshots |
 | `pen.odin` | `.pen` reading and writing, variable resolution |
 | `themes.odin`, `pages.odin`, `libraries.odin` | theme axes and themed variables; pages in the header; imported libraries |
@@ -298,10 +333,10 @@ Engine (`src/engine/`):
 | `fonts.odin`, `varfont.odin`, `text_outline.odin` | fonts by family and weight; variable font instances; text drawn as outlines |
 | `draw.odin` | transforms and drawing a node tree: boxes, paths, text, placeholders, culling, level of detail |
 | `paint.odin`, `blur.odin` | fills, gradients and shadows; blur effects |
-| `images.odin`, `image_formats.odin`, `png.odin` | image fills and decoding; PNG encoding |
+| `images.odin`, `image_formats.odin`, `png.odin`, `png_js.odin` | image fills and decoding; PNG encoding (system zlib on a desktop, stb in a browser) |
 | `svgpath.odin`, `icons.odin` | SVG path parser; the embedded Lucide icon set (`assets/lucide.txt`) |
 | `codegen.odin` | HTML/CSS and React export |
-| `files.odin` | absolute paths, file titles, mapped files |
+| `files.odin`, `files_native.odin`, `files_js.odin` | what the engine asks of the system (files, folders, paths): `core:os` on a desktop, a table of the page's files in a browser |
 
 App (`src/`):
 
@@ -323,3 +358,11 @@ App (`src/`):
 | `metal_darwin.odin` | the window's `CAMetalLayer` (WebGPU builds) |
 | `nanovg/`, `fontstash/` | patched vendored renderer (with `gl/` and `wgpu/` backends) and font rasteriser |
 | `wgpu/` | the wgpu-native bindings; the library itself is fetched by `tools/fetch_wgpu.sh` |
+
+Browser viewer:
+
+| File | Role |
+| --- | --- |
+| `src/web/viewer.odin` | the host: canvas, files fetched on demand, pages, fit, the procs the page calls |
+| `web/index.html`, `web/viewer.js` | the page: loading the module, fetching files, local files, pan, zoom and pinch |
+| `tools/build_web.sh` | builds `build/web/` (needs LLVM's `wasm-ld`) |

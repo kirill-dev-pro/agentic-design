@@ -4,12 +4,11 @@ import "core:bytes"
 import "core:compress/zlib"
 import "core:encoding/json"
 import "core:fmt"
-import "core:os"
-import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 import "core:time"
 import "../fontstash"
+import nvg "../nanovg"
 
 // Fonts by family: those a document lists under "fonts" (as pen.dev does), installed
 // fonts and those in a `fonts` folder next to the open document (.ttf, .otf, every font of
@@ -45,13 +44,18 @@ var_instances: map[string]struct {
 	font: int,
 }
 
-// the app's own folder first: static instances of variable fonts (tools/font_instances.py)
-FONT_DIRS := [?]string{"~/Library/Application Support/Agentic Design/fonts", "~/Library/Fonts", "/Library/Fonts", "/System/Library/Fonts/Supplemental", "/System/Library/Fonts"}
+// the app's own folder first: static instances of variable fonts (tools/font_instances.py);
+// in a browser, the fonts the page serves under /fonts
+when ODIN_OS == .JS {
+	FONT_DIRS := [?]string{"/fonts"}
+} else {
+	FONT_DIRS := [?]string{"~/Library/Application Support/Agentic Design/fonts", "~/Library/Fonts", "/Library/Fonts", "/System/Library/Fonts/Supplemental", "/System/Library/Fonts"}
+}
 
 fonts_scan :: proc() {
 	if fonts_scanned do return
 	fonts_scanned = true
-	home, _ := os.user_home_dir(context.temp_allocator)
+	home := home_dir()
 	for dir in FONT_DIRS {
 		d := dir
 		if strings.has_prefix(d, "~") do d = fmt.tprintf("%s%s", home, d[1:])
@@ -63,7 +67,7 @@ fonts_scan :: proc() {
 // Fonts that travel with a document: the `fonts` folder next to it.
 fonts_add_document_dir :: proc(doc_path: string) {
 	fonts_scan()
-	if fonts_scan_dir(fmt.tprintf("%s/fonts", os.dir(absolute_path(doc_path)))) do fonts_sort_names()
+	if fonts_scan_dir(fmt.tprintf("%s/fonts", path_dir(absolute_path(doc_path)))) do fonts_sort_names()
 }
 
 // Fonts a document lists under "fonts", as pen.dev keeps those added to a file (its "Add
@@ -86,7 +90,7 @@ fonts_add_declared :: proc(fonts: json.Value, base_dir: string) {
 		url := string(e["url"].(json.String) or_else "")
 		if name == "" || url == "" || strings.has_prefix(url, "data:") || strings.contains(url, "://") && !strings.has_prefix(url, "file://") do continue
 		path := strings.trim_prefix(url, "file://")
-		if !filepath.is_abs(path) do path, _ = filepath.join({base_dir, path}, context.temp_allocator)
+		if !path_is_abs(path) do path = path_join(base_dir, path)
 		key := fmt.tprintf("%s|%s", strings.to_lower(name, context.temp_allocator), path)
 		if key in declared_fonts do continue
 		infos := font_file_infos(path)
@@ -213,8 +217,7 @@ fonts_sort_names :: proc() {
 // Adds the faces of every font file in a folder; true if the folder is new or has changed
 // since it was last read (faces already known are skipped).
 fonts_scan_dir :: proc(d: string) -> bool {
-	mtime: i64 = -1 // a folder that does not exist (yet)
-	if st, serr := os.stat(d, context.temp_allocator); serr == nil do mtime = st.modification_time._nsec
+	mtime := file_mtime(d) // -1: a folder that does not exist (yet)
 	if seen, ok := font_dirs_seen[d]; ok {
 		if seen == mtime do return false
 		font_dirs_seen[d] = mtime
@@ -222,18 +225,18 @@ fonts_scan_dir :: proc(d: string) -> bool {
 		font_dirs_seen[strings.clone(d)] = mtime
 	}
 	if mtime < 0 do return false
-	infos, err := os.read_all_directory_by_path(d, context.temp_allocator)
-	if err != nil do return false
-	for info in infos {
-		lower := strings.to_lower(info.name, context.temp_allocator)
+	names, ok := dir_names(d)
+	if !ok do return false
+	for name in names {
+		lower := strings.to_lower(name, context.temp_allocator)
 		ext := lower[strings.last_index_byte(lower, '.') + 1:] if strings.contains_rune(lower, '.') else ""
 		if ext != "ttf" && ext != "otf" && ext != "ttc" && ext != "woff" do continue
-		path := fmt.tprintf("%s/%s", d, info.name)
+		path := fmt.tprintf("%s/%s", d, name)
 		for fi in font_file_infos(path) {
 			// the font's own names first ("Source Sans 3" from SourceSans3-It.ttf); the
 			// file name only when the tables cannot be read
 			family, weight, italic := fi.family, fi.weight, fi.italic
-			if family == "" do family, weight, italic = parse_font_name(info.name[:len(info.name) - len(ext) - 1])
+			if family == "" do family, weight, italic = parse_font_name(name[:len(name) - len(ext) - 1])
 			if family == "" || script_only_font(family) do continue
 			fam := family_find(family)
 			if fam == nil {
@@ -371,7 +374,11 @@ add_noto_fallback :: proc(font, weight: int, italic: bool) {
 	add_symbol_fallbacks(font)
 }
 
-SYMBOL_FONTS := [?]string{"/System/Library/Fonts/Apple Symbols.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"}
+when ODIN_OS == .JS {
+	SYMBOL_FONTS := [0]string{} // (a page has no system fonts)
+} else {
+	SYMBOL_FONTS := [?]string{"/System/Library/Fonts/Apple Symbols.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"}
+}
 symbol_fonts: [len(SYMBOL_FONTS)]int // fontstash handles, 0 until loaded, -1 if missing
 
 add_symbol_fallbacks :: proc(font: int) {
@@ -457,8 +464,8 @@ font_file_bytes :: proc(face: ^Face) -> (data: []u8, ok, mapped: bool) {
 		data, ok = map_file(face.path)
 		return data, ok, true
 	}
-	raw, err := os.read_entire_file(face.path, context.allocator)
-	if err != nil do return nil, false, false
+	raw, rok := read_file(face.path, context.allocator)
+	if !rok do return nil, false, false
 	defer delete(raw)
 	data, ok = woff_to_sfnt(raw)
 	return data, ok, false
@@ -505,29 +512,28 @@ Font_Info :: struct {
 }
 
 // Family, weight, style and weight axis of every font in a file: one, or each font of a
-// .ttc collection. Only the table directories and the name, OS/2 and fvar tables are read.
+// .ttc collection. The file is mapped (map_file): only the pages of the table
+// directories and the name, OS/2 and fvar tables are read.
 font_file_infos :: proc(path: string) -> []Font_Info {
 	out := make([dynamic]Font_Info, context.temp_allocator)
-	f, err := os.open(path)
-	if err != nil do return nil
-	defer os.close(f)
-	head: [12]u8
-	if n, _ := os.read_at(f, head[:], 0); n != 12 do return nil
-	switch string(head[:4]) {
+	file, mok := map_file(path)
+	if !mok do return nil
+	defer unmap_file(file)
+	if len(file) < 12 do return nil
+	switch string(file[:4]) {
 	case "ttcf":
-		count := min(fbe32(head[:], 8), 64)
-		offs := make([]u8, count * 4, context.temp_allocator)
-		if n, _ := os.read_at(f, offs, 12); n != len(offs) do return nil
+		count := min(fbe32(file, 8), 64)
+		if 12 + count * 4 > len(file) do return nil
 		for i in 0 ..< count {
-			if fi, ok := sfnt_info(f, fbe32(offs, i * 4), false); ok {
+			if fi, ok := sfnt_info(file, fbe32(file, 12 + i * 4), false); ok {
 				fi.index = i
 				append(&out, fi)
 			}
 		}
 	case "wOFF":
-		if fi, ok := sfnt_info(f, 0, true); ok do append(&out, fi)
+		if fi, ok := sfnt_info(file, 0, true); ok do append(&out, fi)
 	case:
-		if fi, ok := sfnt_info(f, 0, false); ok do append(&out, fi)
+		if fi, ok := sfnt_info(file, 0, false); ok do append(&out, fi)
 	}
 	// Web fonts (fontsource, Google Fonts subsets) often lack the typographic family, so
 	// a 500 file says "JetBrains Mono Medium". Outside the system's font folders, a family
@@ -547,24 +553,25 @@ font_file_infos :: proc(path: string) -> []Font_Info {
 
 // One font's names: the typographic family (name ID 16) or family (ID 1), usWeightClass
 // and the italic bit of OS/2, and the weight axis of a TrueType variable font.
-sfnt_info :: proc(f: ^os.File, offset: int, woff: bool) -> (info: Font_Info, ok: bool) {
-	hdr: [44]u8
+// What it returns is copied out of `file` (temp allocator).
+sfnt_info :: proc(file: []u8, offset: int, woff: bool) -> (info: Font_Info, ok: bool) {
 	hlen := 44 if woff else 12
-	if n, _ := os.read_at(f, hdr[:hlen], i64(offset)); n != hlen do return
-	tag := fbe32(hdr[:], 4 if woff else 0)
+	if offset < 0 || offset + hlen > len(file) do return
+	hdr := file[offset:][:hlen]
+	tag := fbe32(hdr, 4 if woff else 0)
 	if tag != 0x00010000 && tag != 0x4F54544F && tag != 0x74727565 do return // TrueType, 'OTTO', 'true'
-	count := fbe16(hdr[:], 12 if woff else 4)
+	count := fbe16(hdr, 12 if woff else 4)
 	if count <= 0 || count > 200 do return
 	rec := 20 if woff else 16
-	dir := make([]u8, count * rec, context.temp_allocator)
-	if n, _ := os.read_at(f, dir, i64(offset + hlen)); n != len(dir) do return
+	if offset + hlen + count * rec > len(file) do return
+	dir := file[offset + hlen:][:count * rec]
 	Dir :: struct {
-		f:    ^os.File,
+		file: []u8,
 		dir:  []u8,
 		rec:  int,
 		woff: bool,
 	}
-	d := Dir{f, dir, rec, woff}
+	d := Dir{file, dir, rec, woff}
 	has :: proc(d: Dir, name: string) -> bool {
 		for i := 0; i + d.rec <= len(d.dir); i += d.rec do if string(d.dir[i:i + 4]) == name do return true
 		return false
@@ -574,9 +581,8 @@ sfnt_info :: proc(f: ^os.File, offset: int, woff: bool) -> (info: Font_Info, ok:
 			if string(d.dir[i:i + 4]) != name do continue
 			off := fbe32(d.dir, i + 4 if d.woff else i + 8)
 			length := fbe32(d.dir, i + 8 if d.woff else i + 12)
-			if length <= 0 || length > 1 << 20 do return nil
-			buf := make([]u8, length, context.temp_allocator)
-			if n, _ := os.read_at(d.f, buf, i64(off)); n != length do return nil
+			if length <= 0 || length > 1 << 20 || off < 0 || off + length > len(d.file) do return nil
+			buf := slice.clone(d.file[off:][:length], context.temp_allocator) // (the file is unmapped after)
 			if d.woff {
 				orig := fbe32(d.dir, i + 12)
 				if length < orig do return inflate_table(buf, orig)
@@ -707,4 +713,28 @@ font_open_license :: proc(path: string) -> bool {
 		if strings.contains(l, marker) do return true
 	}
 	return false
+}
+
+// Works around two bugs in Odin's fontstash/nanovg ports. When the glyph atlas fills up,
+// fontstash doubles it and asks nanovg for a new texture, but nanovg uploads the old,
+// smaller pixel buffer into it (a crash inside glTexImage2D). And nothing ever resets the
+// atlas, so glyphs rasterised at every zoom level accumulate until the texture is huge.
+font_atlas_init :: proc(vg: ^nvg.Context) {
+	vg.fs.callbackResize = proc(data: rawptr, w, h: int) {
+		ctx := (^nvg.Context)(data)
+		old := ctx.fontImages[ctx.fontImageIdx]
+		// no pixels: fontstash marks the used area dirty and re-uploads it on the next flush
+		ctx.fontImages[ctx.fontImageIdx] = ctx.params.renderCreateTexture(ctx.params.userPtr, .Alpha, w, h, {}, nil)
+		if old != 0 do ctx.params.renderDeleteTexture(ctx.params.userPtr, old)
+	}
+}
+
+FONT_ATLAS_MAX :: 2048
+
+// Between frames: once the atlas has outgrown its budget, start over with an empty one.
+font_atlas_trim :: proc(vg: ^nvg.Context) {
+	if vg.fs.width <= FONT_ATLAS_MAX && vg.fs.height <= FONT_ATLAS_MAX do return
+	fontstash.ResetAtlas(&vg.fs, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
+	fontstash.__atlasReset(&vg.fs, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
+	vg.fs.callbackResize(vg, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
 }

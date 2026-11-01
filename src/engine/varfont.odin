@@ -35,9 +35,7 @@ f2dot14 :: proc(b: []u8, at: int) -> f32 {
 
 @(private = "file")
 fixed :: proc(b: []u8, at: int) -> f32 {
-	v := u32be(b, at)
-	if v >= 0x80000000 do v -= 0x100000000
-	return f32(v) / 65536
+	return f32(i32(u32(u32be(b, at)))) / 65536 // (signed 16.16)
 }
 
 @(private = "file")
@@ -559,13 +557,13 @@ varfont_instance :: proc(file: []u8, offset: int, settings: []Var_Axis) -> (out:
 	at := 12 + nt * 16
 	for e in entries {
 		append(&font, ..transmute([]u8)e.tag)
-		sum := 0
+		sum: u32 // (wraps around, as the checksum does)
 		for i := 0; i < len(e.data); i += 4 {
-			w := 0
-			for k in 0 ..< 4 do w = w << 8 | (int(e.data[i + k]) if i + k < len(e.data) else 0)
-			sum = (sum + w) & 0xFFFFFFFF
+			w: u32
+			for k in 0 ..< 4 do w = w << 8 | (u32(e.data[i + k]) if i + k < len(e.data) else 0)
+			sum += w
 		}
-		put32(&font, sum)
+		put32(&font, int(sum))
 		put32(&font, at)
 		put32(&font, len(e.data))
 		at += (len(e.data) + 3) &~ 3

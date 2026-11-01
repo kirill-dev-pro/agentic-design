@@ -38,3 +38,6 @@ index lists), sits next to the GL one, and so that the following fixes can be ap
   pixel slice to the file's own channel count (3 for an RGB PNG such as a dashboard
   thumbnail). The GL backend read past the slice through its raw pointer and never
   noticed; the WebGPU backend copies the slice and trapped. The slice is now 4 channels.
+- nanovg: builds for `js` too (upstream lists only Windows, Linux and macOS), for the
+  browser viewer; `CreateImagePath` returns 0 there, as stb_image has no file access in
+  WebAssembly (the engine reads an image's bytes and calls `CreateImageMem`).

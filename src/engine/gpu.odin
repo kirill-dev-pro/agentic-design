@@ -7,9 +7,10 @@ package engine
 // (gpu_<backend>.odin and src/nanovg/<backend>) calls the GPU API itself.
 //
 // One backend is compiled in, chosen with -define:RENDERER=...:
-//   wgpu  WebGPU through wgpu-native (gpu_wgpu.odin, src/nanovg/wgpu), the default;
-//         build.sh fetches the library (tools/fetch_wgpu.sh)
-//   gl    OpenGL 3.2 core (gpu_gl.odin, src/nanovg/gl)
+//   wgpu  WebGPU (gpu_wgpu.odin, src/nanovg/wgpu), the default: through wgpu-native on a
+//         desktop (build.sh fetches the library, tools/fetch_wgpu.sh), the browser's
+//         own in a page
+//   gl    OpenGL 3.2 core (gpu_gl.odin, src/nanovg/gl), desktop only
 //
 // Every backend provides:
 //
@@ -17,7 +18,9 @@ package engine
 //   Target                  an offscreen colour buffer with a stencil; `image` is the
 //                           NanoVG image to draw it with, `w`, `h` its size in pixels
 //   gpu_create(surface) -> ^nvg.Context
-//                           creates the NanoVG context (antialiased, stencil strokes)
+//                           creates the NanoVG context (antialiased, stencil strokes);
+//                           in a browser gpu_create_async(surface, done) instead, which
+//                           hands it to `done` once the browser has given a device
 //   gpu_destroy()
 //   gpu_window_begin(w, h, clear)
 //                           the next frame draws into the window's framebuffer of w × h
@@ -36,7 +39,8 @@ package engine
 //   gpu_read(t: ^Target, x, y, w, h) -> []u8
 //                           the pixels of a rectangle of t (nil: the window's framebuffer,
 //                           as last drawn) as RGBA rows, top row first, origin at the
-//                           top left (temp allocator)
+//                           top left (temp allocator); blank in a browser, which cannot
+//                           wait for the GPU
 //   gpu_max_side() -> int   the largest texture side the GPU takes
 //   gpu_allocated() -> int  bytes the GPU driver has allocated for this process (-1:
 //                           unknown), for the `memory` report

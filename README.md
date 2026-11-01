@@ -58,6 +58,19 @@ brew install odin
 ./build/agentic-design file.pen
 ```
 
+The same engine also runs in a browser as a read-only viewer (WebAssembly and the
+browser's WebGPU: Chrome, Edge, Safari 26):
+
+```sh
+brew install lld                # wasm-ld, to link WebAssembly
+./tools/build_web.sh            # -> build/web/
+python3 -m http.server 8000     # then open, for a document on the same server:
+# http://localhost:8000/build/web/?file=/designs/sample-screens.pen
+```
+
+Without `?file=`, drop a `.pen` file or its folder on the page. Drag to pan, scroll or
+pinch to zoom, 0 to fit.
+
 Connect it to Claude Code for every project:
 
 ```sh
@@ -209,6 +222,7 @@ backtrace if it crashes. The full recipe is in [docs/testing.md](docs/testing.md
 | `src/engine/gpu.odin`, `gpu_gl.odin`, `gpu_wgpu.odin` | the GPU interface besides NanoVG and its OpenGL and WebGPU backends |
 | `src/nanovg/wgpu`, `src/wgpu`, `src/metal_darwin.odin` | NanoVG on WebGPU; the wgpu-native bindings (library fetched by `tools/fetch_wgpu.sh`); the window's Metal layer |
 | `src/nanovg`, `src/fontstash` | vendored NanoVG/fontstash ports with text rendering fixes (see `src/nanovg/README.md`) |
+| `src/web/`, `web/`, `tools/build_web.sh` | the browser viewer: its host, the page, the build |
 | `tools/uidrive.py` | drives the interface through the socket for tests |
 | `tools/font_instances.py` | static instances of variable fonts for the app's font folder |
 | `tools/dogfood/` | a Chrome DevTools client for reading live pages, and the generator of the Sample Search design system |

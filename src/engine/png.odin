@@ -1,3 +1,4 @@
+#+build !js
 package engine
 
 import "base:runtime"
@@ -268,7 +269,7 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 }
 
 
-// Bottom-up RGBA rows (as glReadPixels gives them) to a PNG, in the temporary allocator.
+// RGBA rows, top row first (as gpu_read gives them), to a PNG in the temporary allocator.
 png_encode :: proc(pixels: []u8, w, h: i32) -> (png: []u8, ok: bool) {
 	return png_write(pixels, int(w), int(h), context.temp_allocator)
 }

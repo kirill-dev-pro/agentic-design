@@ -1209,3 +1209,55 @@ request reports `gpu_allocated_bytes` (`MTLDevice.currentAllocatedSize`; -1 with
   offscreen until shown; the log says when it switches.
 - A build now downloads wgpu-native once (`tools/fetch_wgpu.sh`, run by `build.sh`).
 
+
+## 55. A browser viewer on the same engine; the engine's files go through one layer
+
+**Problem.** Step 4 of the WebGPU plan (#51–#54): show `.pen` files in a web page with the
+engine of the app, not a second renderer. Odin's `core:os` does not compile for
+`js_wasm32` at all, and the engine used it, `core:path/filepath` and POSIX `mmap` for
+fonts, images, libraries and code export. A page has no files, no installed fonts and no
+synchronous GPU readback, and the browser hands out its WebGPU adapter and device through
+promises.
+
+**Decision.**
+
+- Everything the engine asks of the system goes through `src/engine/files.odin`:
+  `read_file`, `map_file`, `file_exists`, `file_mtime`, `dir_names` and path procs, with a
+  desktop half on `core:os` (as before, call for call) and a browser half on a table of
+  files the host hands over. Font headers are now parsed from the mapped file instead of
+  `read_at` calls, and an image file is read and decoded from memory instead of by path
+  (`stbi.load` has no file access in WebAssembly).
+- In the browser, a read of a file that is not in the table fails and queues its path;
+  the viewer has the page fetch the queue from its server and reads the document again
+  when the files arrive. The engine asks for exactly what it reads: the document, then
+  the libraries it imports, then the fonts they declare and the images it draws, each
+  round in parallel. A file the server does not have is handed over empty and listed as
+  missing. No manifest of a document's files, no second parser in JavaScript.
+- The WebGPU backend splits into a shared file and a desktop and a browser half
+  (`gpu_wgpu_native.odin`, `gpu_wgpu_js.odin`). In the browser the context is created
+  through callbacks (`gpu_create_async`), with the browser's default limits (8192-pixel
+  textures, 256-byte uniform offsets: what the renderer uses; the glue's conversion of
+  required limits reads the wrong offset), and `gpu_read` gives blank pixels. PNG
+  encoding uses stb_image_write there (no system zlib). OpenGL is desktop-only.
+- The page owns the input (Odin's glue passes no modifier keys or position with a wheel
+  event, and a trackpad pinch is a wheel with `ctrlKey`) and calls exported procs. The
+  module draws only when something changed. Text without a family and families that are
+  not available are drawn with the built-in Noto Sans, as pen.dev does.
+
+**Consequences.**
+
+- The same About screen of sample-screens drawn at 1× in headless Chrome (Dawn on Metal)
+  and by the app (wgpu-native on Metal) differs by at most 1/255 per channel. At 2×,
+  0.05 % of the pixels differ, on the edges of curves (icons, a circle's stroke): the
+  curve tessellation is finer at 2× and WebAssembly's floating point does not round
+  exactly as arm64's.
+- In headless Chrome at 1440 × 900 and 2×, a frame's layout and drawing take a median
+  of 1–5 ms while panning or zooming sample-screens, a product design (eight pages, images, a
+  library), the site design and the stress file, 9 ms at most (zooming a product design); the
+  module's heap is 49–79 MB. The WebAssembly file is 5.4 MB, 4.3 MB of it the two Noto
+  Sans fonts.
+- On the desktop nothing changed: the 35 outputs of the build comparison and the product design's
+  screenshots (with image fills) are byte-identical to the build before.
+- Building it needs LLVM's `wasm-ld` (Homebrew's `lld`), which `tools/build_web.sh`
+  looks for. Fonts in a `fonts` folder next to a document are only found when the document
+  lists them (a web server lists no folders), as in pen.dev.
