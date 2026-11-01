@@ -49,10 +49,14 @@ server_thread :: proc() {
 	ep, _ := net.parse_endpoint(fmt.tprintf("127.0.0.1:%d", server_port()))
 	sock, err := net.listen_tcp(ep)
 	if err != nil do return
+	// not inherited by processes this one starts: the updater's relaunch helper held the
+	// port open, and the new window found it taken and ran without a control server
+	close_on_exec(posix.FD(sock))
 	server_listening = true
 	for {
 		client, _, aerr := net.accept_tcp(sock)
 		if aerr != nil do continue
+		close_on_exec(posix.FD(client))
 		thread.create_and_start_with_poly_data(client, handle_client, self_cleanup = true)
 	}
 }
@@ -125,4 +129,9 @@ process_requests :: proc() -> bool {
 finish_request :: proc(req: ^Request, response: string) {
 	req.response = response
 	sync.sema_post(&req.done)
+}
+
+close_on_exec :: proc(fd: posix.FD) {
+	flags := posix.fcntl(fd, .GETFD)
+	if flags >= 0 do posix.fcntl(fd, .SETFD, flags | posix.FD_CLOEXEC)
 }
