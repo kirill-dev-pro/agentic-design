@@ -27,7 +27,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/samples"
 cp "$BIN" "$APP/Contents/MacOS/agentic-design"
 cp assets/icon/AppIcon.icns "$APP/Contents/Resources/"
 cp designs/sample-screens.pen designs/sample.lib.pen "$APP/Contents/Resources/samples/"
-cp assets/LICENSE-lucide.txt assets/fonts/OFL-NotoSans.txt "$APP/Contents/Resources/"
+cp assets/LICENSE-lucide.txt assets/fonts/OFL-NotoSans.txt THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
