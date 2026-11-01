@@ -127,6 +127,14 @@ app_main :: proc(path: string) {
 		fmt.eprintln("could not create a window")
 		return
 	}
+	// AGENTIC_WINDOW_POS=40,60 places the window (two test windows side by side)
+	if v := os.get_env("AGENTIC_WINDOW_POS", context.temp_allocator); v != "" {
+		if parts := strings.split(v, ",", context.temp_allocator); len(parts) == 2 {
+			x, xok := strconv.parse_int(parts[0])
+			y, yok := strconv.parse_int(parts[1])
+			if xok && yok do glfw.SetWindowPos(pf.window, i32(x), i32(y))
+		}
+	}
 	app.vg = engine.gpu_create(platform_gpu_surface())
 	if app.vg == nil {
 		fmt.eprintln("could not start the renderer")

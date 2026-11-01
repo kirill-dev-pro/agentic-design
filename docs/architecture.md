@@ -186,13 +186,14 @@ through `src/engine/gpu.odin` (decision #52):
   `src/api.odin`), a view screenshot reads the window;
 - `gpu_max_side`, `gpu_trim` and `gpu_finish` give the texture limit and hand memory back.
 
-One backend is compiled in: OpenGL by default (`src/engine/gpu_gl.odin`), WebGPU with
-`-define:RENDERER=wgpu` (`src/engine/gpu_wgpu.odin`, on wgpu-native, which runs on Metal
-here and Vulkan or D3D12 elsewhere). No other file calls the GPU API. With WebGPU the
-GLFW window has no GL context; `src/metal_darwin.odin` gives its content view a
-`CAMetalLayer`, the frame is drawn into the layer's drawable and `gpu_present` shows it.
-When macOS gives no drawable (a locked screen), the frame goes to an offscreen target of
-the window's size, so view screenshots keep working.
+One backend is compiled in: WebGPU by default (`src/engine/gpu_wgpu.odin`, on
+wgpu-native, which runs on Metal here and Vulkan or D3D12 elsewhere; decision #54),
+OpenGL with `-define:RENDERER=gl` (`src/engine/gpu_gl.odin`). No other file calls the GPU
+API. With WebGPU the GLFW window has no GL context; `src/metal_darwin.odin` gives its
+content view a `CAMetalLayer` tagged sRGB, the frame is drawn into one of the layer's two
+drawables and `gpu_present` shows it. When the window is not visible (behind other
+windows, a locked screen), wgpu gives no drawable and the frame goes to an offscreen
+target of the window's size, so view screenshots keep working.
 
 Patched copies of NanoVG and fontstash live in `src/nanovg` and `src/fontstash`. The
 patches are listed in `src/nanovg/README.md`.

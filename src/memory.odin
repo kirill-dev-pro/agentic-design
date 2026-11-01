@@ -200,9 +200,9 @@ api_memory :: proc(b: ^strings.Builder) {
 	strings.write_string(b, "},")
 	fmt.sbprintf(
 		b,
-		`"node_size":%d,"nodes":%d,"nodes_bytes":%d,"ghosts":%d,"ghosts_bytes":%d,"undo":%d,"undo_bytes":%d,"undo_records":%d,"undo_records_bytes":%d,"redo":%d,"redo_bytes":%d,"other_tabs_bytes":%d,"text_cache":%d,"text_cache_bytes":%d,"outline_cache":%d,"outline_bytes":%d,"fonts":%d,"font_data_bytes":%d,"glyphs":%d,"atlas":[%d,%d],"images":%d,"gradient_textures":%d,"thumbnails":%d,"blur_buffers":%d,"blur_texture_bytes":%d,"var_instances":%d,"temp_arena_bytes":%d,"framebuffer":[%d,%d]}}`,
+		`"node_size":%d,"nodes":%d,"nodes_bytes":%d,"ghosts":%d,"ghosts_bytes":%d,"undo":%d,"undo_bytes":%d,"undo_records":%d,"undo_records_bytes":%d,"redo":%d,"redo_bytes":%d,"other_tabs_bytes":%d,"text_cache":%d,"text_cache_bytes":%d,"outline_cache":%d,"outline_bytes":%d,"fonts":%d,"font_data_bytes":%d,"glyphs":%d,"atlas":[%d,%d],"images":%d,"gradient_textures":%d,"thumbnails":%d,"blur_buffers":%d,"blur_texture_bytes":%d,"var_instances":%d,"temp_arena_bytes":%d,"framebuffer":[%d,%d],"gpu_allocated_bytes":%d}}`,
 		size_of(engine.Node), len(doc.nodes), nodes_b, len(doc.ghosts), ghosts_b, len(app.undo_stack), undo_b, len(engine.node_records), undo_records_bytes(), len(app.redo_stack), redo_b, tabs_b,
 		len(engine.text_cache), text_b, len(engine.outline_cache), outline_b, len(app.vg.fs.fonts), fonts_b, glyphs, app.vg.fs.width, app.vg.fs.height,
-		len(engine.images), len(engine.gradient_images), len(thumbs), len(engine.blur_buffers), blur_px * 4, len(engine.var_instances), temp_cap, fb.x, fb.y,
+		len(engine.images), len(engine.gradient_images), len(thumbs), len(engine.blur_buffers), blur_px * 4, len(engine.var_instances), temp_cap, fb.x, fb.y, engine.gpu_allocated(),
 	)
 }

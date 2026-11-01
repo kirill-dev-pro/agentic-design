@@ -17,6 +17,14 @@ foreign objc {
 	dlsym :: proc(handle: rawptr, name: cstring) -> rawptr ---
 }
 
+foreign import coregraphics "system:CoreGraphics.framework"
+
+@(default_calling_convention = "c")
+foreign coregraphics {
+	CGColorSpaceCreateWithName :: proc(name: rawptr) -> rawptr ---
+	CGColorSpaceRelease :: proc(space: rawptr) ---
+}
+
 @(private = "file")
 RTLD_DEFAULT :: rawptr(~uintptr(1)) // (void *)-2
 
@@ -32,6 +40,14 @@ platform_metal_layer :: proc(window: glfw.WindowHandle) -> rawptr {
 	layer := send_id(objc_getClass("CAMetalLayer"), sel_getUid("layer"))
 	if view == nil || layer == nil do return nil
 	send_f64(layer, sel_getUid("setContentsScale:"), get_f64(ns_window, sel_getUid("backingScaleFactor")))
+	// the document's colours are sRGB (as in CSS and pen.dev): macOS converts them for the
+	// display (a P3 laptop screen shows them as authored, not more saturated)
+	if name := (^rawptr)(dlsym(RTLD_DEFAULT, "kCGColorSpaceSRGB")); name != nil {
+		if cs := CGColorSpaceCreateWithName(name^); cs != nil {
+			send_ptr(layer, sel_getUid("setColorspace:"), cs)
+			CGColorSpaceRelease(cs)
+		}
+	}
 	// a layer-hosting view: the layer first, then wantsLayer
 	send_ptr(view, sel_getUid("setLayer:"), layer)
 	send_bool(view, sel_getUid("setWantsLayer:"), true)

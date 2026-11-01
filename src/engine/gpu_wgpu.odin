@@ -8,14 +8,16 @@ import nvgw "../nanovg/wgpu"
 import wgpu "../wgpu"
 
 // The WebGPU backend (see gpu.odin), on wgpu-native: Metal on macOS (Vulkan and D3D12
-// elsewhere), the browser's WebGPU in a page. Build with -define:RENDERER=wgpu after
-// tools/fetch_wgpu.sh.
+// elsewhere), the browser's WebGPU in a page. The default renderer; build.sh fetches
+// the library (tools/fetch_wgpu.sh).
 //
 // Every target, the window's included, has the surface's colour format (BGRA8Unorm on
 // macOS, not its sRGB variant: blending and colours then work on the same values as
 // OpenGL) and a Stencil8 buffer. When macOS gives the window no drawable (the screen is
 // locked or the window is fully covered), the frame is drawn into an offscreen target of
-// the window's size instead, so that a view screenshot still works.
+// the window's size instead, so that a view screenshot still works. wgpu asks macOS
+// whether the window is visible at all (`occlusionState`): a window behind others, or
+// opened without focus behind the active app, draws offscreen until it is shown.
 
 when RENDERER == "wgpu" {
 
@@ -162,7 +164,11 @@ when RENDERER == "wgpu" {
 
 	@(private = "file")
 	configure :: proc(w, h: int) {
+		// two drawables instead of wgpu's three: the window keeps one less frame of its
+		// size (8-30 MB); the app draws far below the display rate anyway
+		extras := wgpu.SurfaceConfigurationExtras{chain = {sType = .SurfaceConfigurationExtras}, desiredMaximumFrameLatency = 1}
 		wgpu.SurfaceConfigure(G.surface, &{
+			nextInChain = &extras,
 			device = G.device,
 			format = G.format,
 			usage = G.surface_usage,
@@ -190,6 +196,9 @@ when RENDERER == "wgpu" {
 		}
 		color: wgpu.TextureView
 		if st.status == .SuccessOptimal || st.status == .SuccessSuboptimal {
+			if G.last_status != .SuccessOptimal && G.last_status != .SuccessSuboptimal && G.last_status != {} {
+				fmt.eprintln("WebGPU: drawing into the window again")
+			}
 			G.frame = st.texture
 			G.frame_view = wgpu.TextureCreateView(G.frame)
 			color = G.frame_view
@@ -261,6 +270,20 @@ when RENDERER == "wgpu" {
 
 	gpu_max_side :: proc() -> int {
 		return G.max_side
+	}
+
+	// MTLDevice.currentAllocatedSize on macOS.
+	gpu_allocated :: proc() -> int {
+		when ODIN_OS == .Darwin {
+			if G.device == nil do return -1
+			mtl := wgpu.DeviceGetNativeMetalDevice(G.device)
+			msg := dlsym(RTLD_DEFAULT, "objc_msgSend")
+			if mtl == nil || msg == nil do return -1
+			send := cast(proc "c" (self, op: rawptr) -> uint)msg
+			return int(send(mtl, sel_getUid("currentAllocatedSize")))
+		} else {
+			return -1
+		}
 	}
 
 	gpu_trim :: proc() {
@@ -447,3 +470,17 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
 		wgpu.CommandEncoderRelease(enc)
 	}
 }
+
+when RENDERER == "wgpu" && ODIN_OS == .Darwin {
+	foreign import objc_runtime "system:objc"
+
+	@(private = "file", default_calling_convention = "c")
+	foreign objc_runtime {
+		sel_getUid :: proc(name: cstring) -> rawptr ---
+		dlsym :: proc(handle: rawptr, name: cstring) -> rawptr ---
+	}
+
+	@(private = "file")
+	RTLD_DEFAULT :: rawptr(~uintptr(1)) // (void *)-2
+}
+

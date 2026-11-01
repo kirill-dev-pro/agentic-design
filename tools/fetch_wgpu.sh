@@ -1,6 +1,6 @@
 #!/bin/sh
-# Downloads wgpu-native into src/wgpu/lib/ (see src/wgpu/README.md). Needed only for a
-# WebGPU build (./build.sh -define:RENDERER=wgpu).
+# Downloads wgpu-native into src/wgpu/lib/ (see src/wgpu/README.md). build.sh runs it;
+# an OpenGL build (-define:RENDERER=gl) does not need it.
 set -e
 cd "$(dirname "$0")/.."
 VERSION=v29.0.1.1

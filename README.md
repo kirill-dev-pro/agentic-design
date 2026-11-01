@@ -51,9 +51,9 @@ as a library.
 
 ```sh
 brew install odin
-./build.sh                      # debug build -> build/agentic-design
-./build.sh -o:speed -define:RENDERER=wgpu   # draw with WebGPU (Metal) instead of OpenGL;
-                                            # fetches wgpu-native into src/wgpu/lib once
+./build.sh                      # debug build -> build/agentic-design (WebGPU on Metal;
+                                # the first build downloads wgpu-native into src/wgpu/lib)
+./build.sh -o:speed -define:RENDERER=gl   # the OpenGL renderer instead
 ./build/agentic-design          # opens designs/untitled.pen
 ./build/agentic-design file.pen
 ```

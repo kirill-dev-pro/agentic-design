@@ -1141,7 +1141,7 @@ which is what the shared engine needs (#51). It costs about 11 MB of binary.
   byte for byte the size it was.
 - The default stays OpenGL until the WebGPU window has been looked at on an unlocked
   screen: presentation, live resize, Retina scale and colours. All the checks below ran
-  with the screen locked.
+  with the screen locked. (Done the same day; WebGPU became the default, #54.)
 
 **Consequences.**
 
@@ -1170,4 +1170,42 @@ which is what the shared engine needs (#51). It costs about 11 MB of binary.
 - Under lldb on a debug build: the scripted run, fuzz seeds 71, 13 and 29, undo and redo of
   102 steps, the memory session (flat at 266–275 MB through 20 screenshots) and the
   presence script pass, with no WebGPU validation errors.
+
+## 54. WebGPU is the default renderer; Metal's fixed cost and sRGB colours
+
+**Problem.** #53 left OpenGL the default until the WebGPU window had been seen on an
+unlocked screen, and until its memory had been measured with the window's drawables,
+which a locked screen does not give.
+
+**Decision.** WebGPU is the default; `-define:RENDERER=gl` builds the OpenGL renderer,
+kept as a fallback. The window's `CAMetalLayer` is tagged sRGB, and the surface has two
+drawables instead of wgpu's three (`desiredMaximumFrameLatency = 1`). The `memory`
+request reports `gpu_allocated_bytes` (`MTLDevice.currentAllocatedSize`; -1 with OpenGL).
+
+**Consequences.**
+
+- Looked at side by side with OpenGL on the same file, the user saw no difference, and
+  live resizing was smoother. Their two screen captures (Display P3) differ only in
+  saturated colours: a purple of sRGB (57, 8, 158) shows as P3 (52, 12, 152) in the WebGPU
+  window, exactly its sRGB-to-P3 conversion, and as P3 (57, 8, 158) in the OpenGL one. The
+  OpenGL window passed the document's sRGB values to the display unconverted, so on a P3
+  screen saturated colours were too saturated; WebGPU shows them as pen.dev and browsers
+  do. Greys are identical.
+- Memory, both windows visible, same file: at 850 × 620 points WebGPU takes 227 MB and
+  OpenGL 196 MB; at 1440 × 900, 258 against 276 MB (after ten 2× screenshots each, 266
+  against 284 MB). Window surfaces: OpenGL 41 / 99 MB, WebGPU 16 / 40 MB (two drawables).
+  The rest of the difference is the GPU driver's own memory: 165–171 MB for WebGPU
+  against 102–119 MB for OpenGL, of which only 17–22 MB are our textures and buffers
+  (`gpu_allocated_bytes`). Plain Metal shows where the rest comes from: a test program
+  (no wgpu) that only clears a texture each frame holds 86 MB of driver memory, and 142 MB
+  once a frame also copies a buffer or uploads a texture, whatever the size of the copy
+  or the queue. wgpu itself adds nothing (a wgpu window that only clears holds 0 MB until
+  it draws), and texture uploads cannot be avoided, so this is the floor of a Metal app on
+  this system. It is larger than OpenGL's, and OpenGL's window surfaces are larger than
+  WebGPU's: WebGPU wins from about 1440 × 900 up, and by 100–165 MB after screenshots of
+  big files (#53).
+- A window that macOS reports as not visible (`occlusionState`: behind other windows, or
+  opened without focus behind the active app) gets no drawable from wgpu, and draws
+  offscreen until shown; the log says when it switches.
+- A build now downloads wgpu-native once (`tools/fetch_wgpu.sh`, run by `build.sh`).
 

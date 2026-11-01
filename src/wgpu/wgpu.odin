@@ -2,9 +2,9 @@ package wgpu
 
 import "base:intrinsics"
 
-// Agentic Design: the library is linked, and must be there, only in a WebGPU build
-// (-define:RENDERER=wgpu); the OpenGL build imports this package without using it.
-@(private) ENABLED :: #config(RENDERER, "gl") == "wgpu"
+// Agentic Design: the library is linked, and must be there, only in a WebGPU build (the
+// default; -define:RENDERER=gl builds with OpenGL and imports this package unused).
+@(private) ENABLED :: #config(RENDERER, "wgpu") == "wgpu"
 
 WGPU_SHARED :: #config(WGPU_SHARED, false)
 WGPU_DEBUG  :: #config(WGPU_DEBUG,  false)

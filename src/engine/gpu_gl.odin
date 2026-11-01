@@ -67,6 +67,10 @@ when RENDERER == "gl" {
 		return int(max_side)
 	}
 
+	gpu_allocated :: proc() -> int {
+		return -1 // (OpenGL does not say)
+	}
+
 	gpu_trim :: proc() {
 		if renderer != nil do nvgl.RecycleBuffers(renderer)
 	}

@@ -7,9 +7,9 @@ package engine
 // (gpu_<backend>.odin and src/nanovg/<backend>) calls the GPU API itself.
 //
 // One backend is compiled in, chosen with -define:RENDERER=...:
-//   gl    OpenGL 3.2 core (gpu_gl.odin, src/nanovg/gl), the default
-//   wgpu  WebGPU through wgpu-native (gpu_wgpu.odin, src/nanovg/wgpu); run
-//         tools/fetch_wgpu.sh first
+//   wgpu  WebGPU through wgpu-native (gpu_wgpu.odin, src/nanovg/wgpu), the default;
+//         build.sh fetches the library (tools/fetch_wgpu.sh)
+//   gl    OpenGL 3.2 core (gpu_gl.odin, src/nanovg/gl)
 //
 // Every backend provides:
 //
@@ -38,12 +38,14 @@ package engine
 //                           as last drawn) as RGBA rows, top row first, origin at the
 //                           top left (temp allocator)
 //   gpu_max_side() -> int   the largest texture side the GPU takes
+//   gpu_allocated() -> int  bytes the GPU driver has allocated for this process (-1:
+//                           unknown), for the `memory` report
 //   gpu_trim()              gives back what per-frame buffers grew to (between frames)
 //   gpu_finish()            hands deleted resources back to the driver now
 //
 // The calls happen between NanoVG frames: begin a window or a target, nvg.BeginFrame,
 // draw, nvg.EndFrame (which runs the GPU work), then read or blur.
 
-RENDERER :: #config(RENDERER, "gl")
+RENDERER :: #config(RENDERER, "wgpu")
 
 #assert(RENDERER == "gl" || RENDERER == "wgpu", "RENDERER must be gl or wgpu")
