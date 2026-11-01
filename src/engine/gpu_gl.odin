@@ -42,6 +42,8 @@ when RENDERER == "gl" {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	}
 
+	gpu_present :: proc() {} // (the host swaps the GL buffers)
+
 	target_make :: proc(w, h: int) -> Target {
 		fb := nvgl.CreateFramebuffer(renderer, w, h, {})
 		return {image = fb.image, w = w, h = h, fb = fb}

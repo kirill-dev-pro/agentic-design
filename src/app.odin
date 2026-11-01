@@ -127,7 +127,11 @@ app_main :: proc(path: string) {
 		fmt.eprintln("could not create a window")
 		return
 	}
-	app.vg = engine.gpu_create({set_proc_address = glfw.gl_set_proc_address})
+	app.vg = engine.gpu_create(platform_gpu_surface())
+	if app.vg == nil {
+		fmt.eprintln("could not start the renderer")
+		return
+	}
 	// the engine draws with the window's NanoVG context, on the open document (tabs are
 	// swapped into app.doc), and skips the pages the window does not show
 	engine.renderer = app.vg

@@ -4,6 +4,7 @@ package agentic_design
 import "core:c"
 import "core:os"
 import "vendor:glfw"
+import "engine"
 
 // Window and input on top of GLFW. Events arrive through callbacks between
 // two PollEvents calls; this module turns them into per-frame state that the
@@ -53,16 +54,21 @@ pf: Platform
 
 platform_init :: proc(width, height: int, title: cstring) -> bool {
 	if !glfw.Init() do return false
-	glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, 3)
-	glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, 2)
-	glfw.WindowHint_int(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-	glfw.WindowHint_bool(glfw.OPENGL_FORWARD_COMPAT, true)
-	// NanoVG antialiases its own edges, and draws with the stencil buffer alone: no
-	// multisampling (4× would hold 4 colour and 4 depth-stencil values per pixel) and no
-	// depth buffer, which together took some 200 MB of video memory on a Retina window
-	glfw.WindowHint_int(glfw.SAMPLES, 0)
-	glfw.WindowHint_int(glfw.DEPTH_BITS, 0)
-	glfw.WindowHint_int(glfw.STENCIL_BITS, 8)
+	when engine.RENDERER == "gl" {
+		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, 3)
+		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, 2)
+		glfw.WindowHint_int(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+		glfw.WindowHint_bool(glfw.OPENGL_FORWARD_COMPAT, true)
+		// NanoVG antialiases its own edges, and draws with the stencil buffer alone: no
+		// multisampling (4× would hold 4 colour and 4 depth-stencil values per pixel) and
+		// no depth buffer, which together took some 200 MB of video memory on a Retina
+		// window
+		glfw.WindowHint_int(glfw.SAMPLES, 0)
+		glfw.WindowHint_int(glfw.DEPTH_BITS, 0)
+		glfw.WindowHint_int(glfw.STENCIL_BITS, 8)
+	} else {
+		glfw.WindowHint_int(glfw.CLIENT_API, glfw.NO_API) // WebGPU draws into a Metal layer
+	}
 	glfw.WindowHint_bool(glfw.RESIZABLE, true)
 	glfw.WindowHint_bool(glfw.COCOA_RETINA_FRAMEBUFFER, true)
 	// AGENTIC_QUIET: open behind other windows without taking focus (tests);
@@ -79,8 +85,10 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 		return false
 	}
 	if quiet do platform_order_back()
-	glfw.MakeContextCurrent(pf.window)
-	glfw.SwapInterval(1)
+	when engine.RENDERER == "gl" {
+		glfw.MakeContextCurrent(pf.window)
+		glfw.SwapInterval(1)
+	}
 	pf.refresh = 60
 	// (no monitor while the displays sleep: GetVideoMode(nil) would crash)
 	if monitor := glfw.GetPrimaryMonitor(); monitor != nil {
@@ -212,7 +220,8 @@ platform_should_close :: proc() -> bool {
 }
 
 platform_swap :: proc() {
-	glfw.SwapBuffers(pf.window)
+	when engine.RENDERER == "gl" do glfw.SwapBuffers(pf.window)
+	else do engine.gpu_present()
 }
 
 platform_window_size :: proc() -> [2]f32 {
@@ -267,3 +276,11 @@ mod_cmd :: proc() -> bool {
 mod_shift :: proc() -> bool {
 	return key_down(glfw.KEY_LEFT_SHIFT) || key_down(glfw.KEY_RIGHT_SHIFT)
 }
+
+// What the renderer needs from the window: the GL context is current (GL), or the
+// window's content view has a CAMetalLayer to draw into (WebGPU).
+platform_gpu_surface :: proc() -> engine.Gpu_Surface {
+	when engine.RENDERER == "gl" do return {set_proc_address = glfw.gl_set_proc_address}
+	else do return {metal_layer = platform_metal_layer(pf.window)}
+}
+

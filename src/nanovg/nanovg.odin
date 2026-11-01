@@ -903,7 +903,7 @@ CreateImagePath :: proc(ctx: ^Context, filename: cstring, imageFlags: ImageFlags
 		return 0
 	}
 
-	data  := img[:int(w) * int(h) * int(n)]
+	data  := img[:int(w) * int(h) * 4] // (asked for 4 channels; `n` is the file's own count)
 	image := CreateImageRGBA(ctx, int(w), int(h), imageFlags, data)
 	stbi.image_free(img)
 	return image
@@ -921,7 +921,7 @@ CreateImageMem :: proc(ctx: ^Context, data: []byte, imageFlags: ImageFlags) -> i
 		return 0
 	}
 
-	pixel_data := img[:int(w) * int(h) * int(n)]
+	pixel_data := img[:int(w) * int(h) * 4] // (asked for 4 channels; `n` is the file's own count)
 	image := CreateImageRGBA(ctx, int(w), int(h), imageFlags, pixel_data)
 	stbi.image_free(img)
 	return image

@@ -173,9 +173,9 @@ NanoVG draws everything:
 shadow), ellipses, SVG paths parsed by `src/engine/svgpath.odin`, text, and placeholders for node
 types the app does not render.
 
-NanoVG turns paths, images and text into GPU work through its backend
-(`src/nanovg/gl`, OpenGL 3.2). The rest of the GPU work goes through `src/engine/gpu.odin`
-(decision #52):
+NanoVG turns paths, images and text into GPU work through its backend: `src/nanovg/gl`
+(OpenGL 3.2) or `src/nanovg/wgpu` (WebGPU, decision #53). The rest of the GPU work goes
+through `src/engine/gpu.odin` (decision #52):
 
 - `gpu_window_begin` and `target_begin` choose where the next NanoVG frame draws (the
   window or an offscreen `Target`) and clear it;
@@ -186,8 +186,13 @@ NanoVG turns paths, images and text into GPU work through its backend
   `src/api.odin`), a view screenshot reads the window;
 - `gpu_max_side`, `gpu_trim` and `gpu_finish` give the texture limit and hand memory back.
 
-One backend is compiled in (`-define:RENDERER=...`); `src/engine/gpu_gl.odin` is the
-OpenGL one. No other file calls the GPU API.
+One backend is compiled in: OpenGL by default (`src/engine/gpu_gl.odin`), WebGPU with
+`-define:RENDERER=wgpu` (`src/engine/gpu_wgpu.odin`, on wgpu-native, which runs on Metal
+here and Vulkan or D3D12 elsewhere). No other file calls the GPU API. With WebGPU the
+GLFW window has no GL context; `src/metal_darwin.odin` gives its content view a
+`CAMetalLayer`, the frame is drawn into the layer's drawable and `gpu_present` shows it.
+When macOS gives no drawable (a locked screen), the frame goes to an offscreen target of
+the window's size, so view screenshots keep working.
 
 Patched copies of NanoVG and fontstash live in `src/nanovg` and `src/fontstash`. The
 patches are listed in `src/nanovg/README.md`.
@@ -284,7 +289,7 @@ Engine (`src/engine/`):
 | File | Role |
 | --- | --- |
 | `engine.odin` | the globals the host sets, `sorted_keys` |
-| `gpu.odin`, `gpu_gl.odin` | the GPU interface besides NanoVG: offscreen targets, blur pass, pixel readback; its OpenGL backend |
+| `gpu.odin`, `gpu_gl.odin`, `gpu_wgpu.odin` | the GPU interface besides NanoVG: offscreen targets, blur pass, pixel readback; its OpenGL and WebGPU backends |
 | `doc.odin` | node model, props, parsing, indexes, instances, overrides, undo snapshots |
 | `pen.odin` | `.pen` reading and writing, variable resolution |
 | `themes.odin`, `pages.odin`, `libraries.odin` | theme axes and themed variables; pages in the header; imported libraries |
@@ -314,4 +319,6 @@ App (`src/`):
 | `memory.odin` | the big allocator, memory trim and the `memory` report |
 | `clipboard_darwin.odin` | putting data on the system clipboard |
 | `activity_darwin.odin`, `applog.odin`, `settings.odin` | no App Nap while agents work; the start/exit log; app settings |
-| `nanovg/`, `fontstash/` | patched vendored renderer and font rasteriser |
+| `metal_darwin.odin` | the window's `CAMetalLayer` (WebGPU builds) |
+| `nanovg/`, `fontstash/` | patched vendored renderer (with `gl/` and `wgpu/` backends) and font rasteriser |
+| `wgpu/` | the wgpu-native bindings; the library itself is fetched by `tools/fetch_wgpu.sh` |

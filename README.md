@@ -52,6 +52,8 @@ as a library.
 ```sh
 brew install odin
 ./build.sh                      # debug build -> build/agentic-design
+./build.sh -o:speed -define:RENDERER=wgpu   # draw with WebGPU (Metal) instead of OpenGL;
+                                            # fetches wgpu-native into src/wgpu/lib once
 ./build/agentic-design          # opens designs/untitled.pen
 ./build/agentic-design file.pen
 ```
@@ -204,6 +206,8 @@ backtrace if it crashes. The full recipe is in [docs/testing.md](docs/testing.md
 | `src/onboarding.odin`, `src/agents.odin` | the onboarding sheet; agent client detection and MCP registration |
 | `src/files_ui.odin`, `src/pages_ui.odin`, `src/libraries_ui.odin`, `src/fonts_ui.odin`, `src/export_ui.odin` | drops and file dialogs, pages, libraries, font import and export as the app does them |
 | `src/gestures_darwin.odin` | trackpad gestures via Cocoa |
+| `src/engine/gpu.odin`, `gpu_gl.odin`, `gpu_wgpu.odin` | the GPU interface besides NanoVG and its OpenGL and WebGPU backends |
+| `src/nanovg/wgpu`, `src/wgpu`, `src/metal_darwin.odin` | NanoVG on WebGPU; the wgpu-native bindings (library fetched by `tools/fetch_wgpu.sh`); the window's Metal layer |
 | `src/nanovg`, `src/fontstash` | vendored NanoVG/fontstash ports with text rendering fixes (see `src/nanovg/README.md`) |
 | `tools/uidrive.py` | drives the interface through the socket for tests |
 | `tools/font_instances.py` | static instances of variable fonts for the app's font folder |

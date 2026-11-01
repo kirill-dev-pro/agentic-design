@@ -8,6 +8,8 @@ package engine
 //
 // One backend is compiled in, chosen with -define:RENDERER=...:
 //   gl    OpenGL 3.2 core (gpu_gl.odin, src/nanovg/gl), the default
+//   wgpu  WebGPU through wgpu-native (gpu_wgpu.odin, src/nanovg/wgpu); run
+//         tools/fetch_wgpu.sh first
 //
 // Every backend provides:
 //
@@ -20,6 +22,7 @@ package engine
 //   gpu_window_begin(w, h, clear)
 //                           the next frame draws into the window's framebuffer of w × h
 //                           pixels, cleared to `clear`
+//   gpu_present()           shows the window's frame (GL: nothing, GLFW swaps)
 //   target_make(w, h) -> Target, target_free(^Target)
 //   target_begin(^Target, clear)
 //                           the next frame draws into the target, cleared to `clear`
@@ -43,4 +46,4 @@ package engine
 
 RENDERER :: #config(RENDERER, "gl")
 
-#assert(RENDERER == "gl", "RENDERER must be gl")
+#assert(RENDERER == "gl" || RENDERER == "wgpu", "RENDERER must be gl or wgpu")

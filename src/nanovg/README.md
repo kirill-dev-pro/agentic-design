@@ -3,7 +3,9 @@
 Copies of Odin's `vendor:nanovg` and `vendor:fontstash` (Odin-native ports of
 [nanovg](https://github.com/memononen/nanovg) and
 [fontstash](https://github.com/memononen/fontstash), zlib licence), taken from Odin
-dev-2026-10. Kept in the repository so the following fixes can be applied:
+dev-2026-10. Kept in the repository so that `wgpu/`, a WebGPU backend written here after
+`gl/` (the same calls, the same shader in WGSL, the same stencil passes, fans turned into
+index lists), sits next to the GL one, and so that the following fixes can be applied:
 
 - fontstash: glyph advances and positions are no longer rounded to whole pixels of the
   rendered size, so text keeps its width and position at every zoom level.
@@ -32,3 +34,7 @@ dev-2026-10. Kept in the repository so the following fixes can be applied:
   they run out (`__grow`), as upstream's C code does. `resize` alone reserved exactly what
   was asked, so after `RecycleBuffers` a big frame regrew them in thousands of steps, each
   a full copy once past 256 KB.
+- nanovg: `CreateImagePath` and `CreateImageMem` ask stb_image for 4 channels but cut the
+  pixel slice to the file's own channel count (3 for an RGB PNG such as a dashboard
+  thumbnail). The GL backend read past the slice through its raw pointer and never
+  noticed; the WebGPU backend copies the slice and trapped. The slice is now 4 channels.

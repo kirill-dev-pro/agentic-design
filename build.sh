@@ -1,8 +1,12 @@
 #!/bin/sh
-# Builds build/agentic-design. Pass -o:speed for an optimized build.
+# Builds build/agentic-design. Pass -o:speed for an optimized build, and
+# -define:RENDERER=wgpu to draw with WebGPU instead of OpenGL (docs/architecture.md).
 set -e
 cd "$(dirname "$0")"
 mkdir -p build
+case " $* " in
+*RENDERER=wgpu*) ./tools/fetch_wgpu.sh >/dev/null ;; # wgpu-native, once
+esac
 odin build src -out:build/agentic-design "${@:--debug}"
 # The MCP tool list is hand-written JSON (src/mcp.odin TOOLS_JSON): a stray quote makes
 # strict clients (Claude Code, Codex) drop every tool, so the build checks that it parses.

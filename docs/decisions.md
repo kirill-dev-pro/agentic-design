@@ -1111,3 +1111,63 @@ the engine's last Cocoa call, moved to the app (`src/clipboard_darwin.odin`).
   cannot fall back to GL at run time. If that is ever needed, the same calls can become
   a table of procedures.
 
+## 53. A WebGPU backend next to OpenGL; OpenGL stays the default until it is seen on screen
+
+**Problem.** OpenGL is deprecated on macOS and absent from the browser and from phones.
+WebGPU runs on Metal, Vulkan and D3D12 through wgpu-native, and in the browser natively,
+which is what the shared engine needs (#51). It costs about 11 MB of binary.
+
+**Decision.**
+
+- `src/nanovg/wgpu` is a NanoVG backend written after the GL3 one: the same calls, the
+  same fragment shader in WGSL, the same stencil passes for fills and strokes. Each GL
+  state the GL backend switches to is one pipeline. WebGPU has no triangle fans: each
+  path's fan becomes an indexed triangle list with the same triangles. Texture lookups use
+  level 0 (`textureSampleLevel`), so they may sit under the shader's branches.
+- `src/engine/gpu_wgpu.odin` implements the calls of `gpu.odin` on wgpu-native v29.0.1.1.
+  Every target, the window's included, has the surface's format (`BGRA8Unorm`, not its
+  sRGB variant, so that blending works on the same values as OpenGL) and a `Stencil8`
+  buffer. The blur is the same shader in WGSL. Readback copies up to 2048 rows at a time
+  into a mapped buffer: 128-row strips, each waiting for the GPU, made screenshots 3–4
+  times slower than with OpenGL.
+- The window: GLFW opens it without a GL context, `src/metal_darwin.odin` gives its
+  content view a `CAMetalLayer` (through `objc_msgSend`, see the file), `gpu_present`
+  presents. Without a drawable (a locked screen; `Occluded`), the frame is drawn into an
+  offscreen target of the window's size, and a view screenshot reads that.
+- The wgpu bindings are vendored in `src/wgpu` with one change: the library is linked,
+  and must exist, only when `RENDERER == "wgpu"`. The 34 MB static library is not in the
+  repository; `tools/fetch_wgpu.sh` downloads the pinned release and checks its SHA-256,
+  and `build.sh` runs it for a WebGPU build. An OpenGL build needs none of it and is
+  byte for byte the size it was.
+- The default stays OpenGL until the WebGPU window has been looked at on an unlocked
+  screen: presentation, live resize, Retina scale and colours. All the checks below ran
+  with the screen locked.
+
+**Consequences.**
+
+- Pictures (35 outputs as in #52, both builds run from paths of the same length): 21
+  identical, 12 within 1–2 of 255 on under 0.01 % of pixels, and two that differ more.
+  The window screenshot with a fading toast differs in time, not in drawing. The canvas
+  of sample.lib at scale 0.5 differs on 0.18 % of pixels: one-unit dividers there are
+  half a pixel thick with edges through pixel centres. NanoVG's antialiasing fringe of a
+  fill thinner than a pixel overlaps itself. OpenGL (rows counted upwards) leaves the
+  overlap's edge row out and shows about half the line's colour, the correct coverage.
+  Metal (rows counted downwards) takes it in and shows the full colour. Off such exact
+  ties both overdraw the same way. Fills under a device pixel should be drawn as NanoVG
+  draws thin strokes (one pixel wide, alpha scaled); that would fix both.
+- Measured with `tools/perf/perfbench.py` (OpenGL → WebGPU final build, sample-screens /
+  stress10; [performance.md](performance.md#opengl-and-webgpu-1-november-2026-decision-53)
+  has both WebGPU runs): frames while panning 0.41 → 0.31 / 1.89 → 1.79 ms, zooming
+  0.29 → 0.17 / 0.55 → 0.43 ms, dragging the same within the noise; idle CPU 0.9 → 0.5 /
+  3.0 → 2.1 %; screenshots 10–25 % slower (stress10 canvas at 2× 222 → 278 ms).
+  `phys_footprint` at start 276 → 244 / 293 → 271 MB, after the screenshots 394 → 287 /
+  486 → 321 MB. The comparison of memory is not final: with the screen locked the Metal
+  layer holds no drawables, while OpenGL's 99 MB of window surfaces count either way.
+  Unlocked, the layer adds two or three drawables of the window's size (about 21 MB each
+  on a Retina 1440 × 900 window).
+- The fuzzer found a bug the GL backend had hidden: Odin's NanoVG cut the pixels of an
+  RGB image file to 3 channels after asking stb_image for 4 (`src/nanovg/README.md`).
+- Under lldb on a debug build: the scripted run, fuzz seeds 71, 13 and 29, undo and redo of
+  102 steps, the memory session (flat at 266–275 MB through 20 screenshots) and the
+  presence script pass, with no WebGPU validation errors.
+
