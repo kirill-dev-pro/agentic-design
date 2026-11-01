@@ -1382,3 +1382,32 @@ a tilted layer landed: `bounds` is the unrotated layout box.
 
 **Consequences.** Per-side strokes stay solid. A dashed line is a one-segment path, since a
 zero-height rectangle's outline runs out and back over itself.
+
+## 61. A rotated layer in a flex frame takes the room of its rotated box, as in pen.dev
+
+**Problem.** A layer turned by `rotation` inside a frame with a flex layout was laid out by
+its unrotated box and then turned around its top-left corner. pen.dev lays out the box
+around the rotated layer: a 160 × 100 card at 30° in a horizontal frame took 160 of the row
+here and 188.6 there, and stuck out above the frame instead of starting at its top. Every
+later sibling, the frame's fit_content size and the cross-axis alignment differed with it
+(D53).
+
+**Decision.** Measured in pen.dev 1.2.21 (its MCP `Get` with resolved bounds, then
+`layout: "none"` to read the positions it gives): in a flex frame a rotated child counts
+with the axis-aligned box around it, for the flow, the gaps, `justifyContent`,
+`alignItems` and the frame's fit_content size, and its top-left corner (the point it turns
+around) sits inside that box where the rotation puts it. A `fill_container` child gets its
+share of the free room as its own, unrotated, size and then takes the room of that size
+rotated, as pen.dev does. In `layout: "none"` frames nothing changes: `x` and `y` are the
+corner it turns around, as the schema says ("Degrees CCW around top-left corner"; the
+format has no other origin). `rotated_extent` in `layout.odin` gives the box and the
+corner's offset.
+
+**Consequences.** On a minimal file (horizontal and vertical frames, each alignment,
+justify centre, a rotated frame with a text inside, rotations of −20° to 90°) every
+layer's box now equals pen.dev's to 0.01; before, up to 217 units off
+(`tools/perf/rotcmp.py`). Files without rotated children in flex frames are unchanged:
+canvas screenshots and `get_document` of sample.lib, sample-screens, reddit-ui and
+stress10 are identical. A product landing page we compare places all its tilted cards in
+`layout: "none"` frames, so it is unchanged too; its hero and "Built for this job" frames
+match pen.dev's bounds to 1.94 units, all of it text widths.

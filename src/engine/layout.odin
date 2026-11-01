@@ -1,6 +1,7 @@
 package engine
 
 import "core:hash"
+import "core:math"
 import "core:mem"
 import "core:strings"
 import nvg "../nanovg"
@@ -139,6 +140,7 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 		if flowing && spec[main].mode == .Fill do avail[main] = 0 // in a container fitting its content
 		cw, ch := measure(doc, c, avail, depth + 1)
 		sizes[i] = {cw, ch}
+		if flowing do sizes[i], _ = rotated_extent(cw, ch, c.rotation)
 		if !flowing || spec[main].mode == .Fill do continue
 		counted[i] = true
 		used += sizes[i][main]
@@ -156,7 +158,7 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 				avail := inner
 				avail[main] = share
 				cw, ch := measure(doc, c, avail, depth + 1)
-				sizes[i] = {cw, ch}
+				sizes[i], _ = rotated_extent(cw, ch, c.rotation)
 			}
 		}
 		across = 0
@@ -173,7 +175,7 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 		avail[cross] = across
 		if ([2]Size_Spec{c.width, c.height})[main].mode == .Fill do avail[main] = 0
 		cw, ch := measure(doc, c, avail, depth + 1)
-		sizes[i] = {cw, ch}
+		sizes[i], _ = rotated_extent(cw, ch, c.rotation)
 		if ([2]Size_Spec{c.width, c.height})[main].mode == .Fill do continue
 		counted[i] = true
 		used += sizes[i][main]
@@ -187,7 +189,7 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 			avail[main] = share
 			if avail[cross] < 0 do avail[cross] = across
 			cw, ch := measure(doc, c, avail, depth + 1)
-			sizes[i] = {cw, ch}
+			sizes[i], _ = rotated_extent(cw, ch, c.rotation)
 			counted[i] = true
 		}
 	}
@@ -251,7 +253,10 @@ arrange :: proc(doc: ^Document, n: ^Node, x, y, w, h: f32, depth: int) {
 		if c == nil || !c.enabled || c.abs_pos do continue
 		specs := [2]Size_Spec{c.width, c.height}
 		if specs[main].mode == .Fill do fills += 1
-		else do fixed_sum += ([2]f32{c.mw, c.mh})[main]
+		else {
+			ext, _ := rotated_extent(c.mw, c.mh, c.rotation)
+			fixed_sum += ext[main]
+		}
 		count += 1
 	}
 	gap := n.gap
@@ -281,16 +286,20 @@ arrange :: proc(doc: ^Document, n: ^Node, x, y, w, h: f32, depth: int) {
 		size := [2]f32{c.mw, c.mh}
 		if specs[main].mode == .Fill do size[main] = fill_size
 		if specs[cross].mode == .Fill do size[cross] = inner[cross]
+		// the room it takes is its rotated box (a fill gets its share as its own size, as
+		// in pen.dev, and then takes the room of that rotated)
+		ext, off := rotated_extent(size.x, size.y, c.rotation)
 		pos: [2]f32
 		pos[main] = cursor
-		free := inner[cross] - size[cross]
+		free := inner[cross] - ext[cross]
 		switch n.align {
 		case .Start:
 		case .Center: pos[cross] = free / 2
 		case .End: pos[cross] = free
 		}
-		arrange(doc, c, ix + pos.x, iy + pos.y, size.x, size.y, depth + 1)
-		cursor += ([2]f32{c.w, c.h})[main] + gap
+		arrange(doc, c, ix + pos.x + off.x, iy + pos.y + off.y, size.x, size.y, depth + 1)
+		took, _ := rotated_extent(c.w, c.h, c.rotation)
+		cursor += took[main] + gap
 	}
 }
 
@@ -298,6 +307,23 @@ arrange_absolute :: proc(doc: ^Document, c: ^Node, px, py: f32, inner: [2]f32, d
 	cw := inner.x if c.width.mode == .Fill else c.mw
 	ch := inner.y if c.height.mode == .Fill else c.mh
 	arrange(doc, c, px + c.pos.x, py + c.pos.y, cw, ch, depth + 1)
+}
+
+// A rotated layer in a flex frame takes the room of its rotated box, as in pen.dev: the
+// frame's flow, gaps, alignment and fit_content size use the box around the rotated
+// layer, and the layer's own top-left (the corner it turns around) sits inside that box
+// where the rotation puts it. `rotated_extent` gives the size of the box around a w × h
+// layer turned by `deg` counter-clockwise, and the offset of its top-left corner from
+// the box's top-left. A layer that is not rotated gets its own size and no offset.
+rotated_extent :: proc(w, h, deg: f32) -> (size, offset: [2]f32) {
+	if deg == 0 do return {w, h}, {}
+	t := -deg * math.PI / 180 // as drawn: nvg.Rotate(-rotation) with y down
+	cs, sn := math.cos(t), math.sin(t)
+	a := [2]f32{w * cs, w * sn} // the top edge
+	b := [2]f32{-h * sn, h * cs} // the left edge
+	lo := [2]f32{min(0, a.x, b.x, a.x + b.x), min(0, a.y, b.y, a.y + b.y)}
+	hi := [2]f32{max(0, a.x, b.x, a.x + b.x), max(0, a.y, b.y, a.y + b.y)}
+	return hi - lo, -lo
 }
 
 // ---------------------------------------------------------------- instances
