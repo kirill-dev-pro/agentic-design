@@ -1,0 +1,3973 @@
+{
+  "version": "2.21",
+  "themes": {
+    "mode": [
+      "light",
+      "dark"
+    ],
+    "viewport": [
+      "desktop",
+      "mobile"
+    ]
+  },
+  "variables": {
+    "accent": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#C8643F"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#E8876A"
+        }
+      ]
+    },
+    "accent-soft": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#F6E3DA"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#3A241C"
+        }
+      ]
+    },
+    "agent-claude": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#D97757"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#E8876A"
+        }
+      ]
+    },
+    "agent-codex": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#10A37F"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#2BC79B"
+        }
+      ]
+    },
+    "agent-person": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#5B6CF0"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#8592FF"
+        }
+      ]
+    },
+    "bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#FAFAF7"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#0E0F12"
+        }
+      ]
+    },
+    "border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#E4E2DA"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#2A2E37"
+        }
+      ]
+    },
+    "canvas": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#EDECE7"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#121318"
+        }
+      ]
+    },
+    "code-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#15161A"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#08090B"
+        }
+      ]
+    },
+    "code-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#8C8F98"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#7A7E88"
+        }
+      ]
+    },
+    "code-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#E9E7E1"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#E9E7E1"
+        }
+      ]
+    },
+    "dot-green": {
+      "type": "color",
+      "value": "#28C840"
+    },
+    "dot-red": {
+      "type": "color",
+      "value": "#FF5F57"
+    },
+    "dot-yellow": {
+      "type": "color",
+      "value": "#FEBC2E"
+    },
+    "font-mono": {
+      "type": "string",
+      "value": "JetBrains Mono"
+    },
+    "font-sans": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "glow-claude": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#D977574D"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#E8876A59"
+        }
+      ]
+    },
+    "on-accent": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#FFFFFF"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#120C09"
+        }
+      ]
+    },
+    "on-cursor": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "page-width": {
+      "type": "number",
+      "value": [
+        {
+          "value": 1440
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 390
+        }
+      ]
+    },
+    "radius-lg": {
+      "type": "number",
+      "value": 20
+    },
+    "radius-md": {
+      "type": "number",
+      "value": 12
+    },
+    "radius-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "section-gap": {
+      "type": "number",
+      "value": [
+        {
+          "value": 56
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 32
+        }
+      ]
+    },
+    "section-pad-x": {
+      "type": "number",
+      "value": [
+        {
+          "value": 120
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 20
+        }
+      ]
+    },
+    "section-pad-y": {
+      "type": "number",
+      "value": [
+        {
+          "value": 112
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 64
+        }
+      ]
+    },
+    "shadow-soft": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#0000001A"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#00000066"
+        }
+      ]
+    },
+    "shadow-window": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1A120E26"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#00000099"
+        }
+      ]
+    },
+    "size-body": {
+      "type": "number",
+      "value": [
+        {
+          "value": 18
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 16
+        }
+      ]
+    },
+    "size-h1": {
+      "type": "number",
+      "value": [
+        {
+          "value": 72
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 40
+        }
+      ]
+    },
+    "size-h2": {
+      "type": "number",
+      "value": [
+        {
+          "value": 44
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 30
+        }
+      ]
+    },
+    "size-h3": {
+      "type": "number",
+      "value": [
+        {
+          "value": 20
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 18
+        }
+      ]
+    },
+    "size-small": {
+      "type": "number",
+      "value": [
+        {
+          "value": 14
+        },
+        {
+          "theme": {
+            "viewport": "mobile"
+          },
+          "value": 13
+        }
+      ]
+    },
+    "surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#FFFFFF"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#16181D"
+        }
+      ]
+    },
+    "surface-2": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#F2F1EC"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#1D2027"
+        }
+      ]
+    },
+    "text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#15161A"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#F2F2F0"
+        }
+      ]
+    },
+    "text-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#5B5E66"
+        },
+        {
+          "theme": {
+            "mode": "dark"
+          },
+          "value": "#9EA2AC"
+        }
+      ]
+    }
+  },
+  "pages": [
+    {
+      "name": "Landing",
+      "nodes": [
+        "d-root",
+        "m-root"
+      ]
+    },
+    {
+      "name": "Components",
+      "nodes": [
+        "btn-primary",
+        "btn-secondary",
+        "logo",
+        "nav",
+        "sec-head",
+        "feature",
+        "tool",
+        "check",
+        "code",
+        "cursor",
+        "footer"
+      ]
+    }
+  ],
+  "fonts": [
+    {
+      "name": "Inter",
+      "style": "normal",
+      "url": "./fonts/Inter-Medium.ttf",
+      "weight": 500
+    },
+    {
+      "name": "Inter",
+      "style": "normal",
+      "url": "./fonts/Inter-Bold.ttf",
+      "weight": 700
+    },
+    {
+      "name": "Inter",
+      "style": "normal",
+      "url": "./fonts/Inter-Regular.ttf",
+      "weight": 400
+    },
+    {
+      "name": "Inter",
+      "style": "normal",
+      "url": "./fonts/Inter-SemiBold.ttf",
+      "weight": 600
+    },
+    {
+      "name": "JetBrains Mono",
+      "style": "normal",
+      "url": "./fonts/jetbrains-mono-latin-400-normal.woff",
+      "weight": 400
+    },
+    {
+      "name": "JetBrains Mono",
+      "style": "normal",
+      "url": "./fonts/jetbrains-mono-latin-500-normal.woff",
+      "weight": 500
+    },
+    {
+      "name": "JetBrains Mono",
+      "style": "normal",
+      "url": "./fonts/jetbrains-mono-latin-600-normal.woff",
+      "weight": 600
+    }
+  ],
+  "children": [
+    {
+      "type": "frame",
+      "id": "d-root",
+      "name": "Landing / Desktop",
+      "fill": "$bg",
+      "layout": "vertical",
+      "theme": {
+        "viewport": "desktop"
+      },
+      "width": "$page-width",
+      "x": 0,
+      "y": 0,
+      "children": [
+        {
+          "type": "ref",
+          "id": "d-nav",
+          "ref": "nav",
+          "width": "fill_container"
+        },
+        {
+          "type": "frame",
+          "id": "d-hero",
+          "name": "Hero",
+          "alignItems": "center",
+          "gap": 28,
+          "layout": "vertical",
+          "padding": [
+            96,
+            "$section-pad-x",
+            0,
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "alignItems": "center",
+              "cornerRadius": 16,
+              "fill": "$accent-soft",
+              "justifyContent": "center",
+              "layout": "horizontal",
+              "padding": [
+                6,
+                12
+              ],
+              "stroke": "$accent-soft",
+              "strokeAlignment": "inner",
+              "strokeWidth": 1,
+              "id": "d-badge",
+              "name": "Badge",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "d-badge-label",
+                  "content": "Prototype · free and open · macOS",
+                  "fill": "$accent",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 13,
+                  "fontWeight": "500",
+                  "lineHeight": 1.333,
+                  "textGrowth": "auto"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "d-h1",
+              "content": "A design canvas your agent can see",
+              "fill": "$text",
+              "fontFamily": "$font-sans",
+              "fontSize": "$size-h1",
+              "fontWeight": "700",
+              "letterSpacing": -2,
+              "lineHeight": 1.04,
+              "textAlign": "center",
+              "textGrowth": "fixed-width",
+              "width": 900
+            },
+            {
+              "type": "text",
+              "id": "d-lede",
+              "content": "Agentic Design is a native macOS editor for .pen files. Your agent reads the document, draws into it and screenshots the result over MCP, while you watch and edit the same canvas live.",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": "$size-body",
+              "fontWeight": "400",
+              "lineHeight": 1.55,
+              "textAlign": "center",
+              "textGrowth": "fixed-width",
+              "width": 680
+            },
+            {
+              "type": "frame",
+              "id": "d-ctas",
+              "name": "Buttons",
+              "alignItems": "center",
+              "gap": 12,
+              "layout": "horizontal",
+              "width": "fit_content",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "d-cta1",
+                  "descendants": {
+                    "btn-primary-label": {
+                      "content": "Get it for macOS"
+                    }
+                  },
+                  "ref": "btn-primary"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-cta2",
+                  "descendants": {
+                    "btn-secondary-icon": {
+                      "icon": "plug"
+                    },
+                    "btn-secondary-label": {
+                      "content": "Connect an agent"
+                    }
+                  },
+                  "ref": "btn-secondary"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "d-hero-art",
+              "name": "Art",
+              "layout": "vertical",
+              "padding": [
+                32,
+                0,
+                0,
+                0
+              ],
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "d-m-mock",
+                  "name": "App window",
+                  "clip": true,
+                  "cornerRadius": 14,
+                  "effect": {
+                    "blur": 64,
+                    "color": "$shadow-window",
+                    "offset": {
+                      "x": 0,
+                      "y": 24
+                    },
+                    "shadowType": "outer",
+                    "type": "shadow"
+                  },
+                  "fill": "$surface",
+                  "height": 620,
+                  "layout": "none",
+                  "stroke": "$border",
+                  "strokeAlignment": "inner",
+                  "strokeWidth": 1,
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-bar",
+                      "fill": "$surface-2",
+                      "height": 40,
+                      "width": 1200,
+                      "x": 0,
+                      "y": 0
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "d-m-d1",
+                      "fill": "$dot-red",
+                      "height": 10,
+                      "width": 10,
+                      "x": 16,
+                      "y": 15
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "d-m-d2",
+                      "fill": "$dot-yellow",
+                      "height": 10,
+                      "width": 10,
+                      "x": 32,
+                      "y": 15
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "d-m-d3",
+                      "fill": "$dot-green",
+                      "height": 10,
+                      "width": 10,
+                      "x": 48,
+                      "y": 15
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-tab",
+                      "content": "agentic-design-site.pen",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "x": 80,
+                      "y": 12
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-side",
+                      "fill": "$surface",
+                      "height": 580,
+                      "stroke": "$border",
+                      "strokeAlignment": "inner",
+                      "strokeWidth": {
+                        "right": 1
+                      },
+                      "width": 200,
+                      "x": 0,
+                      "y": 40
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-side-h",
+                      "content": "LAYERS",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 11,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.8,
+                      "x": 16,
+                      "y": 56
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly0",
+                      "content": "Landing / Desktop",
+                      "fill": "$text",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 16,
+                      "y": 80
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly1",
+                      "content": "Nav",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 106
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly2",
+                      "content": "Hero",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 132
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly3",
+                      "content": "Badge",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 40,
+                      "y": 158
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-sel",
+                      "cornerRadius": 6,
+                      "fill": "$accent-soft",
+                      "height": 24,
+                      "width": 184,
+                      "x": 8,
+                      "y": 180
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly4",
+                      "content": "Title",
+                      "fill": "$text",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "600",
+                      "x": 40,
+                      "y": 184
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly5",
+                      "content": "Buttons",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 40,
+                      "y": 210
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly6",
+                      "content": "Features",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 236
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly7",
+                      "content": "Agents",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 262
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly8",
+                      "content": "MCP tools",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 288
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly9",
+                      "content": ".pen files",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 314
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly10",
+                      "content": "Download",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 340
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ly11",
+                      "content": "Footer",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "400",
+                      "x": 28,
+                      "y": 366
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-insp",
+                      "fill": "$surface",
+                      "height": 580,
+                      "stroke": "$border",
+                      "strokeAlignment": "inner",
+                      "strokeWidth": {
+                        "left": 1
+                      },
+                      "width": 240,
+                      "x": 960,
+                      "y": 40
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ih0",
+                      "content": "POSITION",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 11,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.8,
+                      "x": 976,
+                      "y": 58
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if00a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 82
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if00b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 82
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if01a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 116
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if01b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 116
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ih1",
+                      "content": "LAYOUT",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 11,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.8,
+                      "x": 976,
+                      "y": 164
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if10a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 188
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if10b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 188
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if11a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 222
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if11b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 222
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ih2",
+                      "content": "TYPOGRAPHY",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 11,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.8,
+                      "x": 976,
+                      "y": 270
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if20a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 294
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if20b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 294
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if21a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 328
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if21b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 328
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if22a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 362
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if22b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 362
+                    },
+                    {
+                      "type": "text",
+                      "id": "d-m-ih3",
+                      "content": "FILL",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 11,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.8,
+                      "x": 976,
+                      "y": 410
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if30a",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 976,
+                      "y": 434
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-if30b",
+                      "cornerRadius": 6,
+                      "fill": "$surface-2",
+                      "height": 26,
+                      "width": 100,
+                      "x": 1084,
+                      "y": 434
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-m-swatch",
+                      "cornerRadius": 3,
+                      "fill": "$accent",
+                      "height": 14,
+                      "width": 14,
+                      "x": 982,
+                      "y": 441
+                    },
+                    {
+                      "type": "frame",
+                      "id": "d-m-canvas",
+                      "name": "Canvas",
+                      "clip": true,
+                      "fill": "$canvas",
+                      "height": 580,
+                      "layout": "none",
+                      "width": 760,
+                      "x": 200,
+                      "y": 40,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "d-m-ab-label",
+                          "content": "Hero",
+                          "fill": "$text-muted",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 11,
+                          "fontWeight": "500",
+                          "x": 180,
+                          "y": 82
+                        },
+                        {
+                          "type": "frame",
+                          "id": "d-m-ab",
+                          "name": "Artboard",
+                          "cornerRadius": 4,
+                          "effect": {
+                            "blur": 24,
+                            "color": "$shadow-soft",
+                            "offset": {
+                              "x": 0,
+                              "y": 8
+                            },
+                            "shadowType": "outer",
+                            "type": "shadow"
+                          },
+                          "fill": "$bg",
+                          "height": 380,
+                          "layout": "none",
+                          "width": 400,
+                          "x": 180,
+                          "y": 100,
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-bar1",
+                              "cornerRadius": 5,
+                              "fill": "$accent",
+                              "height": 10,
+                              "width": 120,
+                              "x": 28,
+                              "y": 36
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-h1",
+                              "cornerRadius": 6,
+                              "fill": "$text",
+                              "height": 22,
+                              "width": 310,
+                              "x": 28,
+                              "y": 64
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-h2",
+                              "cornerRadius": 6,
+                              "fill": "$text",
+                              "height": 22,
+                              "width": 250,
+                              "x": 28,
+                              "y": 94
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-p1",
+                              "cornerRadius": 4,
+                              "fill": "$border",
+                              "height": 9,
+                              "width": 340,
+                              "x": 28,
+                              "y": 132
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-p2",
+                              "cornerRadius": 4,
+                              "fill": "$border",
+                              "height": 9,
+                              "width": 300,
+                              "x": 28,
+                              "y": 149
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-btn",
+                              "cornerRadius": 8,
+                              "fill": "$accent",
+                              "height": 36,
+                              "width": 120,
+                              "x": 28,
+                              "y": 180
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-btn2",
+                              "cornerRadius": 8,
+                              "fill": "$surface-2",
+                              "height": 36,
+                              "width": 100,
+                              "x": 158,
+                              "y": 180
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-img",
+                              "cornerRadius": 10,
+                              "fill": "$accent-soft",
+                              "height": 116,
+                              "width": 344,
+                              "x": 28,
+                              "y": 236
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-selc",
+                              "cornerRadius": 2,
+                              "height": 60,
+                              "stroke": "$agent-claude",
+                              "strokeWidth": 1.5,
+                              "width": 318,
+                              "x": 24,
+                              "y": 60
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "d-m-ab-selx",
+                              "cornerRadius": 12,
+                              "height": 124,
+                              "stroke": "$agent-codex",
+                              "strokeWidth": 1.5,
+                              "width": 352,
+                              "x": 24,
+                              "y": 232
+                            }
+                          ]
+                        },
+                        {
+                          "type": "ref",
+                          "id": "d-m-cur1",
+                          "descendants": {
+                            "cursor-name": {
+                              "content": "Claude"
+                            }
+                          },
+                          "ref": "cursor",
+                          "x": 510,
+                          "y": 200
+                        },
+                        {
+                          "type": "ref",
+                          "id": "d-m-cur2",
+                          "descendants": {
+                            "cursor-arrow": {
+                              "fill": "$agent-codex"
+                            },
+                            "cursor-name": {
+                              "content": "Codex"
+                            },
+                            "cursor-pill": {
+                              "fill": "$agent-codex"
+                            }
+                          },
+                          "ref": "cursor",
+                          "x": 540,
+                          "y": 430
+                        },
+                        {
+                          "type": "ref",
+                          "id": "d-m-cur3",
+                          "descendants": {
+                            "cursor-arrow": {
+                              "fill": "$agent-person"
+                            },
+                            "cursor-name": {
+                              "content": "You"
+                            },
+                            "cursor-pill": {
+                              "fill": "$agent-person"
+                            }
+                          },
+                          "ref": "cursor",
+                          "x": 100,
+                          "y": 300
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "d-what",
+          "name": "What it is",
+          "gap": "$section-gap",
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "ref",
+              "id": "d-what-h",
+              "descendants": {
+                "sec-eyebrow": {
+                  "content": "WHAT IT IS"
+                },
+                "sec-lede": {
+                  "content": "Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work."
+                },
+                "sec-title": {
+                  "content": "A canvas built for agents, and for you"
+                }
+              },
+              "ref": "sec-head",
+              "width": 720
+            },
+            {
+              "type": "frame",
+              "id": "d-cards",
+              "name": "Cards",
+              "gap": 24,
+              "layout": "horizontal",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "d-card1",
+                  "descendants": {
+                    "feature-body": {
+                      "content": "Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive."
+                    },
+                    "feature-icon": {
+                      "icon": "app-window"
+                    },
+                    "feature-title": {
+                      "content": "Native on macOS"
+                    }
+                  },
+                  "ref": "feature",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-card2",
+                  "descendants": {
+                    "feature-body": {
+                      "content": "They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint."
+                    },
+                    "feature-icon": {
+                      "icon": "bot"
+                    },
+                    "feature-title": {
+                      "content": "Agents are first-class users"
+                    }
+                  },
+                  "ref": "feature",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-card3",
+                  "descendants": {
+                    "feature-body": {
+                      "content": "Your designs are plain .pen files on your disk, readable by people, agents and pencil.design."
+                    },
+                    "feature-icon": {
+                      "icon": "heart"
+                    },
+                    "feature-title": {
+                      "content": "Free and open"
+                    }
+                  },
+                  "ref": "feature",
+                  "width": "fill_container"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "d-agents",
+          "name": "Agents on the canvas",
+          "alignItems": "center",
+          "fill": "$surface-2",
+          "gap": 64,
+          "layout": "horizontal",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "d-ag-text",
+              "name": "Text",
+              "gap": 28,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "d-ag-h",
+                  "descendants": {
+                    "sec-eyebrow": {
+                      "content": "AGENTS ON THE CANVAS"
+                    },
+                    "sec-lede": {
+                      "content": "Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour."
+                    },
+                    "sec-title": {
+                      "content": "Watch them work"
+                    }
+                  },
+                  "ref": "sec-head",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "frame",
+                  "id": "d-ag-list",
+                  "name": "List",
+                  "gap": 14,
+                  "layout": "vertical",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "d-ag-k1",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Claude in clay, Codex in green, named from the MCP client"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-ag-k2",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Frames marked placeholder glow while an agent works on them"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-ag-k3",
+                      "descendants": {
+                        "check-text": {
+                          "content": "A cursor outside the view waits at the edge, pointing the way"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "d-ag-art",
+              "name": "Canvas art",
+              "clip": true,
+              "cornerRadius": "$radius-lg",
+              "fill": "$canvas",
+              "height": 420,
+              "layout": "none",
+              "width": 560,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "d-ag-board",
+                  "name": "Board",
+                  "cornerRadius": 6,
+                  "effect": {
+                    "blur": 24,
+                    "color": "$glow-claude",
+                    "offset": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "shadowType": "outer",
+                    "spread": 2,
+                    "type": "shadow"
+                  },
+                  "fill": "$bg",
+                  "height": 280,
+                  "layout": "none",
+                  "stroke": "$agent-claude",
+                  "strokeWidth": 2,
+                  "width": 300,
+                  "x": 60,
+                  "y": 60,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "d-ag-ph",
+                      "content": "placeholder",
+                      "fill": "$agent-claude",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "600",
+                      "x": 16,
+                      "y": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-ag-r1",
+                      "cornerRadius": 4,
+                      "fill": "$text",
+                      "height": 16,
+                      "width": 180,
+                      "x": 16,
+                      "y": 44
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-ag-r2",
+                      "cornerRadius": 4,
+                      "fill": "$border",
+                      "height": 8,
+                      "width": 240,
+                      "x": 16,
+                      "y": 72
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-ag-r3",
+                      "cornerRadius": 4,
+                      "fill": "$border",
+                      "height": 8,
+                      "width": 200,
+                      "x": 16,
+                      "y": 88
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d-ag-r4",
+                      "cornerRadius": 8,
+                      "fill": "$accent-soft",
+                      "height": 140,
+                      "width": 268,
+                      "x": 16,
+                      "y": 116
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "d-ag-c1",
+                  "descendants": {
+                    "cursor-name": {
+                      "content": "Claude"
+                    }
+                  },
+                  "ref": "cursor",
+                  "x": 300,
+                  "y": 120
+                },
+                {
+                  "type": "ref",
+                  "id": "d-ag-c2",
+                  "descendants": {
+                    "cursor-arrow": {
+                      "fill": "$agent-codex"
+                    },
+                    "cursor-name": {
+                      "content": "Codex"
+                    },
+                    "cursor-pill": {
+                      "fill": "$agent-codex"
+                    }
+                  },
+                  "ref": "cursor",
+                  "x": 400,
+                  "y": 320
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "d-tools",
+          "name": "MCP tools",
+          "gap": 64,
+          "layout": "horizontal",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "d-tl-text",
+              "name": "Text",
+              "gap": 28,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "d-tl-h",
+                  "descendants": {
+                    "sec-eyebrow": {
+                      "content": "MCP TOOLS"
+                    },
+                    "sec-lede": {
+                      "content": "agentic-design mcp is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click."
+                    },
+                    "sec-title": {
+                      "content": "One command to connect"
+                    }
+                  },
+                  "ref": "sec-head",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl-code",
+                  "descendants": {
+                    "code-text": {
+                      "content": "$ claude mcp add --scope user agentic-design \\\n    -- /path/to/build/agentic-design mcp"
+                    },
+                    "code-title": {
+                      "content": "Terminal"
+                    }
+                  },
+                  "ref": "code",
+                  "width": "fill_container"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "d-tl-list",
+              "name": "Tools",
+              "gap": 10,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "d-tl0",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "What the document holds and how its parts are named"
+                    },
+                    "tool-name": {
+                      "content": "get_guide"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl1",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Several edits as one undo step, all or nothing"
+                    },
+                    "tool-name": {
+                      "content": "batch"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl2",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": ".pen nodes in, ids out, with nested children"
+                    },
+                    "tool-name": {
+                      "content": "create_nodes"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl3",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Layers by name, type, text, ref or variable"
+                    },
+                    "tool-name": {
+                      "content": "find_nodes"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl4",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "A node, the canvas or the whole window, in any theme"
+                    },
+                    "tool-name": {
+                      "content": "screenshot"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl5",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Hard-coded colours, missing fonts, text that does not fit"
+                    },
+                    "tool-name": {
+                      "content": "lint"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl6",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Tokens, theme axes and the theme shown"
+                    },
+                    "tool-name": {
+                      "content": "set_variables"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl7",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Import other .pen files as libraries"
+                    },
+                    "tool-name": {
+                      "content": "set_libraries"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "d-tl8",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "HTML + CSS or React + Tailwind for the page"
+                    },
+                    "tool-name": {
+                      "content": "export_code"
+                    }
+                  },
+                  "ref": "tool",
+                  "width": "fill_container"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "d-pen",
+          "name": ".pen files",
+          "fill": "$surface-2",
+          "gap": 64,
+          "layout": "horizontal",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "d-pen-text",
+              "name": "Text",
+              "gap": 28,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "d-pen-h",
+                  "descendants": {
+                    "sec-eyebrow": {
+                      "content": ".PEN FILES"
+                    },
+                    "sec-lede": {
+                      "content": "Documents are pencil.design .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev."
+                    },
+                    "sec-title": {
+                      "content": "Speaks .pen, keeps the rest"
+                    }
+                  },
+                  "ref": "sec-head",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "frame",
+                  "id": "d-pen-list",
+                  "name": "List",
+                  "gap": 14,
+                  "layout": "vertical",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "d-pen-k0",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Frames, groups, shapes, paths, text and Lucide icons"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-pen-k1",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Flex layout: gap, padding, fit and fill"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-pen-k2",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Variables, theme axes and per-frame themes"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-pen-k3",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Components, instances, overrides and slots"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-pen-k4",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Gradients, several fills and shadows, blurs"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "d-pen-k5",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Unknown properties kept as they are"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ref",
+              "id": "d-pen-code",
+              "descendants": {
+                "code-text": {
+                  "content": "{\n  \"type\": \"ref\",\n  \"ref\": \"btn-primary\",\n  \"descendants\": {\n    \"btn-primary-label\": {\n      \"content\": \"Get it for macOS\"\n    }\n  }\n}"
+                },
+                "code-title": {
+                  "content": "hero.pen"
+                }
+              },
+              "ref": "code",
+              "width": "fill_container"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "d-dl",
+          "name": "Download",
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "d-dl-band",
+              "name": "Band",
+              "alignItems": "center",
+              "cornerRadius": "$radius-lg",
+              "fill": "$accent-soft",
+              "gap": 48,
+              "layout": "horizontal",
+              "padding": 56,
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "d-dl-text",
+                  "name": "Text",
+                  "gap": 28,
+                  "layout": "vertical",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "d-dl-h",
+                      "descendants": {
+                        "sec-eyebrow": {
+                          "content": "DOWNLOAD"
+                        },
+                        "sec-lede": {
+                          "content": "Agentic Design is a prototype. Build it with one script, open it, and the onboarding connects your agents."
+                        },
+                        "sec-title": {
+                          "content": "Run it on your Mac"
+                        }
+                      },
+                      "ref": "sec-head",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "d-dl-ctas",
+                      "name": "Buttons",
+                      "gap": 12,
+                      "layout": "horizontal",
+                      "width": "fit_content",
+                      "children": [
+                        {
+                          "type": "ref",
+                          "id": "d-dl-b1",
+                          "descendants": {
+                            "btn-primary-icon": {
+                              "icon": "terminal"
+                            },
+                            "btn-primary-label": {
+                              "content": "Build from source"
+                            }
+                          },
+                          "ref": "btn-primary"
+                        },
+                        {
+                          "type": "ref",
+                          "id": "d-dl-b2",
+                          "descendants": {
+                            "btn-secondary-icon": {
+                              "icon": "book-open"
+                            },
+                            "btn-secondary-label": {
+                              "content": "Read the docs"
+                            }
+                          },
+                          "ref": "btn-secondary"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "d-dl-code",
+                  "descendants": {
+                    "code-text": {
+                      "content": "$ brew install odin\n$ ./build.sh\n$ ./build/agentic-design"
+                    },
+                    "code-title": {
+                      "content": "Terminal"
+                    }
+                  },
+                  "ref": "code",
+                  "width": "fill_container"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ref",
+          "id": "d-footer",
+          "ref": "footer",
+          "width": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "m-root",
+      "name": "Landing / Mobile",
+      "fill": "$bg",
+      "layout": "vertical",
+      "theme": {
+        "viewport": "mobile"
+      },
+      "width": "$page-width",
+      "x": 1540,
+      "y": 0,
+      "children": [
+        {
+          "type": "ref",
+          "id": "m-nav",
+          "descendants": {
+            "nav-links": {
+              "enabled": false
+            }
+          },
+          "ref": "nav",
+          "width": "fill_container"
+        },
+        {
+          "type": "frame",
+          "id": "m-hero",
+          "name": "Hero",
+          "alignItems": "center",
+          "gap": 28,
+          "layout": "vertical",
+          "padding": [
+            48,
+            "$section-pad-x",
+            0,
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "alignItems": "center",
+              "cornerRadius": 16,
+              "fill": "$accent-soft",
+              "justifyContent": "center",
+              "layout": "horizontal",
+              "padding": [
+                6,
+                12
+              ],
+              "stroke": "$accent-soft",
+              "strokeAlignment": "inner",
+              "strokeWidth": 1,
+              "id": "m-badge",
+              "name": "Badge",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "m-badge-label",
+                  "content": "Prototype · free and open · macOS",
+                  "fill": "$accent",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 12,
+                  "fontWeight": "500",
+                  "lineHeight": 1.333,
+                  "textGrowth": "auto"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "m-h1",
+              "content": "A design canvas your agent can see",
+              "fill": "$text",
+              "fontFamily": "$font-sans",
+              "fontSize": "$size-h1",
+              "fontWeight": "700",
+              "letterSpacing": -1,
+              "lineHeight": 1.04,
+              "textAlign": "center",
+              "textGrowth": "fixed-width",
+              "width": "fill_container"
+            },
+            {
+              "type": "text",
+              "id": "m-lede",
+              "content": "Agentic Design is a native macOS editor for .pen files. Your agent reads the document, draws into it and screenshots the result over MCP, while you watch and edit the same canvas live.",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": "$size-body",
+              "fontWeight": "400",
+              "lineHeight": 1.55,
+              "textAlign": "center",
+              "textGrowth": "fixed-width",
+              "width": "fill_container"
+            },
+            {
+              "type": "frame",
+              "id": "m-ctas",
+              "name": "Buttons",
+              "alignItems": "center",
+              "gap": 12,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "m-cta1",
+                  "descendants": {
+                    "btn-primary-label": {
+                      "content": "Get it for macOS"
+                    }
+                  },
+                  "justifyContent": "center",
+                  "ref": "btn-primary",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-cta2",
+                  "descendants": {
+                    "btn-secondary-icon": {
+                      "icon": "plug"
+                    },
+                    "btn-secondary-label": {
+                      "content": "Connect an agent"
+                    }
+                  },
+                  "justifyContent": "center",
+                  "ref": "btn-secondary",
+                  "width": "fill_container"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "m-hero-art",
+              "name": "Art",
+              "layout": "vertical",
+              "padding": [
+                32,
+                0,
+                0,
+                0
+              ],
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "m-m-mock",
+                  "name": "App window",
+                  "clip": true,
+                  "cornerRadius": 14,
+                  "effect": {
+                    "blur": 64,
+                    "color": "$shadow-window",
+                    "offset": {
+                      "x": 0,
+                      "y": 24
+                    },
+                    "shadowType": "outer",
+                    "type": "shadow"
+                  },
+                  "fill": "$surface",
+                  "height": 420,
+                  "layout": "none",
+                  "stroke": "$border",
+                  "strokeAlignment": "inner",
+                  "strokeWidth": 1,
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "m-m-bar",
+                      "fill": "$surface-2",
+                      "height": 40,
+                      "width": 350,
+                      "x": 0,
+                      "y": 0
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "m-m-d1",
+                      "fill": "$dot-red",
+                      "height": 10,
+                      "width": 10,
+                      "x": 16,
+                      "y": 15
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "m-m-d2",
+                      "fill": "$dot-yellow",
+                      "height": 10,
+                      "width": 10,
+                      "x": 32,
+                      "y": 15
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "m-m-d3",
+                      "fill": "$dot-green",
+                      "height": 10,
+                      "width": 10,
+                      "x": 48,
+                      "y": 15
+                    },
+                    {
+                      "type": "text",
+                      "id": "m-m-tab",
+                      "content": "agentic-design-site.pen",
+                      "fill": "$text-muted",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "x": 80,
+                      "y": 12
+                    },
+                    {
+                      "type": "frame",
+                      "id": "m-m-canvas",
+                      "name": "Canvas",
+                      "clip": true,
+                      "fill": "$canvas",
+                      "height": 380,
+                      "layout": "none",
+                      "width": 350,
+                      "x": 0,
+                      "y": 40,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "m-m-ab-label",
+                          "content": "Hero",
+                          "fill": "$text-muted",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 11,
+                          "fontWeight": "500",
+                          "x": 45,
+                          "y": 22
+                        },
+                        {
+                          "type": "frame",
+                          "id": "m-m-ab",
+                          "name": "Artboard",
+                          "cornerRadius": 4,
+                          "effect": {
+                            "blur": 24,
+                            "color": "$shadow-soft",
+                            "offset": {
+                              "x": 0,
+                              "y": 8
+                            },
+                            "shadowType": "outer",
+                            "type": "shadow"
+                          },
+                          "fill": "$bg",
+                          "height": 300,
+                          "layout": "none",
+                          "width": 260,
+                          "x": 45,
+                          "y": 40,
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-bar1",
+                              "cornerRadius": 5,
+                              "fill": "$accent",
+                              "height": 10,
+                              "width": 120,
+                              "x": 28,
+                              "y": 36
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-h1",
+                              "cornerRadius": 6,
+                              "fill": "$text",
+                              "height": 22,
+                              "width": 170,
+                              "x": 28,
+                              "y": 64
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-h2",
+                              "cornerRadius": 6,
+                              "fill": "$text",
+                              "height": 22,
+                              "width": 110,
+                              "x": 28,
+                              "y": 94
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-p1",
+                              "cornerRadius": 4,
+                              "fill": "$border",
+                              "height": 9,
+                              "width": 200,
+                              "x": 28,
+                              "y": 132
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-p2",
+                              "cornerRadius": 4,
+                              "fill": "$border",
+                              "height": 9,
+                              "width": 160,
+                              "x": 28,
+                              "y": 149
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-btn",
+                              "cornerRadius": 8,
+                              "fill": "$accent",
+                              "height": 36,
+                              "width": 120,
+                              "x": 28,
+                              "y": 180
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-btn2",
+                              "cornerRadius": 8,
+                              "fill": "$surface-2",
+                              "height": 36,
+                              "width": 100,
+                              "x": 158,
+                              "y": 180
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-img",
+                              "cornerRadius": 10,
+                              "fill": "$accent-soft",
+                              "height": 36,
+                              "width": 204,
+                              "x": 28,
+                              "y": 236
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-selc",
+                              "cornerRadius": 2,
+                              "height": 60,
+                              "stroke": "$agent-claude",
+                              "strokeWidth": 1.5,
+                              "width": 178,
+                              "x": 24,
+                              "y": 60
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "m-m-ab-selx",
+                              "cornerRadius": 12,
+                              "height": 44,
+                              "stroke": "$agent-codex",
+                              "strokeWidth": 1.5,
+                              "width": 212,
+                              "x": 24,
+                              "y": 232
+                            }
+                          ]
+                        },
+                        {
+                          "type": "ref",
+                          "id": "m-m-cur1",
+                          "descendants": {
+                            "cursor-name": {
+                              "content": "Claude"
+                            }
+                          },
+                          "ref": "cursor",
+                          "x": 235,
+                          "y": 140
+                        },
+                        {
+                          "type": "ref",
+                          "id": "m-m-cur2",
+                          "descendants": {
+                            "cursor-arrow": {
+                              "fill": "$agent-codex"
+                            },
+                            "cursor-name": {
+                              "content": "Codex"
+                            },
+                            "cursor-pill": {
+                              "fill": "$agent-codex"
+                            }
+                          },
+                          "ref": "cursor",
+                          "x": 250,
+                          "y": 290
+                        },
+                        {
+                          "type": "ref",
+                          "id": "m-m-cur3",
+                          "descendants": {
+                            "cursor-arrow": {
+                              "fill": "$agent-person"
+                            },
+                            "cursor-name": {
+                              "content": "You"
+                            },
+                            "cursor-pill": {
+                              "fill": "$agent-person"
+                            }
+                          },
+                          "ref": "cursor",
+                          "x": 8,
+                          "y": 240
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "m-what",
+          "name": "What it is",
+          "gap": "$section-gap",
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "ref",
+              "id": "m-what-h",
+              "descendants": {
+                "sec-eyebrow": {
+                  "content": "WHAT IT IS"
+                },
+                "sec-lede": {
+                  "content": "Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work."
+                },
+                "sec-title": {
+                  "content": "A canvas built for agents, and for you"
+                }
+              },
+              "ref": "sec-head",
+              "width": "fill_container"
+            },
+            {
+              "type": "frame",
+              "id": "m-cards",
+              "name": "Cards",
+              "gap": 24,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "m-card1",
+                  "descendants": {
+                    "feature-body": {
+                      "content": "Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive."
+                    },
+                    "feature-icon": {
+                      "icon": "app-window"
+                    },
+                    "feature-title": {
+                      "content": "Native on macOS"
+                    }
+                  },
+                  "ref": "feature",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-card2",
+                  "descendants": {
+                    "feature-body": {
+                      "content": "They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint."
+                    },
+                    "feature-icon": {
+                      "icon": "bot"
+                    },
+                    "feature-title": {
+                      "content": "Agents are first-class users"
+                    }
+                  },
+                  "ref": "feature",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-card3",
+                  "descendants": {
+                    "feature-body": {
+                      "content": "Your designs are plain .pen files on your disk, readable by people, agents and pencil.design."
+                    },
+                    "feature-icon": {
+                      "icon": "heart"
+                    },
+                    "feature-title": {
+                      "content": "Free and open"
+                    }
+                  },
+                  "ref": "feature",
+                  "width": "fill_container"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "m-agents",
+          "name": "Agents on the canvas",
+          "alignItems": "center",
+          "fill": "$surface-2",
+          "gap": 32,
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "m-ag-text",
+              "name": "Text",
+              "gap": 28,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "m-ag-h",
+                  "descendants": {
+                    "sec-eyebrow": {
+                      "content": "AGENTS ON THE CANVAS"
+                    },
+                    "sec-lede": {
+                      "content": "Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour."
+                    },
+                    "sec-title": {
+                      "content": "Watch them work"
+                    }
+                  },
+                  "ref": "sec-head",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "frame",
+                  "id": "m-ag-list",
+                  "name": "List",
+                  "gap": 14,
+                  "layout": "vertical",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "m-ag-k1",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Claude in clay, Codex in green, named from the MCP client"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-ag-k2",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Frames marked placeholder glow while an agent works on them"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-ag-k3",
+                      "descendants": {
+                        "check-text": {
+                          "content": "A cursor outside the view waits at the edge, pointing the way"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "m-ag-art",
+              "name": "Canvas art",
+              "clip": true,
+              "cornerRadius": "$radius-lg",
+              "fill": "$canvas",
+              "height": 300,
+              "layout": "none",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "m-ag-board",
+                  "name": "Board",
+                  "cornerRadius": 6,
+                  "effect": {
+                    "blur": 24,
+                    "color": "$glow-claude",
+                    "offset": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "shadowType": "outer",
+                    "spread": 2,
+                    "type": "shadow"
+                  },
+                  "fill": "$bg",
+                  "height": 200,
+                  "layout": "none",
+                  "stroke": "$agent-claude",
+                  "strokeWidth": 2,
+                  "width": 220,
+                  "x": 30,
+                  "y": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "m-ag-ph",
+                      "content": "placeholder",
+                      "fill": "$agent-claude",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 12,
+                      "fontWeight": "600",
+                      "x": 16,
+                      "y": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "m-ag-r1",
+                      "cornerRadius": 4,
+                      "fill": "$text",
+                      "height": 16,
+                      "width": 140,
+                      "x": 16,
+                      "y": 44
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "m-ag-r2",
+                      "cornerRadius": 4,
+                      "fill": "$border",
+                      "height": 8,
+                      "width": 180,
+                      "x": 16,
+                      "y": 72
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "m-ag-r3",
+                      "cornerRadius": 4,
+                      "fill": "$border",
+                      "height": 8,
+                      "width": 150,
+                      "x": 16,
+                      "y": 88
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "m-ag-r4",
+                      "cornerRadius": 8,
+                      "fill": "$accent-soft",
+                      "height": 68,
+                      "width": 188,
+                      "x": 16,
+                      "y": 116
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "m-ag-c1",
+                  "descendants": {
+                    "cursor-name": {
+                      "content": "Claude"
+                    }
+                  },
+                  "ref": "cursor",
+                  "x": 200,
+                  "y": 90
+                },
+                {
+                  "type": "ref",
+                  "id": "m-ag-c2",
+                  "descendants": {
+                    "cursor-arrow": {
+                      "fill": "$agent-codex"
+                    },
+                    "cursor-name": {
+                      "content": "Codex"
+                    },
+                    "cursor-pill": {
+                      "fill": "$agent-codex"
+                    }
+                  },
+                  "ref": "cursor",
+                  "x": 240,
+                  "y": 230
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "m-tools",
+          "name": "MCP tools",
+          "gap": 32,
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "m-tl-text",
+              "name": "Text",
+              "gap": 28,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "m-tl-h",
+                  "descendants": {
+                    "sec-eyebrow": {
+                      "content": "MCP TOOLS"
+                    },
+                    "sec-lede": {
+                      "content": "agentic-design mcp is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click."
+                    },
+                    "sec-title": {
+                      "content": "One command to connect"
+                    }
+                  },
+                  "ref": "sec-head",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl-code",
+                  "descendants": {
+                    "code-text": {
+                      "content": "$ claude mcp add --scope user \\\n  agentic-design -- \\\n  /path/to/agentic-design mcp"
+                    },
+                    "code-title": {
+                      "content": "Terminal"
+                    }
+                  },
+                  "ref": "code",
+                  "width": "fill_container"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "m-tl-list",
+              "name": "Tools",
+              "gap": 10,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "m-tl0",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "What the document holds and how its parts are named"
+                    },
+                    "tool-name": {
+                      "content": "get_guide"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl1",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Several edits as one undo step, all or nothing"
+                    },
+                    "tool-name": {
+                      "content": "batch"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl2",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": ".pen nodes in, ids out, with nested children"
+                    },
+                    "tool-name": {
+                      "content": "create_nodes"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl3",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Layers by name, type, text, ref or variable"
+                    },
+                    "tool-name": {
+                      "content": "find_nodes"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl4",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "A node, the canvas or the whole window, in any theme"
+                    },
+                    "tool-name": {
+                      "content": "screenshot"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl5",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Hard-coded colours, missing fonts, text that does not fit"
+                    },
+                    "tool-name": {
+                      "content": "lint"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl6",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Tokens, theme axes and the theme shown"
+                    },
+                    "tool-name": {
+                      "content": "set_variables"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl7",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "Import other .pen files as libraries"
+                    },
+                    "tool-name": {
+                      "content": "set_libraries"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "ref",
+                  "id": "m-tl8",
+                  "alignItems": "start",
+                  "descendants": {
+                    "tool-desc": {
+                      "content": "HTML + CSS or React + Tailwind for the page"
+                    },
+                    "tool-name": {
+                      "content": "export_code"
+                    }
+                  },
+                  "gap": 4,
+                  "layout": "vertical",
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "ref": "tool",
+                  "width": "fill_container"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "m-pen",
+          "name": ".pen files",
+          "fill": "$surface-2",
+          "gap": 32,
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "m-pen-text",
+              "name": "Text",
+              "gap": 28,
+              "layout": "vertical",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "m-pen-h",
+                  "descendants": {
+                    "sec-eyebrow": {
+                      "content": ".PEN FILES"
+                    },
+                    "sec-lede": {
+                      "content": "Documents are pencil.design .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev."
+                    },
+                    "sec-title": {
+                      "content": "Speaks .pen, keeps the rest"
+                    }
+                  },
+                  "ref": "sec-head",
+                  "width": "fill_container"
+                },
+                {
+                  "type": "frame",
+                  "id": "m-pen-list",
+                  "name": "List",
+                  "gap": 14,
+                  "layout": "vertical",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "m-pen-k0",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Frames, groups, shapes, paths, text and Lucide icons"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-pen-k1",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Flex layout: gap, padding, fit and fill"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-pen-k2",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Variables, theme axes and per-frame themes"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-pen-k3",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Components, instances, overrides and slots"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-pen-k4",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Gradients, several fills and shadows, blurs"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "ref",
+                      "id": "m-pen-k5",
+                      "descendants": {
+                        "check-text": {
+                          "content": "Unknown properties kept as they are"
+                        }
+                      },
+                      "ref": "check",
+                      "width": "fill_container"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "ref",
+              "id": "m-pen-code",
+              "descendants": {
+                "code-text": {
+                  "content": "{\n  \"type\": \"ref\",\n  \"ref\": \"btn-primary\",\n  \"descendants\": {\n    \"btn-primary-label\": {\n      \"content\": \"Get it for macOS\"\n    }\n  }\n}"
+                },
+                "code-title": {
+                  "content": "hero.pen"
+                }
+              },
+              "ref": "code",
+              "width": "fill_container"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "m-dl",
+          "name": "Download",
+          "layout": "vertical",
+          "padding": [
+            "$section-pad-y",
+            "$section-pad-x"
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "m-dl-band",
+              "name": "Band",
+              "alignItems": "center",
+              "cornerRadius": "$radius-lg",
+              "fill": "$accent-soft",
+              "gap": 28,
+              "layout": "vertical",
+              "padding": 24,
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "m-dl-text",
+                  "name": "Text",
+                  "gap": 28,
+                  "layout": "vertical",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "m-dl-h",
+                      "descendants": {
+                        "sec-eyebrow": {
+                          "content": "DOWNLOAD"
+                        },
+                        "sec-lede": {
+                          "content": "Agentic Design is a prototype. Build it with one script, open it, and the onboarding connects your agents."
+                        },
+                        "sec-title": {
+                          "content": "Run it on your Mac"
+                        }
+                      },
+                      "ref": "sec-head",
+                      "width": "fill_container"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "m-dl-ctas",
+                      "name": "Buttons",
+                      "gap": 12,
+                      "layout": "vertical",
+                      "width": "fill_container",
+                      "children": [
+                        {
+                          "type": "ref",
+                          "id": "m-dl-b1",
+                          "descendants": {
+                            "btn-primary-icon": {
+                              "icon": "terminal"
+                            },
+                            "btn-primary-label": {
+                              "content": "Build from source"
+                            }
+                          },
+                          "justifyContent": "center",
+                          "ref": "btn-primary",
+                          "width": "fill_container"
+                        },
+                        {
+                          "type": "ref",
+                          "id": "m-dl-b2",
+                          "descendants": {
+                            "btn-secondary-icon": {
+                              "icon": "book-open"
+                            },
+                            "btn-secondary-label": {
+                              "content": "Read the docs"
+                            }
+                          },
+                          "justifyContent": "center",
+                          "ref": "btn-secondary",
+                          "width": "fill_container"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "m-dl-code",
+                  "descendants": {
+                    "code-text": {
+                      "content": "$ brew install odin\n$ ./build.sh\n$ ./build/agentic-design"
+                    },
+                    "code-title": {
+                      "content": "Terminal"
+                    }
+                  },
+                  "ref": "code",
+                  "width": "fill_container"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ref",
+          "id": "m-footer",
+          "descendants": {
+            "footer-links": {
+              "enabled": false
+            }
+          },
+          "ref": "footer",
+          "width": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "btn-primary",
+      "name": "Button / Primary",
+      "alignItems": "center",
+      "cornerRadius": "$radius-sm",
+      "fill": "$accent",
+      "gap": 8,
+      "layout": "horizontal",
+      "padding": [
+        12,
+        20
+      ],
+      "reusable": true,
+      "x": 0,
+      "y": 0,
+      "children": [
+        {
+          "type": "icon",
+          "id": "btn-primary-icon",
+          "fill": "$on-accent",
+          "height": 18,
+          "icon": "download",
+          "library": "lucide",
+          "width": 18
+        },
+        {
+          "type": "text",
+          "id": "btn-primary-label",
+          "content": "Get it for macOS",
+          "fill": "$on-accent",
+          "fontFamily": "$font-sans",
+          "fontSize": 15,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "btn-secondary",
+      "name": "Button / Secondary",
+      "alignItems": "center",
+      "cornerRadius": "$radius-sm",
+      "fill": "$surface",
+      "gap": 8,
+      "layout": "horizontal",
+      "padding": [
+        12,
+        20
+      ],
+      "reusable": true,
+      "stroke": "$border",
+      "strokeAlignment": "inner",
+      "strokeWidth": 1,
+      "x": 240,
+      "y": 0,
+      "children": [
+        {
+          "type": "icon",
+          "id": "btn-secondary-icon",
+          "fill": "$text",
+          "height": 18,
+          "icon": "terminal",
+          "library": "lucide",
+          "width": 18
+        },
+        {
+          "type": "text",
+          "id": "btn-secondary-label",
+          "content": "Build from source",
+          "fill": "$text",
+          "fontFamily": "$font-sans",
+          "fontSize": 15,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "logo",
+      "name": "Logo",
+      "alignItems": "center",
+      "gap": 10,
+      "layout": "horizontal",
+      "reusable": true,
+      "x": 480,
+      "y": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "logo-mark",
+          "name": "Mark",
+          "cornerRadius": 8,
+          "fill": "$accent",
+          "height": 28,
+          "layout": "none",
+          "width": 28,
+          "children": [
+            {
+              "type": "path",
+              "id": "logo-pointer",
+              "name": "Pointer",
+              "fill": "$on-accent",
+              "geometry": "M2 1 L17 8.5 L10.2 10.6 L7.4 17.5 Z",
+              "height": 18,
+              "width": 17,
+              "x": 6,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "logo-word",
+          "content": "Agentic Design",
+          "fill": "$text",
+          "fontFamily": "$font-sans",
+          "fontSize": 17,
+          "fontWeight": "700",
+          "letterSpacing": -0.3
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "nav",
+      "name": "Nav",
+      "alignItems": "center",
+      "fill": "$bg",
+      "height": 72,
+      "justifyContent": "space_between",
+      "layout": "horizontal",
+      "padding": [
+        0,
+        "$section-pad-x"
+      ],
+      "reusable": true,
+      "stroke": "$border",
+      "strokeAlignment": "inner",
+      "strokeWidth": {
+        "bottom": 1
+      },
+      "width": 1440,
+      "x": 0,
+      "y": 120,
+      "children": [
+        {
+          "type": "ref",
+          "id": "nav-logo",
+          "ref": "logo"
+        },
+        {
+          "type": "frame",
+          "id": "nav-links",
+          "name": "Links",
+          "alignItems": "center",
+          "gap": 32,
+          "layout": "horizontal",
+          "children": [
+            {
+              "type": "text",
+              "id": "nav-l1",
+              "content": "What it is",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 15,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "nav-l2",
+              "content": "Agents",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 15,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "nav-l3",
+              "content": "MCP tools",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 15,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "nav-l4",
+              "content": ".pen files",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 15,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "nav-l5",
+              "content": "Download",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 15,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "nav-cta",
+          "name": "CTA",
+          "alignItems": "center",
+          "cornerRadius": "$radius-sm",
+          "gap": 8,
+          "layout": "horizontal",
+          "padding": [
+            8,
+            14
+          ],
+          "stroke": "$border",
+          "strokeAlignment": "inner",
+          "strokeWidth": 1,
+          "children": [
+            {
+              "type": "icon",
+              "id": "nav-cta-icon",
+              "fill": "$text",
+              "height": 16,
+              "icon": "code-xml",
+              "library": "lucide",
+              "width": 16
+            },
+            {
+              "type": "text",
+              "id": "nav-cta-label",
+              "content": "Source",
+              "fill": "$text",
+              "fontFamily": "$font-sans",
+              "fontSize": 14,
+              "fontWeight": "600"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "sec-head",
+      "name": "Section heading",
+      "gap": 14,
+      "layout": "vertical",
+      "reusable": true,
+      "width": 720,
+      "x": 0,
+      "y": 240,
+      "children": [
+        {
+          "type": "text",
+          "id": "sec-eyebrow",
+          "content": "WHAT IT IS",
+          "fill": "$accent",
+          "fontFamily": "$font-sans",
+          "fontSize": 13,
+          "fontWeight": "600",
+          "letterSpacing": 1.2
+        },
+        {
+          "type": "text",
+          "id": "sec-title",
+          "content": "A canvas built for agents",
+          "fill": "$text",
+          "fontFamily": "$font-sans",
+          "fontSize": "$size-h2",
+          "fontWeight": "700",
+          "letterSpacing": -1,
+          "lineHeight": 1.1,
+          "textGrowth": "fixed-width",
+          "width": "fill_container"
+        },
+        {
+          "type": "text",
+          "id": "sec-lede",
+          "content": "Lede text.",
+          "fill": "$text-muted",
+          "fontFamily": "$font-sans",
+          "fontSize": "$size-body",
+          "fontWeight": "400",
+          "lineHeight": 1.55,
+          "textGrowth": "fixed-width",
+          "width": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "feature",
+      "name": "Feature card",
+      "cornerRadius": "$radius-lg",
+      "fill": "$surface",
+      "gap": 16,
+      "layout": "vertical",
+      "padding": 28,
+      "reusable": true,
+      "stroke": "$border",
+      "strokeAlignment": "inner",
+      "strokeWidth": 1,
+      "width": 380,
+      "x": 800,
+      "y": 240,
+      "children": [
+        {
+          "type": "frame",
+          "id": "feature-tile",
+          "name": "Icon tile",
+          "alignItems": "center",
+          "cornerRadius": 10,
+          "fill": "$accent-soft",
+          "height": 44,
+          "justifyContent": "center",
+          "layout": "horizontal",
+          "width": 44,
+          "children": [
+            {
+              "type": "icon",
+              "id": "feature-icon",
+              "fill": "$accent",
+              "height": 22,
+              "icon": "app-window",
+              "library": "lucide",
+              "width": 22
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "feature-title",
+          "content": "Native on macOS",
+          "fill": "$text",
+          "fontFamily": "$font-sans",
+          "fontSize": "$size-h3",
+          "fontWeight": "600",
+          "textGrowth": "fixed-width",
+          "width": "fill_container"
+        },
+        {
+          "type": "text",
+          "id": "feature-body",
+          "content": "Body text.",
+          "fill": "$text-muted",
+          "fontFamily": "$font-sans",
+          "fontSize": 16,
+          "fontWeight": "400",
+          "lineHeight": 1.55,
+          "textGrowth": "fixed-width",
+          "width": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "tool",
+      "name": "Tool row",
+      "alignItems": "center",
+      "cornerRadius": "$radius-md",
+      "fill": "$surface",
+      "gap": 16,
+      "layout": "horizontal",
+      "padding": [
+        14,
+        18
+      ],
+      "reusable": true,
+      "stroke": "$border",
+      "strokeAlignment": "inner",
+      "strokeWidth": 1,
+      "width": 560,
+      "x": 1240,
+      "y": 240,
+      "children": [
+        {
+          "type": "text",
+          "id": "tool-name",
+          "content": "get_guide",
+          "fill": "$accent",
+          "fontFamily": "$font-mono",
+          "fontSize": 14,
+          "fontWeight": "600",
+          "textGrowth": "fixed-width",
+          "width": 150
+        },
+        {
+          "type": "text",
+          "id": "tool-desc",
+          "content": "What the document holds and how to work with it",
+          "fill": "$text-muted",
+          "fontFamily": "$font-sans",
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": 1.4,
+          "textGrowth": "fixed-width",
+          "width": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "check",
+      "name": "Check row",
+      "alignItems": "start",
+      "gap": 12,
+      "layout": "horizontal",
+      "reusable": true,
+      "width": 480,
+      "x": 1240,
+      "y": 340,
+      "children": [
+        {
+          "type": "frame",
+          "id": "check-dot",
+          "name": "Dot",
+          "alignItems": "center",
+          "cornerRadius": 11,
+          "fill": "$accent-soft",
+          "height": 22,
+          "justifyContent": "center",
+          "layout": "horizontal",
+          "width": 22,
+          "children": [
+            {
+              "type": "icon",
+              "id": "check-icon",
+              "fill": "$accent",
+              "height": 14,
+              "icon": "check",
+              "library": "lucide",
+              "width": 14
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "check-text",
+          "content": "Frames, groups, shapes, paths, text, icons",
+          "fill": "$text",
+          "fontFamily": "$font-sans",
+          "fontSize": 16,
+          "fontWeight": "400",
+          "lineHeight": 1.4,
+          "textGrowth": "fixed-width",
+          "width": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "code",
+      "name": "Code block",
+      "clip": true,
+      "cornerRadius": "$radius-md",
+      "fill": "$code-bg",
+      "layout": "vertical",
+      "reusable": true,
+      "width": 560,
+      "x": 0,
+      "y": 520,
+      "children": [
+        {
+          "type": "frame",
+          "id": "code-bar",
+          "name": "Bar",
+          "alignItems": "center",
+          "gap": 8,
+          "layout": "horizontal",
+          "padding": [
+            12,
+            16
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "ellipse",
+              "id": "code-d1",
+              "fill": "$dot-red",
+              "height": 10,
+              "width": 10
+            },
+            {
+              "type": "ellipse",
+              "id": "code-d2",
+              "fill": "$dot-yellow",
+              "height": 10,
+              "width": 10
+            },
+            {
+              "type": "ellipse",
+              "id": "code-d3",
+              "fill": "$dot-green",
+              "height": 10,
+              "width": 10
+            },
+            {
+              "type": "text",
+              "id": "code-title",
+              "content": "Terminal",
+              "fill": "$code-muted",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "code-body",
+          "name": "Body",
+          "layout": "vertical",
+          "padding": [
+            4,
+            20,
+            20,
+            20
+          ],
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "text",
+              "id": "code-text",
+              "content": "$ ./build.sh",
+              "fill": "$code-text",
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "400",
+              "lineHeight": 1.7,
+              "textGrowth": "fixed-width",
+              "width": "fill_container"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "cursor",
+      "name": "Agent cursor",
+      "height": 40,
+      "layout": "none",
+      "reusable": true,
+      "width": 76,
+      "x": 640,
+      "y": 520,
+      "children": [
+        {
+          "type": "path",
+          "id": "cursor-arrow",
+          "name": "Arrow",
+          "fill": "$agent-claude",
+          "geometry": "M2 1 L17 8.5 L10.2 10.6 L7.4 17.5 Z",
+          "height": 18,
+          "stroke": "$on-cursor",
+          "strokeWidth": 1.5,
+          "width": 17,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "type": "frame",
+          "id": "cursor-pill",
+          "name": "Label",
+          "cornerRadius": 10,
+          "fill": "$agent-claude",
+          "layout": "horizontal",
+          "padding": [
+            3,
+            8
+          ],
+          "x": 14,
+          "y": 18,
+          "children": [
+            {
+              "type": "text",
+              "id": "cursor-name",
+              "content": "Claude",
+              "fill": "$on-cursor",
+              "fontFamily": "$font-sans",
+              "fontSize": 12,
+              "fontWeight": "600"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "footer",
+      "name": "Footer",
+      "alignItems": "start",
+      "fill": "$surface-2",
+      "justifyContent": "space_between",
+      "layout": "horizontal",
+      "padding": [
+        48,
+        "$section-pad-x"
+      ],
+      "reusable": true,
+      "stroke": "$border",
+      "strokeAlignment": "inner",
+      "strokeWidth": {
+        "top": 1
+      },
+      "width": 1440,
+      "x": 0,
+      "y": 760,
+      "children": [
+        {
+          "type": "frame",
+          "id": "footer-brand",
+          "name": "Brand",
+          "gap": 12,
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "ref",
+              "id": "footer-logo",
+              "ref": "logo"
+            },
+            {
+              "type": "text",
+              "id": "footer-note",
+              "content": "Free and open. Written in Odin, drawn with NanoVG.",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 14,
+              "fontWeight": "400"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "footer-links",
+          "name": "Links",
+          "gap": 28,
+          "layout": "horizontal",
+          "children": [
+            {
+              "type": "text",
+              "id": "footer-l1",
+              "content": "Docs",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "footer-l2",
+              "content": "Dogfooding log",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "footer-l3",
+              "content": "pencil.design",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "footer-l4",
+              "content": "Odin",
+              "fill": "$text-muted",
+              "fontFamily": "$font-sans",
+              "fontSize": 14,
+              "fontWeight": "500"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 # browser's WebGPU), the page (web/) and Odin's JavaScript glue. Pass -debug for a debug
 # build. Serve the repository and open the page with a document on the same server:
 #   python3 -m http.server 8000
-#   http://localhost:8000/build/web/?file=/designs/sample-screens.pen
+#   http://localhost:8000/build/web/?file=/designs/sample/agentic-design.pen
 # Linking WebAssembly needs LLVM's wasm-ld (Homebrew: brew install lld).
 set -e
 cd "$(dirname "$0")/.."

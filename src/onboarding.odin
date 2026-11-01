@@ -378,13 +378,13 @@ ob_step_features :: proc(vg: ^nvg.Context, body: Rect) {
 }
 
 ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
-	y := ob_heading(vg, body, "Start designing", "Open a file, start from scratch, or explore the sample design system.")
+	y := ob_heading(vg, body, "Start designing", "Open a file, start from scratch, or explore the sample design.")
 	Card :: struct {
 		icon, title, text: string,
 	}
 	cards := [3]Card {
 		{"file-plus", "New file", "An empty .pen file next to the open one."},
-		{"layout-template", "Sample design system", "Sample Search: tokens, components, screens."},
+		{"layout-template", "Sample design", "This app's landing page: components, themes, desktop and mobile."},
 		{"folder-open", "Open a file", "Any .pen file, from pen.dev or elsewhere."},
 	}
 	gap: f32 = 24
@@ -403,14 +403,15 @@ ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
 				onboarding_finish()
 				new_document()
 			case 1:
-				path := fmt.tprintf("%s/sample-screens.pen", app.files_dir)
-				if !os.exists(path) do path = fmt.tprintf("%s/../designs/sample-screens.pen", os.dir(mcp_executable()))
-				// the installed app ships the sample in Resources (read-only, and replaced
-				// by updates): it opens a copy in Application Support
-				if res := bundle_resources(); res != "" && !pf.quiet do path = sample_install(fmt.tprintf("%s/samples", res))
-				// A test window works on a copy: the fuzzer clicked this card and edited the
-				// repository's own sample, which autosave then wrote (dogfooding Session 9).
+				// next to a build: designs/sample/; installed: the bundle's Resources/samples
+				path := fmt.tprintf("%s/../designs/sample/%s", os.dir(mcp_executable()), SAMPLE_FILE)
+				if res := bundle_resources(); res != "" do path = fmt.tprintf("%s/samples/%s", res, SAMPLE_FILE)
+				// the original is never edited: the installed app opens a copy in Application
+				// Support (the bundle is read-only and replaced by updates), a test window a
+				// throwaway copy (a fuzzer once clicked this card and autosaved the repository's
+				// own sample)
 				if pf.quiet do path = sample_copy(path)
+				else if bundle_resources() != "" do path = sample_install(os.dir(path))
 				onboarding_finish()
 				if !open_in_tab(path) do set_status("The sample is not next to this build")
 			case 2:
@@ -441,26 +442,35 @@ ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
 	}
 }
 
-// A throwaway copy of the sample and the library next to it, for quiet (test) windows.
+// The sample design: this app's own landing page (designs/sample/), with the OFL fonts it
+// declares in fonts/ next to it.
+SAMPLE_FILE :: "agentic-design.pen"
+
+// The sample folder copied, so it can be edited and autosaved without touching the
+// original: once into a throwaway folder for quiet (test) windows.
 sample_copy :: proc(path: string) -> string {
 	dir := fmt.tprintf("%s/agentic-design-sample-%d", os.temp_directory(context.temp_allocator) or_else "/tmp", posix.getpid())
-	_ = os.make_directory_all(dir)
-	src_dir := os.dir(path)
-	for name in ([?]string{"sample-screens.pen", "sample.lib.pen"}) {
-		dst := fmt.tprintf("%s/%s", dir, name)
-		if !os.exists(dst) do _ = os.copy_file(dst, fmt.tprintf("%s/%s", src_dir, name))
-	}
-	return fmt.tprintf("%s/sample-screens.pen", dir)
+	sample_copy_folder(os.dir(path), dir)
+	return fmt.tprintf("%s/%s", dir, SAMPLE_FILE)
 }
 
-// The bundled sample copied once into Application Support/Samples, where it can be
-// edited and autosaved.
+// The bundled sample copied once into Application Support/Samples (the bundle is
+// read-only and replaced by updates).
 sample_install :: proc(from: string) -> string {
 	dir := fmt.tprintf("%s/Samples", support_dir())
-	_ = os.make_directory_all(dir)
-	for name in ([?]string{"sample-screens.pen", "sample.lib.pen"}) {
-		dst := fmt.tprintf("%s/%s", dir, name)
-		if !os.exists(dst) do _ = os.copy_file(dst, fmt.tprintf("%s/%s", from, name))
+	sample_copy_folder(from, dir)
+	return fmt.tprintf("%s/%s", dir, SAMPLE_FILE)
+}
+
+// The sample and its fonts/ folder; files already there are kept (the user's edits).
+sample_copy_folder :: proc(from, to: string) {
+	_ = os.make_directory_all(fmt.tprintf("%s/fonts", to))
+	dst := fmt.tprintf("%s/%s", to, SAMPLE_FILE)
+	if !os.exists(dst) do _ = os.copy_file(dst, fmt.tprintf("%s/%s", from, SAMPLE_FILE))
+	fonts, err := os.read_all_directory_by_path(fmt.tprintf("%s/fonts", from), context.temp_allocator)
+	if err != nil do return
+	for fi in fonts {
+		d := fmt.tprintf("%s/fonts/%s", to, fi.name)
+		if !os.exists(d) do _ = os.copy_file(d, fi.fullpath)
 	}
-	return fmt.tprintf("%s/sample-screens.pen", dir)
 }
