@@ -44,6 +44,7 @@ server_start :: proc() {
 }
 
 server_thread :: proc() {
+	context.allocator = big_allocator()
 	ep, _ := net.parse_endpoint(fmt.tprintf("127.0.0.1:%d", server_port()))
 	sock, err := net.listen_tcp(ep)
 	if err != nil do return
@@ -56,7 +57,11 @@ server_thread :: proc() {
 }
 
 handle_client :: proc(client: net.TCP_Socket) {
+	context.allocator = big_allocator() // it frees responses the main thread made
 	defer net.close(client)
+	// a response goes out as two writes (the JSON, then "\n"); with Nagle's algorithm
+	// the second waited for the client's delayed ACK, about 170 ms on every request
+	_ = net.set_option(client, .TCP_Nodelay, true)
 	buf: [dynamic]u8
 	defer delete(buf)
 	tmp: [16 * 1024]u8
@@ -75,6 +80,7 @@ handle_client :: proc(client: net.TCP_Socket) {
 			append(&req_queue, req)
 			sync.mutex_unlock(&req_mutex)
 			platform_wake() // the main loop may be asleep (idle_wait)
+			sync.sema_post(&pace_wake) // or pacing frames (app.odin)
 			sync.sema_wait(&req.done)
 
 			ok := send_all(client, transmute([]u8)req.response) && send_all(client, {'\n'})

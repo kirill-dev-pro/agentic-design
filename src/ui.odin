@@ -1315,10 +1315,9 @@ export_render :: proc() {
 		set_status("Export failed")
 		return
 	}
-	home, _ := os.user_home_dir(context.temp_allocator)
 	name := file_title(app.file_path)
 	if target != nil do name = fmt.tprintf("%s - %s", name, node_label(target))
-	path := fmt.tprintf("%s/Downloads/%s.%s", home, name, EXPORT_EXTENSIONS[export_format])
+	path := fmt.tprintf("%s/%s.%s", downloads_dir(), name, EXPORT_EXTENSIONS[export_format])
 	if export_path != "" do path = export_path
 	if err := os.write_entire_file(path, png); err != nil {
 		set_status("Export failed: %v", err)

@@ -66,7 +66,7 @@ flip_rows :: proc(pixels: []u8, w, h: i32) {
 jpeg_encode :: proc(pixels: []u8, w, h: i32, quality: int) -> ([]u8, bool) {
 	out := make([dynamic]u8, context.temp_allocator)
 	write :: proc "c" (ctx: rawptr, data: rawptr, size: c.int) {
-		context = runtime.default_context()
+		context = app_context()
 		out := (^[dynamic]u8)(ctx)
 		append(out, ..([^]u8)(data)[:size])
 	}

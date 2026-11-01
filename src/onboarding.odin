@@ -4,6 +4,7 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:os"
 import "core:strings"
+import "core:sys/posix"
 import "vendor:glfw"
 import nvg "nanovg"
 
@@ -403,6 +404,9 @@ ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
 			case 1:
 				path := fmt.tprintf("%s/sample-screens.pen", app.files_dir)
 				if !os.exists(path) do path = fmt.tprintf("%s/../designs/sample-screens.pen", os.dir(mcp_executable()))
+				// A test window works on a copy: the fuzzer clicked this card and edited the
+				// repository's own sample, which autosave then wrote (dogfooding Session 9).
+				if pf.quiet do path = sample_copy(path)
 				onboarding_finish()
 				if !open_in_tab(path) do set_status("The sample is not next to this build")
 			case 2:
@@ -431,4 +435,16 @@ ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
 			return
 		}
 	}
+}
+
+// A throwaway copy of the sample and the library next to it, for quiet (test) windows.
+sample_copy :: proc(path: string) -> string {
+	dir := fmt.tprintf("%s/agentic-design-sample-%d", os.temp_directory(context.temp_allocator) or_else "/tmp", posix.getpid())
+	_ = os.make_directory_all(dir)
+	src_dir := os.dir(path)
+	for name in ([?]string{"sample-screens.pen", "sample.lib.pen"}) {
+		dst := fmt.tprintf("%s/%s", dir, name)
+		if !os.exists(dst) do _ = os.copy_file(dst, fmt.tprintf("%s/%s", src_dir, name))
+	}
+	return fmt.tprintf("%s/sample-screens.pen", dir)
 }

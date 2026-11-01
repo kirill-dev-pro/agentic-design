@@ -13,7 +13,20 @@ import nvg "nanovg"
 LINE_HEIGHT :: 1.2
 MAX_DEPTH :: 32
 
+// Layout depends on the document (its version moves with every change to a layer, the
+// header or the tree) and on the fonts at hand. Nothing else changes boxes, so a frame
+// with neither lays nothing out again: the main loop asks up to three times a frame.
+layout_epoch: int // bumped when fonts change, or when code asks for a layout outright
+
+layout_invalidate :: proc() {
+	layout_epoch += 1
+}
+
 layout_document :: proc(doc: ^Document) {
+	if doc.layout_version == doc.version && doc.layout_epoch == layout_epoch && doc.layout_done do return
+	defer {
+		doc.layout_version, doc.layout_epoch, doc.layout_done = doc.version, layout_epoch, true
+	}
 	ghosts_sync(doc)
 	for uid in children_of(doc, 0) {
 		n, _ := doc_find_uid(doc, uid)

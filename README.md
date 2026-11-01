@@ -136,15 +136,16 @@ components named Button, Card, Input, …, `Page.tsx` for the current page).
 
 `get_guide` (what the document holds and how its parts are named; the place to start),
 `batch` (several edits as one undo step, all or nothing), `find_nodes`, `rename_references`
-(repoint variables and refs; with `library`, move a file onto an imported library), `lint` (hard-coded
+(repoint variables and refs; with `library`, move a file onto an imported library), `lint` (`metadata.lintIgnore` on a layer or `ignore` per call skips rules; hard-coded
 colours, missing fonts, text that does not fit, layers cut off, broken refs, off-pixel values),
 `get_document` (with `ids` for subtrees and `depth` for big files), `get_selection`,
 `get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
-(`.pen` nodes, nested `children`), `update_nodes`, `delete_nodes`, `reorder`, `select`,
+(`.pen` nodes, nested `children`; an instance as `parent_id` takes slot content; an image paint's `url` may be any local file, copied into `images/`), `update_nodes`, `delete_nodes`, `reorder`, `select`,
 `zoom_to_fit`, `screenshot` (a node, the canvas, or the whole window with `view: true`),
-`undo`, `redo`, `save`, `open`, `set_variables` (variables, theme axes and the shown theme),
-`set_pages`, `set_libraries` (import other .pen files as libraries), `export_code` (`html` or
-`react`). `screenshot` also writes JPEG, WEBP or PDF files (`format`, `path`) and renders
+`undo`, `redo`, `save`, `open` (`create: true` starts a new file), `add_fonts` (font files or installed families into the document), `set_variables` (variables, theme axes and the shown theme),
+`set_pages`, `set_libraries` (import other .pen files as libraries; they are re-read when their files
+change), `export_code` (`html` or `react`; `ids` for one frame; a `viewport` theme axis
+becomes media queries). `screenshot` also writes JPEG, WEBP or PDF files (`format`, `path`) and renders
 in a given theme (`theme`) whatever the window shows.
 
 The first time the app opens, an onboarding walks through the app and connects agents.

@@ -8,6 +8,7 @@ import "core:math/rand"
 import "core:mem"
 import "core:strconv"
 import "core:strings"
+import "core:sys/posix"
 import "vendor:glfw"
 import nvg "nanovg"
 
@@ -134,7 +135,7 @@ presence_cursor :: proc(key, name: string, color: nvg.Color, person: bool) -> ^P
 	label := name
 	// a second session of the same agent is told apart
 	same := 1
-	for c in cursors do if strings.has_prefix(c.name, name) do same += 1
+	for c in cursors do if cursor_name_is(c.name, name) do same += 1
 	if same > 1 do label = fmt.tprintf("%s %d", name, same)
 	append(&cursors, Peer{key = strings.clone(key), name = strings.clone(label), color = color, person = person, decay = PERSON_DECAY if person else CURSOR_DECAY, phase = rand.float32() * 2 * math.PI})
 	return &cursors[len(cursors) - 1]
@@ -142,7 +143,40 @@ presence_cursor :: proc(key, name: string, color: nvg.Color, person: bool) -> ^P
 
 agent_cursor :: proc(agent: Agent_Info) -> ^Peer {
 	name, color := agent_look(agent.client, agent.title)
-	return presence_cursor(fmt.tprintf("agent:%s", agent.id), name, color, false)
+	key := fmt.tprintf("agent:%s", agent.id)
+	// The MCP proxy names its agent by its process id. An agent that starts a proxy per
+	// call (a script, a CLI) would get a new cursor each time: a crowd of "Claude 36",
+	// "Claude 37". A new proxy takes over the cursor of an earlier one from the same client
+	// whose process has ended; proxies running side by side keep cursors of their own.
+	has := false
+	for &c in cursors do if c.key == key do has = true
+	if !has {
+		for &c in cursors {
+			if c.person || !strings.has_prefix(c.key, "agent:") || !cursor_name_is(c.name, name) do continue
+			if !agent_process_gone(c.key[len("agent:"):]) do continue
+			delete(c.key)
+			c.key = strings.clone(key)
+			break
+		}
+	}
+	return presence_cursor(key, name, color, false)
+}
+
+// "Claude" or "Claude 2" for the name "Claude".
+cursor_name_is :: proc(label, name: string) -> bool {
+	if label == name do return true
+	if !strings.has_prefix(label, name) || len(label) < len(name) + 2 || label[len(name)] != ' ' do return false
+	_, ok := strconv.parse_int(label[len(name) + 1:])
+	return ok
+}
+
+// A numeric agent id is the MCP proxy's process id: true once that process has ended.
+// Other ids (tests, other front ends) never count as ended.
+agent_process_gone :: proc(id: string) -> bool {
+	pid, ok := strconv.parse_int(id)
+	if !ok || pid <= 0 do return false
+	if posix.kill(posix.pid_t(pid), posix.Signal(0)) == .OK do return false
+	return posix.errno() == .ESRCH
 }
 
 cursor_set_file :: proc(c: ^Peer) {

@@ -129,7 +129,7 @@ api_find_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	name := lower(string(params["name"].(json.String) or_else ""))
 	kind := lower(string(params["type"].(json.String) or_else ""))
 	text := lower(string(params["text"].(json.String) or_else ""))
-	ref := string(params["ref"].(json.String) or_else "")
+	ref := string(params["ref"].(json.String) or_else (params["component"].(json.String) or_else ""))
 	variable := strings.trim_prefix(string(params["variable"].(json.String) or_else ""), "$")
 	limit := int(params["limit"].(json.Float) or_else 100)
 	within := 0
@@ -138,7 +138,7 @@ api_find_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		if n == nil do return "within: node not found"
 		within = n.uid
 	}
-	if name == "" && kind == "" && text == "" && ref == "" && variable == "" && within == 0 do return "pass name, type, text, ref, variable or within"
+	if name == "" && kind == "" && text == "" && ref == "" && variable == "" && within == 0 do return "pass name, type, text, ref (or component), variable or within"
 	token := fmt.tprintf(`"$%s"`, variable)
 	strings.write_string(b, `{"nodes":[`)
 	total := 0
@@ -172,6 +172,43 @@ api_find_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			json_write_string(b, n.content if len(n.content) <= 80 else fmt.tprintf("%s…", n.content[:80]))
 		}
 		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s]}}`, num_text(n.x), num_text(n.y), num_text(n.w), num_text(n.h))
+	}
+	// Text shown inside instances (the component's text or an override of it) lives in
+	// the ghost copies. Report it as the instance plus the path to override it with
+	// ("descendants": {"<path>": {"content": ...}}).
+	if text != "" && ref == "" && variable == "" {
+		ghosts_sync(&app.doc)
+		for gi := 0; gi < len(app.doc.ghosts); gi += 1 {
+			g := &app.doc.ghosts[gi]
+			if g.kind != .Text || !strings.contains(lower(g.content), text) do continue
+			if kind != "" && lower(g.type_name) != kind do continue
+			if name != "" && !strings.contains(lower(node_label(g)), name) do continue
+			// walk out through nested instances to the real one, collecting the path
+			path := make([dynamic]string, context.temp_allocator)
+			append(&path, g.ghost_of)
+			inst, _ := doc_find_uid(&app.doc, g.ghost_inst)
+			for inst != nil && inst.ghost {
+				append(&path, inst.ghost_of)
+				inst, _ = doc_find_uid(&app.doc, inst.ghost_inst)
+			}
+			if inst == nil || inst.imported do continue
+			if within != 0 && inst.uid != within && !is_descendant(&app.doc, inst.uid, within) do continue
+			total += 1
+			if total > limit do continue
+			for i in 0 ..< len(path) / 2 do path[i], path[len(path) - 1 - i] = path[len(path) - 1 - i], path[i]
+			if total > 1 do strings.write_byte(b, ',')
+			strings.write_string(b, `{"id":`)
+			json_write_string(b, inst.id)
+			strings.write_string(b, `,"type":"text","in_instance":true,"descendant":`)
+			json_write_string(b, strings.join(path[:], "/", context.temp_allocator))
+			strings.write_string(b, `,"name":`)
+			json_write_string(b, node_label(g))
+			strings.write_string(b, `,"instance_name":`)
+			json_write_string(b, node_label(inst))
+			strings.write_string(b, `,"content":`)
+			json_write_string(b, g.content if len(g.content) <= 80 else fmt.tprintf("%s…", g.content[:80]))
+			fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s]}}`, num_text(g.x), num_text(g.y), num_text(g.w), num_text(g.h))
+		}
 	}
 	fmt.sbprintf(b, `],"total":%d}}`, total)
 	return ""
@@ -211,9 +248,29 @@ api_get_guide :: proc(b: ^strings.Builder) {
 		}
 		groups := make(map[string]Group, 16, context.temp_allocator)
 		keys := make([dynamic]string, context.temp_allocator)
+		// libraries' variables ("alias:name") are summarised after the document's own
+		lib_groups := make(map[string]Group, 16, context.temp_allocator)
+		lib_keys := make([dynamic]string, context.temp_allocator)
+		own := 0
+		kinds := [Var_Kind]string{.Color = "color", .Number = "number", .String = "string", .Bool = "boolean"}
 		for name in doc.var_defs {
 			v, _ := var_get(doc, name)
-			kinds := [Var_Kind]string{.Color = "color", .Number = "number", .String = "string", .Bool = "boolean"}
+			if colon := strings.index_byte(name, ':'); colon > 0 {
+				rest := name[colon + 1:]
+				prefix := rest
+				if i := strings.index_any(rest, "-/."); i > 0 do prefix = rest[:i]
+				key := fmt.tprintf("%s %s", name[:colon], kinds[v.kind])
+				gr, has := lib_groups[key]
+				if !has {
+					gr = Group{kind = kinds[v.kind], names = make([dynamic]string, context.temp_allocator)}
+					append(&lib_keys, key)
+				}
+				gr.count += 1
+				if !slice.contains(gr.names[:], prefix) do append(&gr.names, prefix)
+				lib_groups[key] = gr
+				continue
+			}
+			own += 1
 			prefix := name
 			if i := strings.index_any(name, "-/."); i > 0 do prefix = name[:i]
 			key := fmt.tprintf("%s %s", kinds[v.kind], prefix)
@@ -227,12 +284,24 @@ api_get_guide :: proc(b: ^strings.Builder) {
 			groups[key] = gr
 		}
 		slice.sort(keys[:])
-		fmt.sbprintf(&g, "\n## Variables (%d)\nUse them as \"$name\" in any property.\n", len(doc.var_defs))
-		for k in keys {
-			gr := groups[k]
-			slice.sort(gr.names[:])
-			shown := gr.names[:min(len(gr.names), 12)]
-			fmt.sbprintf(&g, "- %s (%d): %s%s\n", k, gr.count, strings.join(shown, ", ", context.temp_allocator), ", …" if len(gr.names) > len(shown) else "")
+		if own > 0 {
+			fmt.sbprintf(&g, "\n## Variables (%d)\nUse them as \"$name\" in any property.\n", own)
+			for k in keys {
+				gr := groups[k]
+				slice.sort(gr.names[:])
+				shown := gr.names[:min(len(gr.names), 12)]
+				fmt.sbprintf(&g, "- %s (%d): %s%s\n", k, gr.count, strings.join(shown, ", ", context.temp_allocator), ", …" if len(gr.names) > len(shown) else "")
+			}
+		}
+		if len(lib_keys) > 0 {
+			slice.sort(lib_keys[:])
+			fmt.sbprintf(&g, "\n## Library variables (%d)\nUse them as \"$alias:name\"; get_variables lists them all. Name prefixes:\n", len(doc.var_defs) - own)
+			for k in lib_keys {
+				gr := lib_groups[k]
+				slice.sort(gr.names[:])
+				shown := gr.names[:min(len(gr.names), 16)]
+				fmt.sbprintf(&g, "- %s (%d): %s%s\n", k, gr.count, strings.join(shown, ", ", context.temp_allocator), ", …" if len(gr.names) > len(shown) else "")
+			}
 		}
 	}
 
@@ -299,17 +368,44 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	}
 	palette := make([dynamic]Named, context.temp_allocator)
 	for name, v in doc.vars do if v.kind == .Color do append(&palette, Named{name, v.color})
-	closest :: proc(palette: []Named, c: Color) -> (string, int) {
-		best, dist := "", 1 << 30
+	closest :: proc(doc: ^Document, palette: []Named, c: Color) -> (string, int) {
+		// a variable that keeps its value in every theme wins over one that only has
+		// this value in the theme shown now; then the document's own over a library's
+		best, dist, best_fixed, best_own := "", 1 << 30, false, false
 		for p in palette {
 			d := 0
 			for k in 0 ..< 4 do d += abs(int(p.color[k]) - int(c[k]))
-			if d < dist || (d == dist && p.name < best) do best, dist = p.name, d
+			fixed := var_constant(doc, p.name)
+			own := !strings.contains(p.name, ":")
+			better := d < dist
+			if d == dist {
+				if fixed != best_fixed do better = fixed
+				else if own != best_own do better = own
+				else do better = p.name < best
+			}
+			if better do best, dist, best_fixed, best_own = p.name, d, fixed, own
 		}
 		return best, dist
 	}
+	// "light" for a variable whose value is `c` only under some themes
+	themes_with :: proc(doc: ^Document, name: string, c: Color) -> string {
+		parts := make([dynamic]string, context.temp_allocator)
+		for e in doc.var_defs[name] {
+			if e.ref != "" || e.var.kind != .Color || e.var.color != c do continue
+			if len(e.theme) == 0 do append(&parts, "by default")
+			for t in e.theme do append(&parts, fmt.tprintf("in %s %s", t[0], t[1]))
+		}
+		return strings.join(parts[:], ", ", context.temp_allocator) if len(parts) > 0 else "in the theme shown now"
+	}
 	count := 0
+	lint_skip_rules = nil
+	if arr, ok := params["ignore"].(json.Array); ok {
+		rules := make([dynamic]string, context.temp_allocator)
+		for v in arr do append(&rules, string(v.(json.String) or_else ""))
+		lint_skip_rules = rules[:]
+	}
 	issue :: proc(b: ^strings.Builder, count: ^int, limit: int, n: ^Node, rule, msg: string) {
+		if lint_ignored(n, rule) do return
 		count^ += 1
 		if count^ > limit do return
 		if count^ > 1 do strings.write_byte(b, ',')
@@ -340,8 +436,9 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 				if !strings.has_prefix(raw, "#") do continue
 				c, ok := parse_color(raw)
 				if !ok do continue
-				name, d := closest(palette[:], c)
-				if d == 0 do issue(b, &count, limit, &n, "hardcoded-color", fmt.tprintf("%s %s is the value of $%s; use the variable", key, raw, name))
+				name, d := closest(doc, palette[:], c)
+				if d == 0 && !var_constant(doc, name) do issue(b, &count, limit, &n, "hardcoded-color", fmt.tprintf("%s %s is not a variable; $%s has this value only %s and changes with the theme, so use it only if this colour should follow the theme", key, raw, name, themes_with(doc, name, c)))
+				else if d == 0 do issue(b, &count, limit, &n, "hardcoded-color", fmt.tprintf("%s %s is the value of $%s; use the variable", key, raw, name))
 				else if d <= 24 do issue(b, &count, limit, &n, "hardcoded-color", fmt.tprintf("%s %s is not a variable; $%s is close", key, raw, name))
 				else do issue(b, &count, limit, &n, "hardcoded-color", fmt.tprintf("%s %s is not a variable", key, raw))
 			}
@@ -362,6 +459,8 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 				need := f32(len(text_lines(&n, n.w))) * n.font_size * line_height_of(&n)
 				if need > n.h + 0.5 do issue(b, &count, limit, &n, "text-overflow", fmt.tprintf("the text needs %s px of height, the box has %s", num_text(need), num_text(n.h)))
 			}
+		case .Icon:
+			if msg := icon_problem(&n); msg != "" do issue(b, &count, limit, &n, "unknown-icon", msg)
 		case .Ref:
 			if c, _ := doc_find(doc, n.ref); c == nil do issue(b, &count, limit, &n, "broken-ref", fmt.tprintf("component \"%s\" does not exist", n.ref))
 		case .Frame:
@@ -400,12 +499,57 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		if n.height.mode == .Fixed && n.height.has_value && frac(n.height.value) && n.kind != .Path do append(&off, fmt.tprintf("height %s", num_text(n.height.value)))
 		if len(off) > 0 do issue(b, &count, limit, &n, "fractional", fmt.tprintf("not on whole pixels: %s", strings.join(off[:], ", ", context.temp_allocator)))
 	}
+	// text drawn inside instances (a component's or a library's text, or an override) uses
+	// fonts too; the issue points at the instance
+	ghosts_sync(doc)
+	for gi := 0; gi < len(doc.ghosts); gi += 1 {
+		gt := &doc.ghosts[gi]
+		if gt.kind != .Text || !gt.enabled || gt.font_family == "" || font_source(gt.font_family) == .Document do continue
+		inst, _ := doc_find_uid(doc, gt.ghost_inst)
+		for inst != nil && inst.ghost do inst, _ = doc_find_uid(doc, inst.ghost_inst)
+		if inst == nil || !in_scope(doc, inst, scope) do continue
+		m, seen := missing[gt.font_family]
+		if !seen {
+			m.first = inst
+			append(&missing_order, gt.font_family)
+		}
+		m.count += 1
+		missing[gt.font_family] = m
+	}
 	for fam in missing_order {
 		m := missing[fam]
-		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" (used by %d text layers) %s", fam, m.count, font_state(fam)))
+		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" (used by %d text layers, those inside instances included) %s", fam, m.count, font_state(fam)))
 	}
 	fmt.sbprintf(b, `],"count":%d}}`, count)
 	return ""
+}
+
+lint_skip_rules: []string // rules a lint call was told to ignore
+
+// Whether a rule is switched off for a layer: by the call's `ignore`, or by
+// `"metadata": {"lintIgnore": true | ["rule", ...]}` on the layer or an ancestor
+// (artwork, a PDF preview, a brand colour). metadata is a .pen field, kept by pen.dev.
+lint_ignored :: proc(n: ^Node, rule: string) -> bool {
+	if slice.contains(lint_skip_rules, rule) do return true
+	cur := n
+	for depth := 0; cur != nil && depth < MAX_DEPTH; depth += 1 {
+		if i := prop_index(cur, "metadata"); i >= 0 && strings.contains(cur.props[i].raw, "lintIgnore") {
+			if v, err := json.parse_string(cur.props[i].raw, .JSON5, false, context.temp_allocator); err == nil {
+				if obj, ok := v.(json.Object); ok {
+					#partial switch x in obj["lintIgnore"] {
+					case json.Boolean:
+						if x do return true
+					case json.String:
+						if string(x) == rule do return true
+					case json.Array:
+						for r in x do if string(r.(json.String) or_else "") == rule do return true
+					}
+				}
+			}
+		}
+		cur, _ = doc_find_uid(&app.doc, cur.parent)
+	}
+	return false
 }
 
 // ---------------------------------------------------------------- rename_references
@@ -507,3 +651,26 @@ api_rename_references :: proc(b: ^strings.Builder, params: json.Object) -> strin
 	return ""
 }
 
+
+// Whether a variable has the same value under every theme (no themed entries that
+// differ, references followed).
+var_constant :: proc(doc: ^Document, name: string, depth := 0) -> bool {
+	entries, has := doc.var_defs[name]
+	if !has || len(entries) == 0 || depth > 8 do return true
+	first: Var
+	have := false
+	for e in entries {
+		v := e.var
+		if e.ref != "" {
+			ref := strings.trim_prefix(e.ref, "$")
+			if !var_constant(doc, ref, depth + 1) do return false
+			v, _ = var_get(doc, ref)
+		}
+		if !have {
+			first, have = v, true
+			continue
+		}
+		if v.kind != first.kind || v.color != first.color || v.number != first.number || v.str != first.str || v.b != first.b do return false
+	}
+	return true
+}

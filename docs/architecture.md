@@ -210,7 +210,8 @@ align, clipboard and z-order.
 - **Undo** (`push_undo`). Each step stores a snapshot of the whole node array, capped at 200
   steps.
 - **Recent files** are kept in `~/Library/Application Support/Agentic Design/recents.json`.
-  Thumbnails are rendered from the saved file into `thumbs/` next to it.
+  Thumbnails are rendered into `thumbs/` next to it: the open document's from memory
+  right after it is saved, other files from the saved file (docs/performance.md).
 - **Images** dropped or placed on the canvas are copied into `images/` next to the document
   and referenced as `./images/<name>`.
 - **The clipboard** holds a JSON array of `.pen` nodes, also put on the system clipboard as

@@ -124,12 +124,7 @@ close_tab :: proc(i: int) {
 		app.tab = -1
 	}
 	t := &app.tabs[i]
-	doc_clear(&t.doc)
-	pages_free(&t.doc.pages)
-	delete(t.doc.pages)
-	delete(t.doc.nodes)
-	delete(t.doc.header)
-	delete(t.doc.vars)
+	doc_destroy(&t.doc)
 	delete(t.path)
 	delete(t.sel)
 	for s in t.undo_stack do free_snapshot(s)
@@ -286,40 +281,54 @@ thumbs_render :: proc() {
 	}
 	_ = os.make_directory_all(fmt.tprintf("%s/thumbs", support_dir()))
 	for path in paths {
-		data, err := os.read_entire_file(path, context.temp_allocator)
-		if err != nil do continue
-		tmp: Document
-		if !doc_load(&tmp, string(data)) do continue
-		saved := app.doc
-		saved_page := app.page
-		app.doc = tmp
-		doc_load_imports(&app.doc, path)
-		app.page = 0
-		layout_document(&app.doc)
-		pages_sync()
-		if r, ok := bounds_of(all_uids(true)); ok {
-			pad: f32 = 24
-			r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
-			scale := min(560 / r[2], 360 / r[3], 2)
-			if pixels, w, h, rok := render_region(r, scale, nil, {0.157, 0.157, 0.157, 1}); rok {
-				if png, pok := png_encode(pixels, w, h); pok do _ = os.write_entire_file(thumb_path(path), png)
-			}
+		if path == app.file_path && app.tab >= 0 && !app.dirty {
+			// the open document was just saved: it is what the file holds, already parsed,
+			// with its libraries and laid out. Reading the file and its libraries back cost
+			// 30-100 ms on the main thread after every autosave (docs/performance.md).
+			// Drawn as a fresh copy would be: page 0, without the libraries' layers.
+			page0 := make(map[int]bool, 16, context.temp_allocator)
+			multi := len(doc_pages(&app.doc)) > 1
+			for &n in app.doc.nodes do if n.parent == 0 && (n.imported || (multi && page_of_top(&app.doc, n.id) != 0)) do page0[n.uid] = true
+			shown := app.page_hidden
+			app.page_hidden = page0
+			thumb_write(path)
+			app.page_hidden = shown
+		} else {
+			data, err := os.read_entire_file(path, context.temp_allocator)
+			if err != nil do continue
+			tmp: Document
+			if !doc_load(&tmp, string(data)) do continue
+			saved := app.doc
+			saved_page := app.page
+			app.doc = tmp
+			doc_load_imports(&app.doc, path)
+			app.page = 0
+			layout_document(&app.doc)
+			pages_sync()
+			thumb_write(path)
+			// the copy grew while it was shown (imports, layout, pages): free that one, not
+			// the stale struct it was copied from
+			tmp = app.doc
+			app.doc = saved
+			app.page = saved_page
+			doc_destroy(&tmp)
 		}
-		// the copy grew while it was shown (imports, layout, pages): free that one, not the
-		// stale struct it was copied from
-		tmp = app.doc
-		app.doc = saved
-		app.page = saved_page
-		doc_clear(&tmp)
-		pages_free(&tmp.pages)
-		delete(tmp.pages)
-		delete(tmp.nodes)
-		delete(tmp.header)
-		delete(tmp.vars)
 		if img, has := thumbs[path]; has {
 			if img > 0 do nvg.DeleteImage(app.vg, img)
 			delete_key(&thumbs, path)
 		}
+	}
+}
+
+// Draws the shown page of app.doc, all of it, small, into the thumbnail file of `path`.
+thumb_write :: proc(path: string) {
+	r, ok := bounds_of(all_uids(true))
+	if !ok do return
+	pad: f32 = 24
+	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
+	scale := min(560 / r[2], 360 / r[3], 2)
+	if pixels, w, h, rok := render_region(r, scale, nil, {0.157, 0.157, 0.157, 1}); rok {
+		if png, pok := png_encode(pixels, w, h); pok do _ = os.write_entire_file(thumb_path(path), png)
 	}
 }
 

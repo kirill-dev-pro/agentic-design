@@ -33,7 +33,7 @@ install_exit_handlers :: proc() {
 		exit_signal = sig
 	}
 	crash :: proc "c" (sig: posix.Signal) {
-		context = runtime.default_context()
+		context = app_context()
 		app_log("crash: %v (%s)", sig, app.file_path)
 		posix.signal(sig, transmute(proc "c" (posix.Signal))posix.SIG_DFL)
 		posix.raise(sig)

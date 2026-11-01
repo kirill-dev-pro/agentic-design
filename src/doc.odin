@@ -2,8 +2,10 @@ package agentic_design
 
 import "core:encoding/json"
 import "core:fmt"
+import "core:hash"
 import "core:math"
 import "core:math/rand"
+import "core:mem"
 import "core:strconv"
 import "core:strings"
 
@@ -304,6 +306,8 @@ Document :: struct {
 	ghost_root:    map[int]int, // instance uid -> ghost copy of the component root
 	ghost_slot:    map[int]int, // instance uid -> ghost frame that takes the instance's children
 	ghost_version: int,
+	layout_version, layout_epoch: int, // what the boxes were laid out for (layout_document)
+	layout_done:   bool,
 	pages:         [dynamic]Page, // parsed header "pages"
 	pages_version: int,
 	// themes
@@ -320,7 +324,8 @@ Document :: struct {
 Override :: struct {
 	id:            string,
 	replaces:      bool, // override carries a "type": the node is replaced; not supported
-	raw:           string, // the whole override as JSON when it sets more than the fields below
+	raw:           string, // the whole override as JSON (code export reads it)
+	general:       bool, // sets more than the fields below: the copy is re-parsed with raw
 	content, name: string,
 	has_content:   bool,
 	has_name:      bool,
@@ -433,13 +438,17 @@ ghosts_sync :: proc(doc: ^Document) {
 		if doc.nodes[i].kind == .Ref do expand_instance(doc, doc.nodes[i].uid, nil, 0)
 	}
 	doc.building_ghosts = false
+	// after a peak (many instances, then undo) the array would keep its size for good
+	if cap(doc.ghosts) > 2 * len(doc.ghosts) + 256 do shrink(&doc.ghosts)
 }
 
 MAX_INSTANCE_DEPTH :: 6
 
 // Copies the component of `inst_uid` under the instance, applying the override
-// chain (outer instances first, so inner ones are overridden by outer ones).
-expand_instance :: proc(doc: ^Document, inst_uid: int, outer: []^Node, depth: int) {
+// chain (listed outer instances first; applied innermost first, so outer ones win). The chain
+// holds the instances' overrides, not the instances: an instance inside another is a
+// ghost, and doc.ghosts moves as copies are added to it.
+expand_instance :: proc(doc: ^Document, inst_uid: int, outer: [][]Override, depth: int) {
 	inst, _ := doc_find_uid(doc, inst_uid)
 	if inst == nil || depth > MAX_INSTANCE_DEPTH do return
 	comp, _ := doc_find(doc, inst.ref)
@@ -452,9 +461,9 @@ expand_instance :: proc(doc: ^Document, inst_uid: int, outer: []^Node, depth: in
 		real_inst = r
 	}
 	if comp.uid == real_inst.uid || is_descendant(doc, real_inst.uid, comp.uid) || is_descendant(doc, comp.uid, real_inst.uid) do return
-	chain := make([dynamic]^Node, context.temp_allocator)
+	chain := make([dynamic][]Override, context.temp_allocator)
 	append(&chain, ..outer)
-	append(&chain, inst)
+	append(&chain, inst.overrides[:])
 	root := ghost_clone_tree(doc, comp.uid, inst_uid, inst_uid, chain[:], depth, 0)
 	if root == 0 do return
 	doc.ghost_root[inst_uid] = root
@@ -501,7 +510,7 @@ ghost_find_named :: proc(doc: ^Document, uid: int, name: string, depth: int) -> 
 	return 0
 }
 
-ghost_clone_tree :: proc(doc: ^Document, orig_uid, parent, inst_uid: int, chain: []^Node, depth, level: int) -> int {
+ghost_clone_tree :: proc(doc: ^Document, orig_uid, parent, inst_uid: int, chain: [][]Override, depth, level: int) -> int {
 	if level > MAX_DEPTH do return 0
 	orig, _ := doc_find_uid(doc, orig_uid)
 	if orig == nil do return 0
@@ -509,10 +518,21 @@ ghost_clone_tree :: proc(doc: ^Document, orig_uid, parent, inst_uid: int, chain:
 	// an instance shown under another theme than its component gets a re-parsed copy
 	inst_theme := make(map[string]string, context.temp_allocator)
 	if inst, _ := doc_find_uid(doc, inst_uid); inst != nil do theme_in_effect(doc, inst, &inst_theme)
+	// The chain runs outer instance first; overrides are applied innermost first, so the
+	// outermost one wins, as in pen.dev and Figma (a card that sets its button's label can
+	// still be relabelled where the card is used). The root of a nested instance also takes
+	// overrides aimed at that instance itself ("pr-cta": {"fill": ...}).
+	alias_id := ""
+	if level == 0 {
+		if inst, _ := doc_find_uid(doc, inst_uid); inst != nil && inst.ghost do alias_id = inst.ghost_of
+	}
+	aims :: proc(o: Override, id, alias_id: string) -> bool {
+		return !o.replaces && (o.id == id || (alias_id != "" && o.id == alias_id))
+	}
 	// overrides of properties without a fast path (icon, padding, cornerRadius, ...)
 	// are written into a copy of the component node's props, which is then re-parsed
 	general := false
-	for over in chain do for o in over.overrides do if !o.replaces && o.id == orig.id && o.raw != "" do general = true
+	for over in chain do for o in over do if aims(o, orig.id, alias_id) && o.general do general = true
 	// the instance's own properties override the component root (fill, size, padding, ...)
 	root_props: []Prop
 	if level == 0 {
@@ -531,8 +551,8 @@ ghost_clone_tree :: proc(doc: ^Document, orig_uid, parent, inst_uid: int, chain:
 		g = node_clone(orig^)
 		for p in root_props do if !root_override_skipped(p.key) do node_set_raw(&g, p.key, p.raw)
 		if general {
-			for over in chain do for o in over.overrides {
-				if o.replaces || o.id != orig.id || o.raw == "" do continue
+			#reverse for over in chain do for o in over {
+				if !aims(o, orig.id, alias_id) || !o.general do continue
 				v, err := json.parse_string(o.raw, .JSON5, false, context.temp_allocator)
 				obj, ok := v.(json.Object)
 				if err != nil || !ok do continue
@@ -565,9 +585,9 @@ ghost_clone_tree :: proc(doc: ^Document, orig_uid, parent, inst_uid: int, chain:
 		g.ghost = true
 		g.ghost_inst = inst_uid
 	}
-	for over in chain {
-		for o in over.overrides {
-			if o.replaces || o.id != orig.id do continue
+	#reverse for over in chain {
+		for o in over {
+			if !aims(o, orig.id, alias_id) do continue
 			if o.has_content {
 				delete(g.content)
 				g.content = strings.clone(o.content)
@@ -787,6 +807,36 @@ doc_clear :: proc(doc: ^Document) {
 	vars_clear(doc)
 }
 
+// Frees everything a document holds: closing a tab, a thumbnail's copy. Freeing only the
+// layers and the header, as those did, left the instance copies, the lookup tables, the
+// child lists and the theme data behind each time (33 MB after a fuzzing session).
+doc_destroy :: proc(doc: ^Document) {
+	doc_clear(doc)
+	delete(doc.nodes)
+	delete(doc.header)
+	delete(doc.vars)
+	delete(doc.by_uid)
+	delete(doc.by_id) // (its keys are the layers' ids)
+	for _, l in doc.kids do delete(l)
+	delete(doc.kids)
+	for &g in doc.ghosts do node_free(&g)
+	delete(doc.ghosts)
+	delete(doc.ghost_by_uid)
+	for _, l in doc.ghost_kids do delete(l)
+	delete(doc.ghost_kids)
+	delete(doc.ghost_root)
+	delete(doc.ghost_slot)
+	pages_free(&doc.pages)
+	delete(doc.pages)
+	var_defs_free(doc)
+	delete(doc.var_defs)
+	theme_axes_free(&doc.theme_axes)
+	delete(doc.theme_axes)
+	delete(doc.resolve_theme)
+	delete(doc.lib_vars)
+	doc^ = {}
+}
+
 vars_clear :: proc(doc: ^Document) {
 	for k, v in doc.vars {
 		delete(k)
@@ -796,26 +846,127 @@ vars_clear :: proc(doc: ^Document) {
 }
 
 // An undo step: the layers and the document's header (variables, themes, pages, imports).
+// Steps share what did not change between them: each version of a layer is one record,
+// counted by the steps that hold it, so a step costs a pointer per layer plus the layers
+// it changed (a full copy per step took 1.5 MB on the Sample screens, 200 steps 300 MB).
+// The header is shared the same way.
 Snapshot :: struct {
-	nodes:    []Node,
-	header:   []Prop,
+	nodes:  []^Node_Record,
+	header: ^Header_Record,
+}
+
+Node_Record :: struct {
+	hash: u64,
+	refs: int,
+	node: Node,
+}
+
+Header_Record :: struct {
+	hash:     u64,
+	refs:     int,
+	props:    []Prop,
 	lib_vars: string,
 }
 
+node_records: map[u64]^Node_Record
+header_records: map[u64]^Header_Record
+
+// What a layer is, apart from what is worked out from it (parsed values, layout).
+node_record_hash :: proc(n: ^Node) -> u64 {
+	fields := [3]int{n.uid, n.parent, int(n.imported)}
+	h := hash.fnv64a(mem.slice_to_bytes(fields[:]))
+	h = hash.fnv64a(transmute([]u8)n.id, h)
+	for p in n.props {
+		h = hash.fnv64a(transmute([]u8)p.key, h)
+		h = hash.fnv64a({0}, h)
+		h = hash.fnv64a(transmute([]u8)p.raw, h)
+		h = hash.fnv64a({1}, h)
+	}
+	return h
+}
+
+node_record_same :: proc(a, b: ^Node) -> bool {
+	if a.uid != b.uid || a.parent != b.parent || a.imported != b.imported || a.id != b.id || len(a.props) != len(b.props) do return false
+	for p, i in a.props do if p.key != b.props[i].key || p.raw != b.props[i].raw do return false
+	return true
+}
+
+intern_node :: proc(n: ^Node) -> ^Node_Record {
+	h := node_record_hash(n)
+	if r, ok := node_records[h]; ok && node_record_same(&r.node, n) {
+		r.refs += 1
+		return r
+	}
+	r := new(Node_Record)
+	r^ = {h, 1, node_clone(n^)}
+	if h not_in node_records do node_records[h] = r // (a hash collision stays unshared)
+	return r
+}
+
+release_node :: proc(r: ^Node_Record) {
+	r.refs -= 1
+	if r.refs > 0 do return
+	if node_records[r.hash] == r do delete_key(&node_records, r.hash)
+	node_free(&r.node)
+	free(r)
+}
+
+intern_header :: proc(doc: ^Document) -> ^Header_Record {
+	h := hash.fnv64a(transmute([]u8)doc.lib_vars)
+	for p in doc.header {
+		h = hash.fnv64a(transmute([]u8)p.key, h)
+		h = hash.fnv64a({0}, h)
+		h = hash.fnv64a(transmute([]u8)p.raw, h)
+		h = hash.fnv64a({1}, h)
+	}
+	if r, ok := header_records[h]; ok && r.lib_vars == doc.lib_vars && len(r.props) == len(doc.header) {
+		same := true
+		for p, i in r.props do if p.key != doc.header[i].key || p.raw != doc.header[i].raw do same = false
+		if same {
+			r.refs += 1
+			return r
+		}
+	}
+	r := new(Header_Record)
+	r^ = {h, 1, make([]Prop, len(doc.header)), strings.clone(doc.lib_vars)}
+	for p, i in doc.header do r.props[i] = Prop{strings.clone(p.key), strings.clone(p.raw)}
+	if h not_in header_records do header_records[h] = r
+	return r
+}
+
+release_header :: proc(r: ^Header_Record) {
+	r.refs -= 1
+	if r.refs > 0 do return
+	if header_records[r.hash] == r do delete_key(&header_records, r.hash)
+	for p in r.props {
+		delete(p.key)
+		delete(p.raw)
+	}
+	delete(r.props)
+	delete(r.lib_vars)
+	free(r)
+}
+
 doc_snapshot :: proc(doc: ^Document) -> Snapshot {
-	out := Snapshot{nodes = make([]Node, len(doc.nodes)), header = make([]Prop, len(doc.header)), lib_vars = strings.clone(doc.lib_vars)}
-	for n, i in doc.nodes do out.nodes[i] = node_clone(n)
-	for p, i in doc.header do out.header[i] = Prop{strings.clone(p.key), strings.clone(p.raw)}
+	out := Snapshot{nodes = make([]^Node_Record, len(doc.nodes)), header = intern_header(doc)}
+	for &n, i in doc.nodes do out.nodes[i] = intern_node(&n)
 	return out
+}
+
+free_snapshot :: proc(snap: Snapshot) {
+	for r in snap.nodes do release_node(r)
+	delete(snap.nodes)
+	if snap.header != nil do release_header(snap.header)
 }
 
 doc_restore :: proc(doc: ^Document, snap: Snapshot) {
 	for &n in doc.nodes do node_free(&n)
 	clear(&doc.nodes)
-	for n in snap.nodes do append(&doc.nodes, node_clone(n))
-	header_changed := len(snap.header) != len(doc.header) || snap.lib_vars != doc.lib_vars
+	for r in snap.nodes do append(&doc.nodes, node_clone(r.node))
+	h := snap.header
+	header_changed := len(h.props) != len(doc.header) || h.lib_vars != doc.lib_vars
 	if !header_changed {
-		for p, i in snap.header do if p.key != doc.header[i].key || p.raw != doc.header[i].raw do header_changed = true
+		for p, i in h.props do if p.key != doc.header[i].key || p.raw != doc.header[i].raw do header_changed = true
 	}
 	if header_changed {
 		for p in doc.header {
@@ -823,12 +974,14 @@ doc_restore :: proc(doc: ^Document, snap: Snapshot) {
 			delete(p.raw)
 		}
 		clear(&doc.header)
-		for p in snap.header do append(&doc.header, Prop{strings.clone(p.key), strings.clone(p.raw)})
+		for p in h.props do append(&doc.header, Prop{strings.clone(p.key), strings.clone(p.raw)})
 		delete(doc.lib_vars)
-		doc.lib_vars = strings.clone(snap.lib_vars)
+		doc.lib_vars = strings.clone(h.lib_vars)
 		doc_resolve_vars(doc)
-		for &n in doc.nodes do node_refresh(doc, &n)
 	}
+	// a shared record was parsed when it was first kept, maybe under other variables or an
+	// ancestor's other theme: work every layer out again
+	for &n in doc.nodes do node_refresh(doc, &n)
 	doc_bump(doc)
 }
 
@@ -864,8 +1017,33 @@ doc_delete :: proc(doc: ^Document, uid: int) {
 doc_move :: proc(doc: ^Document, uid: int, dx, dy: f32) {
 	n, _ := doc_find_uid(doc, uid)
 	if n == nil do return
-	node_set_number(doc, n, "x", n.pos.x + dx)
-	node_set_number(doc, n, "y", n.pos.y + dy)
+	if n.ghost || in_component(doc, n) {
+		node_set_number(doc, n, "x", n.pos.x + dx)
+		node_set_number(doc, n, "y", n.pos.y + dy)
+		return
+	}
+	// Outside a component no instance copies the position (an instance's own x and y
+	// never reach its copy: root_override_skipped), so only the boxes move: the ghosts
+	// stay and the layout runs again. A version bump here rebuilt every instance on each
+	// frame of a drag (docs/performance.md).
+	set :: proc(doc: ^Document, n: ^Node, key: string, f: f32) -> f32 {
+		raw := fmt.tprintf("%v", round2(f))
+		node_set_raw(n, key, raw)
+		v, _ := json.parse_string(raw, .JSON5, false, context.temp_allocator)
+		return num(doc, v) or_else 0 // as node_refresh reads it
+	}
+	n.pos = {set(doc, n, "x", n.pos.x + dx), set(doc, n, "y", n.pos.y + dy)}
+	layout_invalidate()
+}
+
+// Whether the node is a component or inside one: instances copy what it holds.
+in_component :: proc(doc: ^Document, n: ^Node) -> bool {
+	for p := n; p != nil; {
+		if p.reusable do return true
+		if p.parent == 0 do return false
+		p, _ = doc_find_uid(doc, p.parent)
+	}
+	return false
 }
 
 // Puts a node into another container (0 = canvas), keeping it where it is on
@@ -1384,7 +1562,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 						case "fontWeight": ov.bold, ov.weight, ov.set_weight = weight_is_bold(doc, val), weight_number(doc, val), true
 						}
 					}
-					if general {
+					ov.general = general
+					{
 						b := strings.builder_make(context.temp_allocator)
 						write_json_value(&b, over)
 						ov.raw = strings.clone(strings.to_string(b))
@@ -1527,10 +1706,19 @@ parse_padding :: proc(doc: ^Document, v: json.Value) -> (pad: [4]f32) {
 	arr, is_arr := v.(json.Array)
 	if !is_arr do return
 	switch len(arr) {
+	case 1:
+		f := num(doc, arr[0]) or_else 0
+		return {f, f, f, f}
 	case 2:
 		vert := num(doc, arr[0]) or_else 0
 		horiz := num(doc, arr[1]) or_else 0
 		return {vert, horiz, vert, horiz}
+	case 3:
+		// not in the .pen schema; read as CSS does (top, sides, bottom). The agent API
+		// rewrites it to four values (api_check_nodes).
+		t := num(doc, arr[0]) or_else 0
+		h := num(doc, arr[1]) or_else 0
+		return {t, h, num(doc, arr[2]) or_else 0, h}
 	case 4:
 		for i in 0 ..< 4 do pad[i] = num(doc, arr[i]) or_else 0
 	}

@@ -129,19 +129,7 @@ prop_rank :: proc(key: string) -> int {
 // variables may point at other variables.
 doc_resolve_vars :: proc(doc: ^Document) {
 	vars_clear(doc)
-	for _, &entries in doc.var_defs {
-		for &e in entries {
-			for t in e.theme {
-				delete(t[0])
-				delete(t[1])
-			}
-			delete(e.theme)
-			if e.var.kind == .String do delete(e.var.str)
-			delete(e.ref)
-		}
-		delete(entries)
-	}
-	clear(&doc.var_defs)
+	var_defs_free(doc)
 	raw := ""
 	for p in doc.header do if p.key == "variables" do raw = p.raw
 	var_defs_add(doc, raw)
@@ -281,8 +269,12 @@ descendants_with_slots :: proc(doc: ^Document, n: ^Node, raw: string, api: bool)
 // instances excluded: it is written into their `descendants`).
 write_children :: proc(b: ^strings.Builder, doc: ^Document, parent: int, indent: int, api: bool) {
 	count := 0
+	// a library node's own children are imported too: write them when the parent is
+	// written (get_document of a library component); never at the document's top level
+	parent_imported := false
+	if parent != 0 do if p, _ := doc_find_uid(doc, parent); p != nil do parent_imported = p.imported
 	for &n in doc.nodes {
-		if n.parent != parent || n.slot_of != "" || n.imported do continue
+		if n.parent != parent || n.slot_of != "" || (n.imported && !parent_imported) do continue
 		if count > 0 do strings.write_byte(b, ',')
 		write_indent(b, indent)
 		write_node(b, doc, &n, indent, api)
@@ -403,3 +395,23 @@ json_write_string :: proc(b: ^strings.Builder, s: string) {
 	}
 	strings.write_byte(b, '"')
 }
+
+// Empties doc.var_defs, names included (they were kept before: each change of the
+// variables left a copy of every name behind).
+var_defs_free :: proc(doc: ^Document) {
+	for name, &entries in doc.var_defs {
+		for &e in entries {
+			for t in e.theme {
+				delete(t[0])
+				delete(t[1])
+			}
+			delete(e.theme)
+			if e.var.kind == .String do delete(e.var.str)
+			delete(e.ref)
+		}
+		delete(entries)
+		delete(name)
+	}
+	clear(&doc.var_defs)
+}
+

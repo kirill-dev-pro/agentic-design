@@ -4,7 +4,9 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
+import "core:slice"
 import "core:strings"
+import "core:time"
 
 // Design libraries, as in pen.dev: the header's `imports` maps an alias to another .pen
 // file (by convention a .lib.pen). Its layers and variables are read into this document
@@ -12,7 +14,7 @@ import "core:strings"
 // "brand" is "$ui:brand" and a descendant override key is "ui:label". They are flagged
 // `imported`, so refs and overrides resolve as for local components while saving, the
 // layer tree, pages and the agent API leave them out. A library is read again whenever
-// the document opens.
+// the document opens, and when its file changes on disk (libraries_refresh).
 
 Library :: struct {
 	alias, path: string,
@@ -154,8 +156,46 @@ library_add :: proc(path: string) -> (string, bool) {
 	push_undo()
 	doc_set_header(&app.doc, "imports", imports)
 	doc_load_imports(&app.doc, app.file_path)
+	library_merge_axes(&app.doc, path)
 	mark_dirty()
 	return alias, true
+}
+
+// The library's theme axes and values join the document's, in the same undo step: its
+// variables are themed on them, and a frame can only pin a value the document declares
+// (pen.dev reads the axes from the document's own header).
+library_merge_axes :: proc(doc: ^Document, path: string) {
+	data, err := os.read_entire_file(path, context.temp_allocator)
+	if err != nil do return
+	root, perr := json.parse_string(string(data), .JSON5, false, context.temp_allocator)
+	if perr != nil do return
+	obj, _ := root.(json.Object)
+	themes, ok := obj["themes"].(json.Object)
+	if !ok || len(themes) == 0 do return
+	_ = doc_theme_axes(doc)
+	names := make([dynamic]string, context.temp_allocator)
+	for k in themes do append(&names, k)
+	slice.sort(names[:])
+	changed := false
+	for name in names {
+		values, _ := themes[name].(json.Array)
+		idx := -1
+		for a, i in doc.theme_axes do if a.name == name do idx = i
+		if idx < 0 {
+			append(&doc.theme_axes, Theme_Axis{name = strings.clone(name)})
+			idx = len(doc.theme_axes) - 1
+		}
+		for v in values {
+			val := string(v.(json.String) or_else "")
+			if val == "" || slice.contains(doc.theme_axes[idx].values[:], val) do continue
+			append(&doc.theme_axes[idx].values, strings.clone(val))
+			changed = true
+		}
+	}
+	if !changed do return
+	doc_theme_axes_write(doc)
+	theme_defaults(doc)
+	doc_retheme(doc)
 }
 
 library_remove :: proc(alias: string) {
@@ -188,4 +228,45 @@ library_of :: proc(n: ^Node) -> string {
 	if !n.imported do return ""
 	if i := strings.index_byte(n.id, ':'); i > 0 do return n.id[:i]
 	return ""
+}
+
+// Reads the open document's libraries again when one of their files changed on disk
+// (saved from another tab or window, or by an agent), within a couple of seconds. Not an
+// edit of this document: no undo step, nothing to save. The stamp of each document is
+// kept, so a tab that was in the background reloads when it is shown.
+lib_stamps: map[string]string // document path -> its libraries' paths and modification times
+lib_checked: time.Tick
+
+libraries_refresh :: proc() -> bool {
+	if app.tab < 0 || app.file_path == "" do return false
+	now := time.tick_now()
+	if lib_checked != {} && time.tick_diff(lib_checked, now) < 2 * time.Second do return false
+	lib_checked = now
+	imports := doc_imports(&app.doc)
+	b := strings.builder_make(context.temp_allocator)
+	base := filepath.dir(app.file_path)
+	names := make([dynamic]string, context.temp_allocator)
+	for alias in imports do append(&names, alias)
+	slice.sort(names[:])
+	for alias in names {
+		path := string(imports[alias].(json.String) or_else "")
+		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
+		mtime: i64 = -1
+		if st, serr := os.stat(path, context.temp_allocator); serr == nil do mtime = st.modification_time._nsec
+		fmt.sbprintf(&b, "%s=%s@%d;", alias, path, mtime)
+	}
+	stamp := strings.to_string(b)
+	old, seen := lib_stamps[app.file_path]
+	if seen && old == stamp do return false
+	if seen {
+		delete(lib_stamps[app.file_path])
+		lib_stamps[app.file_path] = strings.clone(stamp)
+	} else {
+		lib_stamps[strings.clone(app.file_path)] = strings.clone(stamp)
+	}
+	// the first look only records; a changed import list is reloaded by set_libraries
+	if !seen || len(imports) == 0 do return false
+	doc_load_imports(&app.doc, app.file_path)
+	app.needs_layout = true
+	return true
 }

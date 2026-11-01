@@ -715,3 +715,319 @@ or where. Other people on the canvas will need the same.
 - Only pointer moves that macOS sends to the window count as input. The pointer position
   read each frame changes when the mouse moves over other apps. Before this, that kept an
   open window drawing at full rate whenever the mouse moved anywhere.
+
+## 36. Memory: measured, then cut where it went
+
+**Problem.** The window took 700 MB at start on a Retina screen, and grew by hundreds of
+megabytes in a session. Most of it was not the document.
+
+**Decision.** Measure first: the `memory` request reports what the app holds (layers,
+instance copies, undo, caches, fonts, and every block of 256 KB or more by where it was
+allocated); `footprint`, `vmmap` and `malloc_history` give the rest. Then:
+
+- The window has no multisampling and no depth buffer. NanoVG antialiases edges itself
+  and needs only the stencil buffer, and frames came out identical without either.
+  Saved 240 MB of video memory.
+- An undo step shares every layer that did not change with the steps around it
+  (decision in `doc.odin`): 100 edits cost 5 MB, not 195.
+- Blocks of 256 KB and more come from the system and go straight back when freed
+  (`memory.odin`). macOS's malloc kept freed large blocks: 20 screenshots left 77 MB
+  that no pressure relief returned. The per-frame arena, screenshots and responses go
+  through it; so does code called from C.
+- Screenshots render in 2048-pixel tiles through one buffer of that fixed size, and read
+  back in strips of 128 rows through a small pixel buffer. The driver keeps the storage
+  of what was deleted:
+  - read straight from the window, it kept a 32 MB staging buffer;
+  - read through a pixel buffer as large as the image, it kept that buffer (20 MB for a
+    window-sized shot);
+  - drawn into a buffer as large as the image, it kept 60–70 MB after a big shot.
+  Screenshots are no longer limited to the window's size. Tiled and single-pass images
+  are identical, a 14840 × 3850 canvas included.
+- PNGs are written with the system's zlib and the app's allocator (`png.odin`), not with
+  stb_image_write, whose C allocations stayed with malloc (a session of agent
+  screenshots reached 400 MB). Opaque images are RGB; files are a quarter smaller.
+- Font files are mapped, not read into memory (the system UI font alone is 9 MB).
+- Closing a tab or rendering a thumbnail frees the whole document. Instance copies,
+  lookup tables and theme data used to stay behind each time, and every change of the
+  variables left a copy of their names.
+
+**Consequences.**
+
+- A 1440 × 900 Retina window starts at about 270 MB. About 220 MB of that is the OpenGL
+  stack's own: a bare GLFW window that only clears takes 234 MB. Below that needs a Metal
+  renderer.
+- Returning freed blocks to the system made two old reads of freed memory crash.
+  Expanding nested instances kept pointers into the copies array while it grew; it now
+  keeps the overrides themselves.
+
+## 37. Frames: lay out only after a change; draw what can be seen
+
+**Problem.** Every frame laid the whole document out up to three times and drew every
+detail, however small on screen. On a file with 40 screens (4,000 layers with instance
+copies), a frame at zoom-to-fit took 10 ms of CPU.
+
+**Decision.**
+
+- Layout runs only when the document's version or the fonts change, or code asks for it
+  (`layout_epoch`). Every change to a layer, the header or the tree moves the version.
+- On the live canvas, details too small to see are simplified:
+  - text under 2 points becomes a bar per line;
+  - icons under 6 points become a dot of their colour;
+  - corners under a third of a point are drawn square;
+  - leaves under half a point are skipped.
+  Screenshots, exports and thumbnails draw everything as before.
+
+**Consequences.** On that file a frame costs 4.6 ms instead of 9.6, and layout 0.03 ms
+instead of 1.4–2 ms.
+
+## 38. Agent API: say what was done to the input, and follow CSS where the format is silent
+
+**Problem.** Dogfooding the landing page (dogfooding Session 9, D1–D12) found the agent
+API quietly doing something other than what was asked: a missing file could not be
+created, a too-large corner radius made an ellipse, indentation vanished from code blocks,
+three-value padding and unknown icon names were dropped without a word, a screenshot scale
+above 4 was capped silently, and lint suggested variables that change with the theme.
+
+**Decision.**
+
+- Geometry and text follow CSS (and Skia, so pen.dev) where `.pen` does not say:
+  - corner radii too big for the box shrink together by one factor and stay circular (the
+    vendored NanoVG clamped x and y separately);
+  - leading spaces of a paragraph (the start of the text and after a newline) are drawn,
+    as `white-space: pre-wrap`; after a soft wrap they are still dropped;
+  - `padding` with three values is read as top, sides, bottom.
+- Input the app had to interpret is reported back: `create_nodes` and `update_nodes`
+  return `warnings` (unknown Lucide icons with close names; three-value padding, which is
+  rewritten to the four values it means, since the schema has no three-value form), and
+  `lint` has an `unknown-icon` rule.
+- `open` takes `create: true` and makes an empty document; its errors name the path.
+  `add_fonts` copies font files or installed families into `fonts/` and declares them.
+  Families installed only as `.ttc` are refused: pen.dev reads no collections.
+- `screenshot` goes up to 16 pixels per unit and reports the scale it used, with a note
+  when it had to reduce it.
+- `get_document` lists libraries only for the whole document (or `libraries: true`);
+  a library component asked for by id comes with its children and their `alias:id`
+  override keys. `get_guide` summarises library variables after the document's own.
+- `lint` suggests a colour variable for a hard-coded colour only if the variable has that
+  value in every theme; otherwise it says in which theme it matches.
+- The MCP proxy names its agent by its process id. A new proxy takes over the cursor of an
+  ended proxy from the same client, so an agent that runs one process per call keeps one
+  cursor. Proxies running side by side keep theirs.
+
+**Consequences.** Files written by older builds with a three-value padding now show it;
+pen.dev ignores such padding, so agents get it rewritten on the way in. `os.make_directory_all`
+fails on an existing folder: font import and `export_code` into an existing folder failed
+on their second use, and now check for the folder instead.
+
+## 39. Code export reads instance copies as the file would state them
+
+**Problem.** The HTML export of the landing page lost the fills and text colours inside
+instances, wrote an instance's overrides twice (on its element and on the component root
+inside it), drew path strokes as a box border and wrote 261 library variables into every
+theme block. The React export put all of a library's components next to the local ones,
+with clashing names.
+
+**Decision.**
+
+- Instance copies keep only parsed fields, for speed. Export reads raw properties (to
+  write `var(--name)` and every paint layer), so it builds a view of each copy: the
+  component node's properties with the overrides of every instance around it written over
+  them, outer first. Every override keeps its JSON for this; a separate flag still marks
+  the overrides that need the copy re-parsed.
+- An instance's element only places and sizes; the component root inside carries the look.
+- Paths are SVG paint (`fill`, `stroke` in CSS, inherited by the `<path>`).
+- The page is generated before the variables. A library's variables, and its components
+  in React, are written only when the generated code uses them. Library components are
+  named after the alias (`LibBadge`).
+- React: a style override of a part becomes a `<part>ClassName` prop merged with `cn`,
+  the way root overrides already travel as classes.
+
+**Consequences.** Export output now matches the canvas for instances (checked by rendering
+the HTML in headless Chrome next to the app's screenshot). Each override's JSON is kept in
+memory once more.
+
+## 40. Libraries bring their theme axes; images and screenshots need no extra steps
+
+**Problem.** After importing a themed library the document had no theme axes, so no frame
+could pin `{"mode": "dark"}`; an agent could not place an image without copying it into
+`images/` itself; a screenshot of a section without its own fill was drawn on white
+whatever the theme.
+
+**Decision.**
+
+- `set_libraries` add merges the library's axes and values into the document's `themes`,
+  in the same undo step (pen.dev reads axes from the document's own header).
+- An image paint's `url` may be any local path; create and update copy the file into
+  `images/` and rewrite the url, as a dropped image is. A missing file is a warning.
+- A node screenshot is drawn on its nearest ancestor's opaque fill, in the screenshot's
+  theme; white only when no ancestor has one.
+- `lint` `missing-font` counts text inside instances and points at the instance.
+
+## 41. A viewport theme axis exports as media queries
+
+**Problem.** A landing page designed as a desktop and a mobile frame, with number tokens
+themed on a `viewport` axis, exported as two fixed-width frames one after the other, the
+tokens inlined as px and the viewport blocks unused.
+
+**Decision.** A theme axis named `viewport`, `breakpoint`, `screen` or `device` is
+responsive. Each of its values gets a width (the widest top-level frame pinned to it; the
+first value: the widest unpinned frame) and, except the widest, a media query below the
+middle between its width and the next wider one. Number properties bound to variables are
+written as `calc(var(--name) * 1px)` (line height as `var()`), so the media queries
+change them. Exported top-level frames are fluid up to their width. `export_code` takes
+`ids` to export one frame. The window's choice on that axis is not pinned on `<html>`.
+
+**Consequences.** Spacing and type follow the breakpoints. Structure does not: a layout
+built from fixed widths still overflows on a phone, and two frames with different
+structures are not merged into one page.
+
+## 42. The outermost override wins; libraries follow their files
+
+**Problem.** A card component that set its button's label could not be relabelled where
+the card was used: the inner override was applied last. An override keyed by a nested
+instance's own id was ignored. A library saved from another tab or by an agent was not
+picked up by the documents importing it until they were reopened.
+
+**Decision.**
+
+- Overrides are applied innermost first, so the outermost one wins, as in pen.dev and
+  Figma (decision text in `expand_instance` reversed). The root of a nested instance also
+  takes overrides aimed at that instance's id. Code export follows the same order.
+- The open document's libraries are re-read within about 2 s of a change to their files
+  (modification times, checked like font folders). This is not an edit: no undo step and
+  nothing to save. `set_libraries` `reload: true` does it at once.
+- Lint can be told a colour is intentional: `metadata.lintIgnore` on a layer (a `.pen`
+  field), or `ignore` for one call.
+- Web fonts without a typographic family name drop a trailing weight word that matches
+  their weight, outside the system font folders.
+- Symbols fall back to Apple Symbols and Arial Unicode after Noto Sans. Colour emoji are
+  not drawn yet.
+
+**Consequences.** A document that relied on an inner override beating an outer one now
+shows the outer value; that matches pen.dev.
+
+## 43. The control socket turns off Nagle's algorithm
+
+**Problem.** Every control request took about 170 ms on an idle window, so a scripted UI
+run or an agent's calls spent most of their time waiting. The window answers with two
+writes (the JSON, then the newline), and the MCP proxy sends requests the same way. With
+Nagle's algorithm the second write waited for the peer's delayed ACK.
+
+**Decision.** Both ends set `TCP_NODELAY` on the connection.
+
+**Consequences.** A request on an idle window takes about 18 ms (waking the loop and one
+frame), measured with 10 sequential `perf`, `get_selection` and `input` calls.
+
+## 44. Exported code ships the document's fonts and images
+
+**Problem.** Exported pages named the brand fonts but did not load them, so a browser
+fell back to Helvetica, and image fills pointed at `./images/…` next to the document,
+not next to the code.
+
+**Decision.** Export writes `@font-face` for each font the document and its libraries
+declare under `fonts` (the declaration pen.dev writes), and with `dir` copies those font
+files to `fonts/` and the images the code uses to `images/` beside the code. The
+`export_code` response lists them under `assets`. Fonts that are only installed on the
+Mac are not copied: whether they may be shipped is the user's call, and `add_fonts`
+declares them.
+
+## 45. Test windows never open the repository's sample
+
+**Problem.** During dogfooding Session 9 a fuzz run in a quiet test window clicked the
+onboarding's "Sample design system" card. When the test folder has no
+`sample-screens.pen`, the card opens the one in `designs/` next to the build, so the fuzzer
+edited the real sample and autosave wrote it (the `s-home` screen and its page entry were
+lost). The quiet-mode guards covered recent files and file dialogs, not this path.
+
+**Decision.** In a quiet window the card copies the sample and its library into
+`$TMPDIR/agentic-design-sample-<pid>/` and opens the copy.
+
+**Consequences.** Fuzzing can still exercise the sample. Anything else that opens a fixed
+path must follow the same rule; the only other one is the default `designs/untitled.pen`
+when no file is given, which tests never rely on.
+
+## 46. Moving a layer outside a component keeps the instance copies
+
+**Problem.** Every frame of a drag rebuilt every instance in the document: `doc_move` wrote
+`x` and `y` through `node_refresh`, which moves the document's version, and `ghosts_sync`
+rebuilds all ghosts on a new version. On a file with 1,500 layers and 3,000 instance copies
+the input phase of a drag frame took 7.7 ms of the 8.3 ms a 120 Hz frame has.
+
+**Decision.** `doc_move` writes the position without moving the version when the layer is
+not a ghost and neither it nor an ancestor is `reusable`, and asks for a layout
+(`layout_invalidate`) instead. No instance copies such a position: an instance's own `x`
+and `y` are not applied to its copy (`root_override_skipped`), and copies are made of
+components only. Inside a component the version moves as before. This is the one
+exception to decision #37's rule that every change to a layer moves the version.
+
+**Consequences.** Drag input on that file takes 2.5 ms instead of 7.7 (no ghost rebuilds);
+the layout still runs over the whole document, which is what remains of it
+(docs/performance.md). Anything cached by the version must not depend on the positions of
+layers outside components; nothing does today (pages, theme axes, child lists, ghosts).
+
+## 47. Agent work is latency-critical: no App Nap while requests come in
+
+**Problem.** A window launched by an agent's MCP call ran at background priority (App
+Nap: it is behind other windows, or the display sleeps). macOS stretched the frame-pacing
+sleep (`1 / refresh`) to about 130 ms, so each request waited about 170 ms and a screenshot
+took seconds. Test windows started from a shell were never throttled, so tests missed it.
+
+**Decision.**
+
+- Each request begins (or extends) an `NSProcessInfo` activity, user-initiated and
+  latency-critical, which ends 10 s after the last request (`activity_darwin.odin`). A
+  window nobody uses can still nap.
+- The pacing sleep waits on a semaphore the server posts, so a request cuts it short.
+- Frames a screenshot, export or copy waits for are not paced.
+
+**Consequences.** Agents get the same latency in the background as in front. The
+activity allows idle system sleep, so a long agent session does not keep the Mac awake.
+Odin's `ActivityOptions` bit_set takes log2 of multi-bit masks, so the raw value is
+passed.
+
+## 48. Exports ship only openly licensed fonts
+
+**Problem.** Export with `dir` copied every declared font next to the code, commercial
+ones included: the landing page bundle carried Scto Grotesk A, licensed per user (the
+reason `designs/fonts/` is not in git).
+
+**Decision.** Amends #44. A font is copied only when its name table names an open
+license (SIL OFL, Apache, Ubuntu Font Licence), as Google Fonts and fontsource files do.
+Other declared fonts keep their `@font-face` rule, pointing at `fonts/<file>`, and the
+`export_code` result has a warning naming the file to supply. `copy_all_fonts: true`
+copies them anyway, for a user whose license allows web embedding. The export button in
+the window follows the default.
+
+## 49. The big allocator's own maps live on the heap; test windows stay out of Downloads
+
+**Problem.** Two freezes. (1) Rarely, the window stopped for good: the bookkeeping maps
+of the big allocator (#36) took their allocator from the first caller's context, which was
+the big allocator itself. Growing a map under `big_mutex` freed its old storage through
+the big allocator; a page-aligned block went to `big_size`, which locked `big_mutex` again
+on the same thread. (2) A fuzzed quiet window pressed Export, which writes to
+`~/Downloads`; the first write from a process without access waits in `open()` for a
+system consent prompt.
+
+**Decision.** The maps are made with `runtime.heap_allocator()` before first use, so no
+allocation under `big_mutex` comes back into the big allocator. Quiet windows export to
+`$TMPDIR/agentic-design-downloads` (`downloads_dir`).
+
+**Consequences.** The user's window still exports to `~/Downloads` and may show the
+consent prompt once, as any app does.
+
+## 50. Correction to #43: the 170 ms per request was App Nap, not Nagle
+
+**Problem.** #43 credited `TCP_NODELAY` with cutting a request from about 170 ms to 18 ms.
+The two measurements were taken on different test windows: the slow one had been idle
+behind other windows with the display asleep (napping, as found later for D35), the fast
+one had just started. The comparison mixed the two effects.
+
+**Decision.** #43 stays: setting `TCP_NODELAY` on a request/response socket costs nothing.
+The latency fix is #47. The controlled comparison is in
+[performance.md](performance.md#windows-started-by-an-agent-d35-decisions-43-and-47)
+("Windows started by an agent"): three builds of the same tree, the window started as the
+MCP proxy starts it. `TCP_NODELAY` alone changes nothing measurable; App Nap accounts for
+the whole ~170 ms, and #47 removes it.
+
+**Consequences.** Latency tests start the window as an agent does and let it idle before
+timing (`tools/perf/agentlat.py`), and compare builds on the same kind of window.

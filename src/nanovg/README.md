@@ -26,3 +26,9 @@ dev-2026-10. Kept in the repository so the following fixes can be applied:
 - nanovg: `TextBreakLines` also breaks a line after a hyphen between letters
   ("Sample-|specific"), as Skia's ICU line breaker does in pen.dev; not before a digit
   ("-5" stays whole).
+- nanovg/gl: `RecycleBuffers` gives back what the per-frame arrays grew to and gives the
+  buffer objects fresh storage, between frames (the app calls it when it goes quiet).
+- nanovg/gl: the per-frame arrays (`paths`, `verts`, `uniforms`) grow by half again when
+  they run out (`__grow`), as upstream's C code does. `resize` alone reserved exactly what
+  was asked, so after `RecycleBuffers` a big frame regrew them in thousands of steps, each
+  a full copy once past 256 KB.

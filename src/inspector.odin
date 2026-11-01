@@ -651,10 +651,9 @@ draw_export_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 
 // Writes the node at the given scale and format into ~/Downloads.
 export_layer :: proc(n: ^Node, scale: f32, format: Export_Format) {
-	home, _ := os.user_home_dir(context.temp_allocator)
 	name := css_name(node_label(n))
 	suffix := "" if scale == 1 else fmt.tprintf("@%vx", scale)
-	path := fmt.tprintf("%s/Downloads/%s%s.%s", home, name, suffix, EXPORT_EXTENSIONS[format])
+	path := fmt.tprintf("%s/%s%s.%s", downloads_dir(), name, suffix, EXPORT_EXTENSIONS[format])
 	export_request(scale, path, format)
 }
 

@@ -3,7 +3,9 @@ package agentic_design
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:strconv"
 import "core:strings"
+import "core:sync"
 import "core:time"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
@@ -108,9 +110,21 @@ App :: struct {
 app: App
 
 app_main :: proc(path: string) {
+	context.allocator = big_allocator() // memory.odin: big blocks go back to the system when freed
+	lod_off = os.get_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
+	use_big_allocator_for_temp()
 	posix_ignore_sigpipe()
 
-	if !platform_init(1440, 900, "Agentic Design") {
+	// AGENTIC_WINDOW=1200x800 sets the window size (tests)
+	win := [2]int{1440, 900}
+	if v := os.get_env("AGENTIC_WINDOW", context.temp_allocator); v != "" {
+		if parts := strings.split(v, "x", context.temp_allocator); len(parts) == 2 {
+			w, wok := strconv.parse_int(parts[0])
+			h, hok := strconv.parse_int(parts[1])
+			if wok && hok && w >= 400 && h >= 300 do win = {w, h}
+		}
+	}
+	if !platform_init(win.x, win.y, "Agentic Design") {
 		fmt.eprintln("could not create a window")
 		return
 	}
@@ -137,14 +151,24 @@ app_main :: proc(path: string) {
 	app_log("start: %s (port %d%s)", app.file_path, server_port(), ", opened by an agent" if pf.no_focus else "")
 
 	active_until = glfw.GetTime() + 1
+	trimmed := false
 	for !platform_should_close() && exit_signal == {} {
 		free_all(context.temp_allocator)
 		font_atlas_trim(app.vg)
 		wait := idle_wait()
-		if wait == 0 {
+		if wait > 0.1 && !trimmed {
+			// the app is going quiet: hand back what the last burst of work freed
+			memory_trim()
+			trimmed = true
+		} else if wait == 0 do trimmed = false
+		if wait == 0 && shot.req == nil && !export_pending && !copy_png_pending {
 			// full rate, but never faster than the display: vsync does not hold back a
-			// window covered by others, and pointer events can come faster than frames
-			if rest := frame_started + 1 / pf.refresh - glfw.GetTime(); rest > 0.0005 do time.sleep(time.Duration(rest * 1e9))
+			// window covered by others, and pointer events can come faster than frames.
+			// A capture waiting for its frame is not paced, and an agent request cuts the
+			// wait short (server.odin posts pace_wake): in a window started by an agent
+			// macOS stretched this sleep to ~130 ms, and every request and screenshot
+			// frame paid it (dogfooding D35).
+			if rest := frame_started + 1 / pf.refresh - glfw.GetTime(); rest > 0.0005 do _ = sync.sema_wait_with_timeout(&pace_wake, time.Duration(rest * 1e9))
 		}
 		platform_poll(wait)
 		frame_started = glfw.GetTime()
@@ -152,14 +176,21 @@ app_main :: proc(path: string) {
 		if platform_had_input() do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
 		fb := frame_size()
 		if added := fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
+		if libraries_refresh() do set_status("A library changed on disk; its components were read again")
 
 		// drawing instances re-lays out their components in place, so refresh
 		// the boxes before requests read them and again before input
 		t0 := time.tick_now()
+		if app.needs_layout do layout_invalidate()
 		layout_document(&app.doc)
 		app.needs_layout = false
 		ran := process_requests()
-		if ran do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
+		if ran {
+			active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
+			agent_activity_touch()
+		}
+		agent_activity_tick()
+		if app.needs_layout do layout_invalidate()
 		if ran || app.needs_layout {
 			layout_document(&app.doc)
 			app.needs_layout = false
@@ -170,6 +201,7 @@ app_main :: proc(path: string) {
 		handle_drops()
 		handle_input()
 		if app.needs_layout {
+			layout_invalidate()
 			layout_document(&app.doc)
 			app.needs_layout = false
 		}
@@ -285,6 +317,7 @@ FONT_ATLAS_MAX :: 2048
 ACTIVE_AFTER_INPUT :: 0.5 // seconds of full frame rate after the last input
 
 active_until: f64
+pace_wake: sync.Sema // posted when a request arrives, so frame pacing does not hold it up
 frame_started: f64
 frames_drawn: int // since the last `perf` request
 
@@ -309,12 +342,16 @@ font_atlas_trim :: proc(vg: ^nvg.Context) {
 }
 
 load_fonts :: proc(vg: ^nvg.Context) {
-	nvg.CreateFont(vg, "sans", "/System/Library/Fonts/Supplemental/Arial.ttf")
-	nvg.CreateFont(vg, "sans-bold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
-	// The interface uses the system font; fall back to Arial when it cannot be read.
-	if nvg.CreateFont(vg, "ui", "/System/Library/Fonts/SFNS.ttf") < 0 {
-		nvg.CreateFont(vg, "ui", "/System/Library/Fonts/Supplemental/Arial.ttf")
+	// mapped, not read into memory (map_file)
+	font :: proc(vg: ^nvg.Context, name, path: string) -> int {
+		data, ok := map_file(path)
+		if !ok do return -1
+		return nvg.CreateFontMem(vg, name, data, false)
 	}
+	font(vg, "sans", "/System/Library/Fonts/Supplemental/Arial.ttf")
+	font(vg, "sans-bold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
+	// The interface uses the system font; fall back to Arial when it cannot be read.
+	if font(vg, "ui", "/System/Library/Fonts/SFNS.ttf") < 0 do font(vg, "ui", "/System/Library/Fonts/Supplemental/Arial.ttf")
 }
 
 // Opens a document (in a tab); kept for callers that predate tabs.
@@ -400,17 +437,6 @@ push_undo :: proc() {
 	for s in app.redo_stack do free_snapshot(s)
 	clear(&app.redo_stack)
 	mark_dirty()
-}
-
-free_snapshot :: proc(snap: Snapshot) {
-	for &n in snap.nodes do node_free(&n)
-	delete(snap.nodes)
-	for p in snap.header {
-		delete(p.key)
-		delete(p.raw)
-	}
-	delete(snap.header)
-	delete(snap.lib_vars)
 }
 
 undo :: proc() {
@@ -635,6 +661,7 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		case: return
 		}
 	}
+	if lod_scale > 0 && n.w * lod_scale < 0.5 && n.h * lod_scale < 0.5 && n.kind != .Frame && n.kind != .Group && n.kind != .Ref do return
 	if blur_active && n.uid != blur_self {
 		if r, ok := blur_layer[n.uid]; ok {
 			draw_blurred_layer(vg, r, alpha)
@@ -704,6 +731,16 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		if len(n.cmds) == 0 || flat do return
 		sx := n.w / n.view_box[2]
 		sy := n.h / n.view_box[3]
+		if n.kind == .Icon && lod_scale > 0 && min(n.w, n.h) * lod_scale < 6 {
+			// a few points across: its strokes are a smudge of its colour
+			color := to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255})
+			s := min(n.w, n.h) * 0.5
+			nvg.BeginPath(vg)
+			nvg.Rect(vg, n.x + (n.w - s) / 2, n.y + (n.h - s) / 2, s, s)
+			nvg.FillColor(vg, {color.r, color.g, color.b, color.a * 0.6})
+			nvg.Fill(vg)
+			return
+		}
 		if n.kind == .Icon {
 			// uniform scale, centred, like an SVG with preserveAspectRatio
 			s := min(sx, sy)
@@ -765,7 +802,8 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		nvg.LineJoin(vg, LINE_JOINS[n.line_join])
 		fill_and_stroke(vg, n)
 	case .Text:
-		draw_text(vg, n)
+		if lod_scale > 0 && n.font_size * lod_scale < 2 do draw_text_bars(vg, n)
+		else do draw_text(vg, n)
 	case .Ref:
 		root := ghost_root_of(doc, n.uid)
 		if root == nil {
@@ -859,8 +897,15 @@ draw_box :: proc(vg: ^nvg.Context, n: ^Node) {
 	}
 }
 
+// Screen points per page unit while the live canvas draws, 0 elsewhere (screenshots,
+// exports, thumbnails, blur buffers). Above 0, details too small to see are simplified:
+// text under 2 points becomes grey bars, icons under 6 points a dot of their colour,
+// corners under a third of a point square, leaves under half a point are skipped.
+lod_scale: f32
+lod_off: bool // AGENTIC_NO_LOD=1 draws every detail (measurements)
+
 rounded_rect :: proc(vg: ^nvg.Context, x, y, w, h: f32, r: [4]f32) {
-	if r == {} do nvg.Rect(vg, x, y, w, h)
+	if r == {} || lod_scale > 0 && max(max(r[0], r[1]), max(r[2], r[3])) * lod_scale < 0.35 do nvg.Rect(vg, x, y, w, h)
 	else do nvg.RoundedRectVarying(vg, x, y, w, h, r[0], r[1], r[2], r[3])
 }
 
@@ -871,6 +916,21 @@ fill_and_stroke :: proc(vg: ^nvg.Context, n: ^Node) {
 		nvg.StrokeWidth(vg, n.stroke_width)
 		nvg.Stroke(vg)
 	}
+}
+
+// Text too small to read on screen: a bar per line in its colour.
+draw_text_bars :: proc(vg: ^nvg.Context, n: ^Node) {
+	rows := len(text_lines(n, n.w))
+	if rows == 0 do return
+	lh := n.font_size * line_height_of(n)
+	color := to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255})
+	nvg.BeginPath(vg)
+	for i in 0 ..< rows {
+		w := n.w if i < rows - 1 else n.w * (0.6 if rows > 1 else 1)
+		nvg.Rect(vg, n.x, n.y + f32(i) * lh + lh * 0.3, w, lh * 0.4)
+	}
+	nvg.FillColor(vg, {color.r, color.g, color.b, color.a * 0.45})
+	nvg.Fill(vg)
 }
 
 draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
@@ -1007,10 +1067,12 @@ draw_canvas :: proc() {
 	tl, br := to_page({c.x, c.y}), to_page({c.x + c.w, c.y + c.h})
 	cull_rect = {tl.x, tl.y, br.x - tl.x, br.y - tl.y}
 	blur_active = true
+	lod_scale = 0 if lod_off else app.zoom
 	for cu in children_of(&app.doc, 0) {
 		if app.page_hidden[cu] do continue
 		if c, _ := doc_find_uid(&app.doc, cu); c != nil do draw_node_tree(vg, c, 1, 0)
 	}
+	lod_scale = 0
 	blur_active = false
 	cull_rect = {}
 	nvg.Restore(vg)

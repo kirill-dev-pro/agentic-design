@@ -150,7 +150,7 @@ drop_shadow :: proc(vg: ^nvg.Context, n: ^Node, offset: [2]f32, blur, spread: f3
 	x, y := n.x + offset.x - spread, n.y + offset.y - spread
 	w, h := n.w + spread * 2, n.h + spread * 2
 	feather := max(blur * 2, 0.5)
-	paint := nvg.BoxGradient(x, y, w, h, radius + spread, feather, to_nvg(color), nvg.Color{0, 0, 0, 0})
+	paint := nvg.BoxGradient(x, y, w, h, clamp(radius + spread, 0, min(w, h) / 2), feather, to_nvg(color), nvg.Color{0, 0, 0, 0})
 	nvg.BeginPath(vg)
 	nvg.Rect(vg, x - feather, y - feather, w + feather * 2, h + feather * 2)
 	nvg.FillPaint(vg, paint)
@@ -166,7 +166,7 @@ draw_inner_shadows :: proc(vg: ^nvg.Context, n: ^Node, radius: f32) {
 		feather := max(e.blur * 2, 0.5)
 		x, y := n.x + e.offset.x + e.spread, n.y + e.offset.y + e.spread
 		w, h := n.w - e.spread * 2, n.h - e.spread * 2
-		paint := nvg.BoxGradient(x, y, w, h, max(radius - e.spread, 0), feather, nvg.Color{0, 0, 0, 0}, to_nvg(e.color))
+		paint := nvg.BoxGradient(x, y, w, h, clamp(radius - e.spread, 0, max(min(w, h), 0) / 2), feather, nvg.Color{0, 0, 0, 0}, to_nvg(e.color))
 		nvg.FillPaint(vg, paint)
 		nvg.Fill(vg)
 	}

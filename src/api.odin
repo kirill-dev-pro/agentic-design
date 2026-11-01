@@ -12,6 +12,7 @@ import "core:strings"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 import nvg "nanovg"
+import nvgl "nanovg/gl"
 import stbiw "vendor:stb/image"
 
 // Request: {"method": "...", "params": {...}}
@@ -50,6 +51,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		e = api_batch(&b, params)
 	case "find_nodes":
 		e = api_find_nodes(&b, params)
+	case "add_fonts":
+		e = api_add_fonts(&b, params)
 	case "get_guide":
 		api_get_guide(&b)
 	case "lint":
@@ -83,6 +86,9 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		e = api_set_pages(&b, params)
 	case "presence":
 		e = api_presence(&b, params)
+	case "memory":
+		if params["trim"].(json.Boolean) or_else false do memory_trim()
+		api_memory(&b)
 	case "perf":
 		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d,"frames":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), ghost_rebuilds, measure_calls, text_measures, frames_drawn)
 		ghost_rebuilds, measure_calls, text_measures, frames_drawn = 0, 0, 0, 0
@@ -92,6 +98,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		strings.write_string(&b, `{"ok":true}`)
 	case "select":
 		uids := uids_param(params, "ids")
+		show_page_of(uids)
 		clear(&app.sel)
 		append(&app.sel, ..uids)
 		if params["zoom"].(json.Boolean) or_else false {
@@ -101,15 +108,37 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 	case "export_code":
 		format := Code_Format.HTML
 		if string(params["format"].(json.String) or_else "html") == "react" do format = .React
-		files := generate_code(&app.doc, format)
+		roots := uids_param(params, "ids")
+		export_all_fonts = params["copy_all_fonts"].(json.Boolean) or_else false
+		defer export_all_fonts = false
+		files := generate_code(&app.doc, format, roots)
 		dir := ""
 		if d, has := params["dir"].(json.String); has && d != "" {
-			written, ok := export_code_to_dir(format, string(d))
-			if !ok do return api_error("could not write the files"), false
+			written, ok := export_code_to_dir(format, string(d), roots)
+			if !ok do return api_error(fmt.tprintf("could not write the files to %s (a file of that name, or no permission)", absolute_path(string(d)))), false
 			dir = written
 		}
 		strings.write_string(&b, `{"dir":`)
 		json_write_string(&b, dir)
+		// fonts and images the code refers to (copied there with dir)
+		strings.write_string(&b, `,"assets":{`)
+		first_asset := true
+		for rel, src in export_assets {
+			if !first_asset do strings.write_byte(&b, ',')
+			first_asset = false
+			json_write_string(&b, rel)
+			strings.write_byte(&b, ':')
+			json_write_string(&b, src)
+		}
+		strings.write_string(&b, `}`)
+		if len(export_warnings) > 0 {
+			strings.write_string(&b, `,"warnings":[`)
+			for rel, i in export_warnings {
+				if i > 0 do strings.write_byte(&b, ',')
+				json_write_string(&b, fmt.tprintf("%s is referenced by @font-face but not copied: the font does not name an open license (OFL, Apache), so it is probably licensed per user. Put the file there yourself if the license allows web use, or pass copy_all_fonts: true.", rel))
+			}
+			strings.write_byte(&b, ']')
+		}
 		strings.write_string(&b, `,"files":{`)
 		for file, i in files {
 			if i > 0 do strings.write_byte(&b, ',')
@@ -120,6 +149,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		strings.write_string(&b, "}}")
 	case "zoom_to_fit":
 		uids := uids_param(params, "ids")
+		show_page_of(uids)
 		if len(uids) == 0 do uids = all_uids(true)
 		if r, ok := bounds_of(uids); ok do zoom_to_rect(r)
 		strings.write_string(&b, `{"ok":true}`)
@@ -144,7 +174,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if !save_document(path) do return api_error("save failed"), false
 		if path != app.file_path {
 			delete(app.file_path)
-			app.file_path = strings.clone(path, runtime.default_allocator())
+			app.file_path = strings.clone(path, big_allocator())
 			update_title()
 		}
 		strings.write_string(&b, `{"path":`)
@@ -152,9 +182,26 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		strings.write_string(&b, "}")
 	case "open":
 		path := string(params["path"].(json.String) or_else "")
-		if !os.exists(path) do return api_error("could not read file"), false
-		if !open_in_tab(path) do return api_error("not a .pen document"), false
-		strings.write_string(&b, `{"ok":true}`)
+		if path == "" do return api_error("pass path"), false
+		abs := absolute_path(path)
+		created := false
+		if !os.exists(abs) {
+			if !(params["create"].(json.Boolean) or_else false) {
+				return api_error(fmt.tprintf("no file at %s; pass \"create\": true to start a new document there", abs)), false
+			}
+			if !strings.has_suffix(abs, ".pen") do return api_error(fmt.tprintf("%s: a new document needs a .pen name", abs)), false
+			_ = os.make_directory_all(os.dir(abs))
+			if werr := os.write_entire_file(abs, "{\n  \"version\": \"2.21\",\n  \"children\": []\n}\n"); werr != nil {
+				return api_error(fmt.tprintf("could not create %s: %v", abs, werr)), false
+			}
+			created = true
+		} else if os.is_dir(abs) {
+			return api_error(fmt.tprintf("%s is a folder, not a .pen file", abs)), false
+		}
+		if !open_in_tab(abs) do return api_error(fmt.tprintf("could not open %s: not a readable .pen document", abs)), false
+		strings.write_string(&b, `{"ok":true,"path":`)
+		json_write_string(&b, app.file_path)
+		fmt.sbprintf(&b, `,"created":%v}}`, created)
 	case "screenshot":
 		if shot.req != nil do return api_error("another screenshot is in progress"), false
 		shot = {
@@ -195,11 +242,11 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 	}
 	if e != "" do return api_error(e), false
 	strings.write_string(&b, "}")
-	return strings.clone(strings.to_string(b), runtime.default_allocator()), false
+	return strings.clone(strings.to_string(b), big_allocator()), false
 }
 
 api_error :: proc(msg: string) -> string {
-	b := strings.builder_make(runtime.default_allocator())
+	b := strings.builder_make(big_allocator())
 	strings.write_string(&b, `{"ok":false,"error":`)
 	json_write_string(&b, msg)
 	strings.write_string(&b, "}")
@@ -235,8 +282,9 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 		strings.write_string(b, `,"variables":`)
 		write_header_value(b, "variables")
 	}
-	// imported libraries and the components they offer ("alias:id" for refs)
-	if !selection_only {
+	// imported libraries and the components they offer ("alias:id" for refs); only with
+	// the whole document, or when asked: a read of a few ids should stay small
+	if !selection_only && (params["libraries"].(json.Boolean) or_else ("ids" not_in params)) {
 		strings.write_string(b, `,"libraries":[`)
 		first_lib := true
 		for alias, rel in doc_imports(&app.doc) {
@@ -295,15 +343,31 @@ api_set_libraries :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			if alias, aok := library_add(p); aok do append(&added, alias)
 		}
 	}
+	removed := make([dynamic]string, context.temp_allocator)
 	if arr, ok := params["remove"].(json.Array); ok {
-		for v in arr do library_remove(string(v.(json.String) or_else ""))
+		for v in arr {
+			alias := string(v.(json.String) or_else "")
+			if alias not_in doc_imports(&app.doc) do return fmt.tprintf("no library \"%s\" is imported", alias)
+			library_remove(alias)
+			append(&removed, alias)
+		}
 	}
-	strings.write_string(b, `{"added":[`)
-	for a, i in added {
-		if i > 0 do strings.write_byte(b, ',')
-		json_write_string(b, a)
+	// read the libraries again now (they are also re-read within seconds of a change)
+	reloaded := params["reload"].(json.Boolean) or_else false
+	if reloaded do doc_load_imports(&app.doc, app.file_path)
+	list :: proc(b: ^strings.Builder, key: string, items: []string) {
+		fmt.sbprintf(b, `"%s":[`, key)
+		for a, i in items {
+			if i > 0 do strings.write_byte(b, ',')
+			json_write_string(b, a)
+		}
+		strings.write_byte(b, ']')
 	}
-	strings.write_string(b, "]}")
+	strings.write_byte(b, '{')
+	list(b, "added", added[:])
+	strings.write_byte(b, ',')
+	list(b, "removed", removed[:])
+	fmt.sbprintf(b, `,"reloaded":%v}}`, reloaded)
 	return ""
 }
 
@@ -355,9 +419,26 @@ api_get_styles :: proc(b: ^strings.Builder, params: json.Object) -> string {
 
 api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	parent := 0
+	// an instance as the parent: the nodes become slot content (`slot`: the id of the
+	// component's slot frame; default: the frame marked as its slot)
+	slot := ""
 	if pid, has := params["parent_id"].(json.String); has && pid != "" {
 		p, _ := doc_find(&app.doc, string(pid))
-		if p == nil || (p.kind != .Frame && p.kind != .Group) do return "parent_id must be a frame or group"
+		if p != nil && p.kind == .Ref && !p.imported {
+			ghosts_sync(&app.doc)
+			slot = string(params["slot"].(json.String) or_else "")
+			if slot == "" {
+				sg, has_slot := app.doc.ghost_slot[p.uid]
+				root := ghost_root_of(&app.doc, p.uid)
+				if !has_slot || root == nil do return fmt.tprintf("instance '%s' has no component to put content in", p.id)
+				if root.uid != sg {
+					if gs, _ := doc_find_uid(&app.doc, sg); gs != nil do slot = gs.ghost_of
+				}
+				// a component without a slot frame takes content in its root (2.8 style)
+			}
+		} else if p == nil || (p.kind != .Frame && p.kind != .Group) {
+			return "parent_id must be a frame, a group or an instance (whose slot gets the nodes)"
+		}
 		parent = p.uid
 	}
 	specs, ok := params["nodes"].(json.Array)
@@ -367,22 +448,129 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	for spec in specs {
 		uid, err := node_from_json(&app.doc, spec, parent)
 		if err != "" do return err
+		if slot != "" do if cn, _ := doc_find_uid(&app.doc, uid); cn != nil do cn.slot_of = strings.clone(slot)
 		append(&created, uid)
 	}
+	warnings := make([dynamic]string, context.temp_allocator)
+	for uid in created do api_check_nodes(uid, true, &warnings)
 	strings.write_string(b, `{"created":[`)
 	for uid, i in created {
 		if i > 0 do strings.write_byte(b, ',')
 		n, _ := doc_find_uid(&app.doc, uid)
 		json_write_string(b, n.id)
 	}
-	strings.write_string(b, "]}")
+	strings.write_byte(b, ']')
+	write_warnings(b, warnings[:])
+	strings.write_byte(b, '}')
 	return ""
+}
+
+// What an agent should hear about the nodes it just wrote: icon names the library does
+// not have, and values the app had to read leniently (3-value padding is rewritten to
+// the four values it means). `deep` checks the whole subtree.
+api_check_nodes :: proc(uid: int, deep: bool, warnings: ^[dynamic]string) {
+	n, _ := doc_find_uid(&app.doc, uid)
+	if n == nil || n.ghost do return
+	if msg := icon_problem(n); msg != "" do append(warnings, fmt.tprintf("%s: %s", n.id, msg))
+	if i := prop_index(n, "padding"); i >= 0 {
+		if v, err := json.parse_string(n.props[i].raw, .JSON5, false, context.temp_allocator); err == nil {
+			if arr, ok := v.(json.Array); ok && len(arr) == 3 {
+				b := strings.builder_make(context.temp_allocator)
+				strings.write_byte(&b, '[')
+				for k in ([4]int{0, 1, 2, 1}) {
+					if b.buf[len(b.buf) - 1] != '[' do strings.write_byte(&b, ',')
+					write_json_value(&b, arr[k])
+				}
+				strings.write_byte(&b, ']')
+				node_set_raw(n, "padding", strings.to_string(b))
+				append(warnings, fmt.tprintf("%s: padding takes 1, 2 or 4 values; [top, sides, bottom] was written as %s", n.id, strings.to_string(b)))
+			}
+		}
+	}
+	if i := prop_index(n, "fill"); i >= 0 && strings.contains(n.props[i].raw, `"image"`) {
+		if raw, changed := adopt_image_fills(n.props[i].raw, n.id, warnings); changed {
+			node_set_raw(n, "fill", raw)
+			node_refresh(&app.doc, n)
+		}
+	}
+	if deep do for cu in children_of(&app.doc, uid) do api_check_nodes(cu, true, warnings)
+}
+
+// Image paints whose url is a file outside the document's images/ folder: the file is
+// copied there and the url becomes "./images/<name>", as a dropped image is, so the
+// document stays self-contained (and pen.dev finds it). A missing file is a warning.
+adopt_image_fills :: proc(raw, id: string, warnings: ^[dynamic]string) -> (string, bool) {
+	v, err := json.parse_string(raw, .JSON5, false, context.temp_allocator)
+	if err != nil do return raw, false
+	items := make([dynamic]json.Value, context.temp_allocator)
+	single := true
+	if arr, ok := v.(json.Array); ok {
+		append(&items, ..arr[:])
+		single = false
+	} else do append(&items, v)
+	changed := false
+	for &item in items {
+		obj, ok := item.(json.Object)
+		if !ok || string(obj["type"].(json.String) or_else "") != "image" do continue
+		url := string(obj["url"].(json.String) or_else "")
+		if url == "" || strings.contains(url, "://") && !strings.has_prefix(url, "file://") || strings.has_prefix(url, "data:") do continue
+		src := strings.trim_prefix(url, "file://")
+		if strings.has_prefix(src, "~/") {
+			home, _ := os.user_home_dir(context.temp_allocator)
+			src = fmt.tprintf("%s/%s", home, src[2:])
+		}
+		path := src if os.is_absolute_path(src) else image_resolve(src)
+		if !os.exists(path) {
+			append(warnings, fmt.tprintf("%s: image %s not found (give an absolute path; it is copied into images/)", id, path))
+			continue
+		}
+		images := fmt.tprintf("%s/images", os.dir(app.file_path))
+		if os.dir(absolute_path(path)) == images do continue // already in place
+		_ = os.make_directory_all(images)
+		name := os.base(path)
+		dst := fmt.tprintf("%s/%s", images, name)
+		// another file of the same name already there: number the copy
+		for k := 2; os.exists(dst) && !files_equal(dst, path); k += 1 {
+			ext := os.ext(name)
+			dst = fmt.tprintf("%s/%s-%d%s", images, strings.trim_suffix(name, ext), k, ext)
+		}
+		if !os.exists(dst) {
+			if cerr := os.copy_file(dst, path); cerr != nil {
+				append(warnings, fmt.tprintf("%s: could not copy %s into images/: %v", id, path, cerr))
+				continue
+			}
+		}
+		obj["url"] = json.String(fmt.tprintf("./images/%s", os.base(dst)))
+		changed = true
+	}
+	if !changed do return raw, false
+	b := strings.builder_make(context.temp_allocator)
+	if single do write_json_value(&b, items[0])
+	else do write_json_value(&b, json.Array(items))
+	return strings.to_string(b), true
+}
+
+files_equal :: proc(a, b: string) -> bool {
+	da, ea := os.read_entire_file(a, context.temp_allocator)
+	db, eb := os.read_entire_file(b, context.temp_allocator)
+	return ea == nil && eb == nil && string(da) == string(db)
+}
+
+write_warnings :: proc(b: ^strings.Builder, warnings: []string) {
+	if len(warnings) == 0 do return
+	strings.write_string(b, `,"warnings":[`)
+	for w, i in warnings {
+		if i > 0 do strings.write_byte(b, ',')
+		json_write_string(b, w)
+	}
+	strings.write_byte(b, ']')
 }
 
 api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	updates, ok := params["updates"].(json.Array)
 	if !ok || len(updates) == 0 do return "updates must be a non-empty array"
 	push_undo()
+	warnings := make([dynamic]string, context.temp_allocator)
 	for u in updates {
 		o, is_obj := u.(json.Object)
 		if !is_obj do return "each update must be an object"
@@ -408,8 +596,11 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 				else do node_set(&app.doc, n, k, v)
 			}
 		}
+		if "icon" in o || "iconFontName" in o || "padding" in o || "fill" in o do api_check_nodes(n.uid, false, &warnings)
 	}
-	strings.write_string(b, `{"updated":true}`)
+	strings.write_string(b, `{"updated":true`)
+	write_warnings(b, warnings[:])
+	strings.write_byte(b, '}')
 	return ""
 }
 
@@ -441,15 +632,11 @@ capture_view :: proc() {
 	req := shot.req
 	defer shot = {}
 	fb := platform_framebuffer_size()
-	w, h := fb.x, fb.y
-	pixels := make([]u8, int(w * h * 4), context.temp_allocator)
-	gl.PixelStorei(gl.PACK_ALIGNMENT, 1)
-	gl.ReadPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
-	finish_request(req, encode_png_response(pixels, w, h))
+	finish_request(req, encode_png_response(read_pixels(fb.x, fb.y), fb.x, fb.y))
 }
 
-// Renders the target into the back buffer, reads it back and encodes a PNG.
-// Runs before the regular frame overwrites the buffer.
+// Renders the target offscreen (render_region), reads it back and encodes a PNG.
+// Runs between frames.
 render_screenshot :: proc() {
 	req := shot.req
 	defer shot = {}
@@ -487,7 +674,7 @@ render_screenshot :: proc() {
 		doc_retheme(&app.doc)
 		layout_document(&app.doc)
 	}
-	pixels, ow, oh, rok := render_region(r, shot.scale, target, {1, 1, 1, 1})
+	pixels, ow, oh, rok := render_region(r, shot.scale, target, shot_backdrop(target))
 	if !rok {
 		finish_request(req, api_error("node too small to capture"))
 		return
@@ -503,80 +690,160 @@ render_screenshot :: proc() {
 			finish_request(req, api_error(fmt.tprintf("could not write %s", path)))
 			return
 		}
-		b := strings.builder_make(runtime.default_allocator())
+		b := strings.builder_make(big_allocator())
 		fmt.sbprintf(&b, `{{"ok":true,"result":{{"path":`)
 		json_write_string(&b, path)
-		fmt.sbprintf(&b, `,"format":"%s","width":%d,"height":%d,"bytes":%d}}}}`, EXPORT_EXTENSIONS[shot.format], ow, oh, len(data))
+		fmt.sbprintf(&b, `,"format":"%s","width":%d,"height":%d,"bytes":%d`, EXPORT_EXTENSIONS[shot.format], ow, oh, len(data))
+		write_scale_note(&b, shot.scale)
+		strings.write_string(&b, "}}")
 		finish_request(req, strings.to_string(b))
 		return
 	}
-	finish_request(req, encode_png_response(pixels, ow, oh))
+	finish_request(req, encode_png_response(pixels, ow, oh, shot.scale))
+}
+
+// What a layer is seen on: the fill of its nearest ancestor with an opaque one (resolved
+// in the theme the screenshot uses), else white. A section without a fill of its own
+// inside a dark page came out as light text on white.
+shot_backdrop :: proc(target: ^Node) -> nvg.Color {
+	if target == nil do return {1, 1, 1, 1}
+	p, _ := doc_find_uid(&app.doc, target.parent)
+	for depth := 0; p != nil && depth < MAX_DEPTH; depth += 1 {
+		if p.has_fill && p.enabled && p.fill[3] == 255 && (p.nfills <= 1 || p.fills[0].kind == .Color) {
+			return {f32(p.fill[0]) / 255, f32(p.fill[1]) / 255, f32(p.fill[2]) / 255, 1}
+		}
+		p, _ = doc_find_uid(&app.doc, p.parent)
+	}
+	return {1, 1, 1, 1}
+}
+
+// Shows the page that holds the first of these layers, so selecting or zooming to a layer
+// on another page does not draw it over the current one.
+show_page_of :: proc(uids: []int) {
+	if len(uids) == 0 do return
+	top := top_ancestor(uids[0])
+	n, _ := doc_find_uid(&app.doc, top)
+	if n == nil || n.imported || !app.page_hidden[top] do return
+	page_switch(page_of_top(&app.doc, n.id))
+}
+
+// The scale used, and why when it is less than asked.
+write_scale_note :: proc(b: ^strings.Builder, asked: f32) {
+	fmt.sbprintf(b, `,"scale":%s`, num_text(render_scale))
+	if asked > 0 && render_scale < asked - 0.001 {
+		strings.write_string(b, `,"note":`)
+		json_write_string(b, fmt.tprintf("scale %s was reduced to %s: an image is at most 16 pixels per unit, the GPU's largest texture on a side and 100 Mpx", num_text(asked), num_text(render_scale)))
+	}
 }
 
 // Draws a page rectangle (a node, or every top-level node) into the back buffer at
 // `scale` pixels per unit and reads the pixels back (bottom-up rows, RGBA).
+render_scale: f32 // the scale the last render_region used, after its limits
+
 render_region :: proc(r: [4]f32, scale: f32, target: ^Node, bg: nvg.Color) -> (pixels: []u8, ow, oh: i32, ok: bool) {
-	fb := platform_framebuffer_size()
-	rw, rh := f32(fb.x), f32(fb.y)
-	s := clamp(scale, 0.05, 4)
-	s = min(s, rw / r[2], rh / r[3])
+	// drawn into a buffer of its own, so it may be larger than the window (up to what the
+	// GPU allows) and leaves the window's frame alone
+	max_side: i32
+	gl.GetIntegerv(gl.MAX_TEXTURE_SIZE, &max_side)
+	max_side = clamp(max_side, 1024, 16384)
+	// up to 16 pixels per unit, the GPU's largest texture a side and 100 Mpx in all;
+	// render_scale tells callers what was used
+	s := clamp(scale, 0.05, 16)
+	s = min(s, f32(max_side) / r[2], f32(max_side) / r[3])
+	if r[2] * s * r[3] * s > 100e6 do s *= math.sqrt(100e6 / (r[2] * s * r[3] * s)) // at most 100 Mpx
+	render_scale = s
 	ow, oh = i32(math.round(r[2] * s)), i32(math.round(r[3] * s)) // 191.9996 px tall is 192, as pen.dev exports it
 	if ow < 1 || oh < 1 do return
 
+	// Drawn in tiles through one buffer of a fixed size. The driver keeps the storage of a
+	// deleted texture for reuse; a buffer the size of each image left 60-70 MB of video
+	// memory behind after a big screenshot, a fixed one keeps at most its 20 MB. Each tile
+	// draws only the layers that reach it.
+	TILE :: 2048
 	vg := app.vg
-	blur_prepare({xf = {s, 0, 0, s, -r[0] * s, -r[1] * s}, dpr = 1, clip = {0, 0, f32(ow), f32(oh)}, fb = {i32(rw), i32(rh)}, bg = bg})
-	gl.Viewport(0, 0, i32(rw), i32(rh))
-	gl.ClearColor(bg.r, bg.g, bg.b, 1)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-	nvg.BeginFrame(vg, rw, rh, 1)
-	nvg.Scale(vg, s, s)
-	nvg.Translate(vg, -r[0], -r[1])
-	blur_active = true
-	if target != nil {
-		draw_node_tree(vg, target, 1, 0)
-	} else {
-		for i in 0 ..< len(app.doc.nodes) {
-			if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do draw_node_tree(vg, &app.doc.nodes[i], 1, 0)
+	pixels = make([]u8, int(ow) * int(oh) * 4, context.temp_allocator)
+	tile_fb := nvgl.CreateFramebuffer(vg, TILE, TILE, {})
+	defer gl.Flush() // (last: the driver takes the deleted buffer back now, not at the next frame)
+	defer nvgl.DeleteFramebuffer(&tile_fb)
+	defer nvgl.BindFramebuffer(nil)
+	saved_cull := cull_rect
+	defer cull_rect = saved_cull
+	for y0 := i32(0); y0 < oh; y0 += TILE {
+		for x0 := i32(0); x0 < ow; x0 += TILE {
+			tw, th := min(TILE, ow - x0), min(TILE, oh - y0)
+			xf := nvg.Matrix{s, 0, 0, s, -r[0] * s - f32(x0), -r[1] * s - f32(y0)}
+			blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg})
+			nvgl.BindFramebuffer(&tile_fb)
+			gl.Viewport(0, 0, TILE, TILE)
+			gl.ClearColor(bg.r, bg.g, bg.b, 1)
+			gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
+			nvg.BeginFrame(vg, TILE, TILE, 1)
+			nvg.Transform(vg, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5])
+			cull_rect = {r[0] + f32(x0) / s, r[1] + f32(y0) / s, f32(tw) / s, f32(th) / s}
+			blur_active = true
+			if target != nil {
+				draw_node_tree(vg, target, 1, 0)
+			} else {
+				for i in 0 ..< len(app.doc.nodes) {
+					if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do draw_node_tree(vg, &app.doc.nodes[i], 1, 0)
+				}
+			}
+			blur_active = false
+			nvg.EndFrame(vg)
+			// the tile's top rows, bottom-up, land in the image's rows (it is bottom-up too)
+			tile := read_pixels_rect(0, TILE - th, tw, th)
+			first := int(oh - y0 - th)
+			for k in 0 ..< int(th) {
+				copy(pixels[((first + k) * int(ow) + int(x0)) * 4:][:int(tw) * 4], tile[k * int(tw) * 4:][:int(tw) * 4])
+			}
 		}
 	}
-	blur_active = false
-	nvg.EndFrame(vg)
-
-	pixels = make([]u8, int(ow * oh * 4), context.temp_allocator)
-	gl.PixelStorei(gl.PACK_ALIGNMENT, 1)
-	gl.ReadPixels(0, i32(rh) - oh, ow, oh, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
 	return pixels, ow, oh, true
 }
 
-// Flips GL rows (bottom-up) in place and encodes a PNG (temp allocator).
-png_encode :: proc(pixels: []u8, ow, oh: i32) -> (png: []u8, ok: bool) {
-	row := int(ow * 4)
-	tmp := make([]u8, row, context.temp_allocator)
-	for y in 0 ..< int(oh) / 2 {
-		a := pixels[y * row:][:row]
-		bb := pixels[(int(oh) - 1 - y) * row:][:row]
-		copy(tmp, a)
-		copy(a, bb)
-		copy(bb, tmp)
-	}
-	for i := 3; i < len(pixels); i += 4 do pixels[i] = 255
-
-	out := make([dynamic]u8, context.temp_allocator)
-	write_chunk :: proc "c" (ctx: rawptr, data: rawptr, size: c.int) {
-		context = runtime.default_context()
-		out := (^[dynamic]u8)(ctx)
-		append(out, ..([^]u8)(data)[:size])
-	}
-	if stbiw.write_png_to_func(write_chunk, &out, c.int(ow), c.int(oh), 4, raw_data(pixels), c.int(row)) == 0 do return
-	return out[:], true
+// The bound framebuffer's pixels (bottom-up rows, RGBA), read in strips of 128 rows
+// through one small pixel buffer. Read straight into memory, the driver kept a 32 MB
+// staging buffer after the first screenshot; through a pixel buffer as large as the
+// image, it kept that one (20 MB for a window-sized shot) in its pool after deletion.
+read_pixels :: proc(w, h: i32) -> []u8 {
+	return read_pixels_rect(0, 0, w, h)
 }
 
-encode_png_response :: proc(pixels: []u8, ow, oh: i32) -> string {
+read_pixels_rect :: proc(x, y, w, h: i32) -> []u8 {
+	STRIP :: 128
+	pixels := make([]u8, int(w * h * 4), context.temp_allocator)
+	row := int(w) * 4
+	pbo: u32
+	gl.GenBuffers(1, &pbo)
+	gl.BindBuffer(gl.PIXEL_PACK_BUFFER, pbo)
+	gl.PixelStorei(gl.PACK_ALIGNMENT, 1)
+	// a whole number of megabytes: the driver keeps a block per size it was asked for, and
+	// image widths vary (one block per width came to 23 MB of shared memory in a session)
+	pbo_size := (int(STRIP) * row + (1 << 20) - 1) / (1 << 20) * (1 << 20)
+	for y0 := i32(0); y0 < h; y0 += STRIP {
+		rows := min(STRIP, h - y0)
+		n := int(rows) * row
+		gl.BufferData(gl.PIXEL_PACK_BUFFER, pbo_size, nil, gl.STREAM_READ)
+		gl.ReadPixels(x, y + y0, w, rows, gl.RGBA, gl.UNSIGNED_BYTE, nil)
+		if src := gl.MapBuffer(gl.PIXEL_PACK_BUFFER, gl.READ_ONLY); src != nil {
+			copy(pixels[int(y0) * row:][:n], ([^]u8)(src)[:n])
+			gl.UnmapBuffer(gl.PIXEL_PACK_BUFFER)
+		}
+	}
+	gl.BindBuffer(gl.PIXEL_PACK_BUFFER, 0)
+	gl.DeleteBuffers(1, &pbo)
+	return pixels
+}
+
+// Flips GL rows (bottom-up) in place and encodes a PNG (temp allocator).
+encode_png_response :: proc(pixels: []u8, ow, oh: i32, asked: f32 = 0) -> string {
 	png, ok := png_encode(pixels, ow, oh)
 	if !ok do return api_error("PNG encoding failed")
 	encoded := base64.encode(png, allocator = context.temp_allocator)
-	b := strings.builder_make(runtime.default_allocator())
-	fmt.sbprintf(&b, `{{"ok":true,"result":{{"width":%d,"height":%d,"png_base64":"%s"}}}}`, ow, oh, encoded)
+	b := strings.builder_make(big_allocator())
+	fmt.sbprintf(&b, `{{"ok":true,"result":{{"width":%d,"height":%d`, ow, oh)
+	if asked > 0 do write_scale_note(&b, asked)
+	fmt.sbprintf(&b, `,"png_base64":"%s"}}}}`, encoded)
 	return strings.to_string(b)
 }
 

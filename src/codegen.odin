@@ -4,6 +4,7 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 
@@ -29,61 +30,256 @@ Gen :: struct {
 	props:    map[string][dynamic]string, // component id -> prop names (override ids)
 	shadcn:   map[string]bool, // shadcn components used
 	icons:    map[string]bool, // lucide-react components used
-	comp_ids: [dynamic]int, // reusable nodes
+	comp_ids: [dynamic]int, // reusable nodes that are exported
+	names:    map[int]string, // component uid -> its React name (unique; "LibBadge" for a library's)
+	styled:   map[string][dynamic]string, // component id -> parts whose style an instance overrides
+	roots:    []int, // layers to export (empty: every top-level layer of the page)
+	viewport: string, // the theme axis written as media queries ("" if none)
+	widths:   map[string]f32, // viewport value -> the width of the frames pinned to it
 }
 
 // Generates the files for the current page.
-generate_code :: proc(doc: ^Document, format: Code_Format) -> []Code_File {
-	g := Gen{doc = doc, format = format}
+generate_code :: proc(doc: ^Document, format: Code_Format, roots: []int = nil) -> []Code_File {
+	clear(&export_assets)
+	for w in export_warnings do delete(w)
+	clear(&export_warnings)
+	g := Gen{doc = doc, format = format, roots = roots}
+	viewport_setup(&g)
 	g.css = strings.builder_make(context.temp_allocator)
 	g.out = strings.builder_make(context.temp_allocator)
-	for n in doc.nodes do if n.reusable do append(&g.comp_ids, n.uid)
+	collect_components(&g)
 	for n in doc.nodes do if n.kind == .Icon && n.icon != "" do g.icons[pascal(n.icon)] = true
 	for n in doc.nodes do for o in n.overrides do if name := override_icon(o); name != "" do g.icons[pascal(name)] = true
 	collect_props(&g)
 	files := make([dynamic]Code_File, context.temp_allocator)
+	// the page is generated first, then the variables: a library's variables are written
+	// only when the page uses them (a page with one library badge got all 261, 108 KB)
 	switch format {
 	case .HTML:
-		gen_css_vars(&g)
 		fmt.sbprintf(&g.out, "<!doctype html>\n<html%s>\n<head>\n<meta charset=\"utf-8\">\n", shown_theme_attrs(doc))
 		fmt.sbprintf(&g.out, "<title>%s</title>\n<link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n", html_escape(file_title(app.file_path)))
-		for cu in children_of(doc, 0) {
-			if app.page_hidden[cu] do continue
+		for cu in export_roots(&g) {
 			n, _ := doc_find_uid(doc, cu)
-			if n == nil || !n.enabled || n.reusable do continue
+			if n == nil || !n.enabled do continue
 			gen_html_node(&g, n, 1, "", true)
 		}
 		strings.write_string(&g.out, "</body>\n</html>\n")
+		nodes_css := strings.to_string(g.css)
+		g.css = strings.builder_make(context.temp_allocator)
+		gen_css_vars(&g, strings.concatenate({nodes_css, strings.to_string(g.out)}, context.temp_allocator))
+		strings.write_string(&g.css, nodes_css)
 		append(&files, Code_File{"index.html", strings.clone(strings.to_string(g.out), context.temp_allocator)})
 		append(&files, Code_File{"styles.css", strings.clone(strings.to_string(g.css), context.temp_allocator)})
 	case .React:
-		gen_css_vars(&g)
-		append(&files, Code_File{"globals.css", strings.clone(strings.to_string(g.css), context.temp_allocator)})
 		gen_react_components(&g)
-		append(&files, Code_File{"components.tsx", strings.clone(strings.to_string(g.out), context.temp_allocator)})
+		components := strings.clone(strings.to_string(g.out), context.temp_allocator)
 		strings.builder_reset(&g.out)
 		gen_react_page(&g)
-		append(&files, Code_File{"Page.tsx", strings.clone(strings.to_string(g.out), context.temp_allocator)})
+		page := strings.clone(strings.to_string(g.out), context.temp_allocator)
+		gen_css_vars(&g, strings.concatenate({components, page}, context.temp_allocator))
+		append(&files, Code_File{"globals.css", strings.clone(strings.to_string(g.css), context.temp_allocator)})
+		append(&files, Code_File{"components.tsx", components})
+		append(&files, Code_File{"Page.tsx", page})
 	}
 	return files[:]
 }
 
 // Writes the files into a folder next to the document (or `dir`) and returns it.
-export_code_to_dir :: proc(format: Code_Format, dir := "") -> (string, bool) {
-	files := generate_code(&app.doc, format)
+export_code_to_dir :: proc(format: Code_Format, dir := "", roots: []int = nil) -> (string, bool) {
+	files := generate_code(&app.doc, format, roots)
 	target := dir
-	if target == "" {
-		home, _ := os.user_home_dir(context.temp_allocator)
-		target = fmt.tprintf("%s/Downloads/%s-%s", home, file_title(app.file_path), "html" if format == .HTML else "react")
-	}
-	if err := os.make_directory_all(target); err != nil do return target, false
+	if target == "" do target = fmt.tprintf("%s/%s-%s", downloads_dir(), file_title(app.file_path), "html" if format == .HTML else "react")
+	if err := os.make_directory_all(target); err != nil && !os.is_dir(target) do return target, false // fails on an existing folder
 	for f in files {
 		if err := os.write_entire_file(fmt.tprintf("%s/%s", target, f.name), f.content); err != nil do return target, false
+	}
+	// the fonts and images the code refers to, next to it
+	for rel, src in export_assets {
+		dst := fmt.tprintf("%s/%s", target, rel)
+		_ = os.make_directory_all(os.dir(dst))
+		if os.exists(dst) do _ = os.remove(dst)
+		if err := os.copy_file(dst, src); err != nil do return target, false
 	}
 	return target, true
 }
 
+// Where exports go: ~/Downloads, or for a quiet (test) window a folder in $TMPDIR.
+// ~/Downloads is privacy-protected: the first write from a process without access waits
+// in open() for the user to answer a system prompt, which froze a fuzzed test window (and
+// would show the user a dialog).
+downloads_dir :: proc() -> string {
+	if pf.quiet {
+		dir := fmt.tprintf("%s/agentic-design-downloads", strings.trim_suffix(os.temp_directory(context.temp_allocator) or_else "/tmp", "/"))
+		_ = os.make_directory_all(dir)
+		return dir
+	}
+	home, _ := os.user_home_dir(context.temp_allocator)
+	return fmt.tprintf("%s/Downloads", home)
+}
+
+// Files the generated code refers to: path relative to the export -> the file on disk.
+// Filled by generate_code; export_code_to_dir copies them.
+export_assets: map[string]string
+export_warnings: [dynamic]string // fonts referenced but not copied (no open license)
+export_all_fonts: bool // copy every declared font, licensed ones too
+
+// An image url as the exported code refers to it: copied to images/ next to the code.
+export_url :: proc(url: string) -> string {
+	if strings.contains(url, "://") || strings.has_prefix(url, "data:") do return url
+	src := image_resolve(url)
+	rel := fmt.tprintf("images/%s", os.base(src))
+	if rel not_in export_assets do export_assets[strings.clone(rel)] = strings.clone(src)
+	return rel
+}
+
+// @font-face rules for the fonts the document and its libraries declare (their "fonts"),
+// with the files copied to fonts/ next to the code. Families that are only installed on
+// this Mac are not shipped.
+gen_font_faces :: proc(g: ^Gen) {
+	write_list :: proc(g: ^Gen, v: json.Value, base: string) {
+		list, _ := v.(json.Array)
+		for item in list {
+			e, _ := item.(json.Object)
+			name := strings.trim_space(string(e["name"].(json.String) or_else ""))
+			url := string(e["url"].(json.String) or_else "")
+			if name == "" || url == "" || strings.has_prefix(url, "data:") do continue
+			src := url
+			if !strings.contains(url, "://") {
+				path := strings.trim_prefix(url, "file://")
+				if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
+				if !os.exists(path) do continue
+				rel := fmt.tprintf("fonts/%s", os.base(path))
+				// a font licensed per user is referenced but not shipped (dogfooding D38)
+				if export_all_fonts || font_open_license(path) {
+					if rel not_in export_assets do export_assets[strings.clone(rel)] = strings.clone(path)
+				} else if !slice.contains(export_warnings[:], rel) {
+					append(&export_warnings, strings.clone(rel))
+				}
+				src = rel
+			}
+			ext := strings.to_lower(filepath.ext(src), context.temp_allocator)
+			format := "woff" if ext == ".woff" else ("woff2" if ext == ".woff2" else ("opentype" if ext == ".otf" else "truetype"))
+			fmt.sbprintf(&g.css, "@font-face {{\n  font-family: \"%s\";\n  src: url(\"%s\") format(\"%s\");\n", name, src, format)
+			#partial switch w in e["weight"] {
+			case json.Integer: fmt.sbprintf(&g.css, "  font-weight: %d;\n", w)
+			case json.Float: fmt.sbprintf(&g.css, "  font-weight: %d;\n", int(w))
+			case json.Array:
+				if len(w) == 2 do fmt.sbprintf(&g.css, "  font-weight: %v %v;\n", w[0], w[1])
+			}
+			if string(e["style"].(json.String) or_else "") == "italic" do strings.write_string(&g.css, "  font-style: italic;\n")
+			strings.write_string(&g.css, "  font-display: swap;\n}\n")
+		}
+	}
+	base := filepath.dir(app.file_path)
+	for p in g.doc.header do if p.key == "fonts" {
+		if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do write_list(g, v, base)
+	}
+	for _, rel in doc_imports(g.doc) {
+		path := string(rel.(json.String) or_else "")
+		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
+		data, err := os.read_entire_file(path, context.temp_allocator)
+		if err != nil do continue
+		root, perr := json.parse_string(string(data), .JSON5, false, context.temp_allocator)
+		if perr != nil do continue
+		obj, _ := root.(json.Object)
+		write_list(g, obj["fonts"], filepath.dir(path))
+	}
+}
+
 // ---------------------------------------------------------------- shared helpers
+
+// The layers to export: the ones asked for, else the page's top-level layers that are
+// not components.
+export_roots :: proc(g: ^Gen) -> []int {
+	if len(g.roots) > 0 do return g.roots
+	out := make([dynamic]int, context.temp_allocator)
+	for cu in children_of(g.doc, 0) {
+		if app.page_hidden[cu] do continue
+		n, _ := doc_find_uid(g.doc, cu)
+		if n == nil || n.reusable do continue
+		append(&out, cu)
+	}
+	return out[:]
+}
+
+// A theme axis named viewport (or breakpoint, screen, device) is responsive: its values
+// become media queries. Each value's width is the widest top-level frame pinned to it
+// (the default value: the widest unpinned frame).
+viewport_setup :: proc(g: ^Gen) {
+	axes := doc_theme_axes(g.doc)
+	for a in axes {
+		switch strings.to_lower(a.name, context.temp_allocator) {
+		case "viewport", "breakpoint", "screen", "device":
+			g.viewport = a.name
+		}
+		if g.viewport != "" && len(a.values) > 0 {
+			for cu in children_of(g.doc, 0) {
+				n, _ := doc_find_uid(g.doc, cu)
+				if n == nil || n.reusable || n.kind != .Frame do continue
+				value := a.values[0]
+				for t in n.theme_set do if t[0] == a.name do value = t[1]
+				g.widths[value] = max(g.widths[value], n.w)
+			}
+			break
+		}
+	}
+}
+
+// Media queries for the viewport axis, widest first: a value applies below the middle
+// between its frames' width and the next wider value's (desktop 1440 and mobile 390:
+// mobile below 915 px).
+Breakpoint :: struct {
+	value: string,
+	width: f32,
+	below: f32, // max-width of its media query; 0 for the widest
+}
+
+viewport_breakpoints :: proc(g: ^Gen) -> []Breakpoint {
+	out := make([dynamic]Breakpoint, context.temp_allocator)
+	for v, w in g.widths do if w > 0 do append(&out, Breakpoint{value = v, width = w})
+	slice.sort_by(out[:], proc(a, b: Breakpoint) -> bool {return a.width > b.width})
+	for i in 1 ..< len(out) do out[i].below = math.floor((out[i].width + out[i - 1].width) / 2)
+	return out[:]
+}
+
+// A length in CSS: calc(var(--name) * 1px) when the property binds a number variable
+// (so themes and media queries change it), else px. `item` picks an element of an array
+// value (padding sides, corner radii); -1 for the whole value.
+len_css :: proc(n: ^Node, key: string, value: f32, item := -1) -> string {
+	if name := bound_var(n, key, item); name != "" do return fmt.tprintf("calc(var(--%s) * 1px)", css_name(name))
+	return px(value)
+}
+
+// The variable a number property (or one element of it) is bound to, or "".
+bound_var :: proc(n: ^Node, key: string, item := -1) -> string {
+	raw := prop_string(n, key)
+	if strings.has_prefix(raw, "$") do return raw[1:]
+	if item < 0 do return ""
+	v, ok := prop_value(n, key)
+	if !ok do return ""
+	arr, is_arr := v.(json.Array)
+	if !is_arr || len(arr) == 0 do return ""
+	// padding and radius sides: [all], [v, h], [t, sides, b], [t, r, b, l]
+	idx := item
+	switch len(arr) {
+	case 1: idx = 0
+	case 2: idx = item % 2
+	case 3:
+		three := [4]int{0, 1, 2, 1}
+		idx = three[item & 3]
+	}
+	if idx >= len(arr) do return ""
+	if s, is_str := arr[idx].(json.String); is_str && strings.has_prefix(string(s), "$") do return string(s)[1:]
+	return ""
+}
+
+// A JavaScript string literal (JSON quoting): text with quotes, braces or newlines is
+// safe as a JSX prop value ({"..."}) or a default.
+js_string :: proc(s: string) -> string {
+	b := strings.builder_make(context.temp_allocator)
+	json_write_string(&b, s)
+	return strings.to_string(b)
+}
 
 css_name :: proc(s: string) -> string {
 	b := strings.builder_make(context.temp_allocator)
@@ -230,7 +426,7 @@ fill_layer_css :: proc(g: ^Gen, n: ^Node, item: json.Value) -> (css: string, kin
 		return item_color_css(raw, p.color, p.opacity), .Color, true
 	case .Image:
 		if n.image_url == "" do return "", .Image, false
-		return fmt.tprintf("url(%s) center / %s no-repeat", n.image_url, image_size_css(n)), .Image, true
+		return fmt.tprintf("url(%s) center / %s no-repeat", export_url(n.image_url), image_size_css(n)), .Image, true
 	case .Linear:
 		// the gradient line on the box, then re-expressed on CSS's line: through the
 		// centre at the same angle, as long as the box projects onto it
@@ -276,7 +472,7 @@ fill_decls :: proc(g: ^Gen, n: ^Node, d: ^[dynamic]Decl) {
 		css, kind, ok := fill_layer_css(g, n, item)
 		if !ok do continue
 		if len(layers) == 0 && kind == .Image && len(prop_items(n, "fill")) == 1 {
-			append(d, Decl{"background-image", fmt.tprintf("url(%s)", n.image_url)})
+			append(d, Decl{"background-image", fmt.tprintf("url(%s)", export_url(n.image_url))})
 			append(d, Decl{"background-size", image_size_css(n)})
 			append(d, Decl{"background-position", "center"})
 			return
@@ -368,10 +564,16 @@ transform_decls :: proc(n: ^Node, d: ^[dynamic]Decl) {
 }
 
 // Variables as custom properties, with a block per non-default theme value.
-gen_css_vars :: proc(g: ^Gen) {
+gen_css_vars :: proc(g: ^Gen, used_in: string) {
 	doc := g.doc
+	gen_font_faces(g)
 	names := make([dynamic]string, context.temp_allocator)
-	for name in doc.var_defs do append(&names, name)
+	// the document's own variables are all written (they are its tokens); a library's
+	// only when the generated code refers to them
+	for name in doc.var_defs {
+		if strings.contains(name, ":") && !strings.contains(used_in, fmt.tprintf("var(--%s)", css_name(name))) do continue
+		append(&names, name)
+	}
 	slice.sort(names[:])
 	saved_theme := make(map[string]string, context.temp_allocator)
 	for k, v in app.theme do saved_theme[k] = v
@@ -395,6 +597,19 @@ gen_css_vars :: proc(g: ^Gen) {
 	clear(&doc.resolve_theme)
 	for a in axes do if len(a.values) > 0 do doc.resolve_theme[a.name] = a.values[0]
 	write_block(g, names[:], ":root")
+	// the viewport axis as media queries: below each breakpoint, the variables that vary
+	// along it take that value's values
+	if g.viewport != "" {
+		for bp in viewport_breakpoints(g) {
+			if bp.below <= 0 do continue
+			clear(&doc.resolve_theme)
+			for b in axes do if len(b.values) > 0 do doc.resolve_theme[b.name] = b.values[0]
+			doc.resolve_theme[g.viewport] = bp.value
+			fmt.sbprintf(&g.css, "@media (max-width: %dpx) {{\n", int(bp.below))
+			write_block(g, names[:], ":root", g.viewport)
+			strings.write_string(&g.css, "}\n")
+		}
+	}
 	// a block per value, the default included, so a subtree can pin any value
 	// (a light frame inside a dark page)
 	for a in axes {
@@ -418,7 +633,60 @@ Decl :: struct {
 	prop, value: string,
 }
 
-node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
+// A layer as code export should read it. Instance copies ("ghosts") are drawn from
+// parsed fields: most have no raw properties, and overrides of fill, stroke, size or
+// weight change only the parsed values. Export reads raw properties (to keep variables
+// as var(--name) and every fill layer), so a copy gets its component node's properties
+// with the instances' overrides written over them, outer instances first.
+export_node :: proc(g: ^Gen, n: ^Node) -> ^Node {
+	if !n.ghost do return n
+	orig, _ := doc_find(g.doc, n.ghost_of)
+	if orig == nil do return n
+	c := new(Node, context.temp_allocator)
+	c^ = n^
+	props := make([dynamic]Prop, 0, len(orig.props) + 4, context.temp_allocator)
+	append(&props, ..(n.props[:] if len(n.props) > 0 else orig.props[:]))
+	set :: proc(props: ^[dynamic]Prop, key, raw: string) {
+		for &p in props do if p.key == key {
+			p.raw = raw
+			return
+		}
+		append(props, Prop{key, raw})
+	}
+	// the chain of instances around the copy, innermost first
+	chain := make([dynamic]^Node, context.temp_allocator)
+	inst, _ := doc_find_uid(g.doc, n.ghost_inst)
+	for inst != nil && len(chain) < MAX_INSTANCE_DEPTH + 2 {
+		append(&chain, inst)
+		if !inst.ghost do break
+		inst, _ = doc_find_uid(g.doc, inst.ghost_inst)
+	}
+	// innermost first, so the outermost override wins (as ghost_clone_tree applies them);
+	// a nested instance's root also takes overrides aimed at that instance
+	alias_id := ""
+	if inst0, _ := doc_find_uid(g.doc, n.ghost_inst); inst0 != nil && inst0.ghost {
+		if root := ghost_root_of(g.doc, inst0.uid); root != nil && root.uid == n.uid do alias_id = inst0.ghost_of
+	}
+	for i in chain {
+		for o in i.overrides {
+			if o.replaces || (o.id != orig.id && (alias_id == "" || o.id != alias_id)) || o.raw == "" do continue
+			v, err := json.parse_string(o.raw, .JSON5, false, context.temp_allocator)
+			obj, ok := v.(json.Object)
+			if err != nil || !ok do continue
+			for k, val in obj {
+				if k == "type" || k == "id" || k == "children" do continue
+				b := strings.builder_make(context.temp_allocator)
+				write_json_value(&b, val)
+				set(&props, k, strings.to_string(b))
+			}
+		}
+	}
+	c.props = props
+	return c
+}
+
+node_decls :: proc(g: ^Gen, n_in: ^Node, parent_in: ^Node) -> []Decl {
+	n := export_node(g, n_in)
 	d := make([dynamic]Decl, context.temp_allocator)
 	add :: proc(d: ^[dynamic]Decl, p, v: string) {append(d, Decl{p, v})}
 	parent := parent_in
@@ -434,15 +702,16 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 			if sn, _ := doc_find_uid(g.doc, slot); sn != nil do parent = sn
 		}
 	}
-	n := n
 	if n.kind == .Ref {
 		if root := ghost_root_of(g.doc, n.uid); root != nil {
-			sized := n^
+			sized := new_clone(n^, context.temp_allocator)
 			sized.width, sized.height = root.width, root.height
-			n = &sized
+			n = sized
 		}
 	}
 	in_flex := parent != nil && parent.layout != .None && !n.abs_pos
+	// with a viewport axis, an exported frame is fluid up to its design width
+	fluid := parent_in == nil && g.viewport != "" && n.kind == .Frame && n.width.mode == .Fixed
 	if instance_root {
 		add(&d, "width", "100%")
 		add(&d, "height", "100%")
@@ -455,8 +724,12 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 	}
 	// size
 	main_h := parent != nil && parent.layout == .Horizontal
-	if !instance_root do switch n.width.mode {
-	case .Fixed: add(&d, "width", px(n.width.value))
+	if fluid {
+		add(&d, "width", "100%")
+		add(&d, "max-width", len_css(n, "width", n.width.value))
+		add(&d, "margin", "0 auto")
+	} else if !instance_root do switch n.width.mode {
+	case .Fixed: add(&d, "width", len_css(n, "width", n.width.value))
 	case .Fill:
 		if in_flex && main_h do add(&d, "flex", "1 1 0")
 		else if in_flex do add(&d, "align-self", "stretch")
@@ -466,7 +739,7 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 		else do add(&d, "width", "fit-content")
 	}
 	if !instance_root do switch n.height.mode {
-	case .Fixed: add(&d, "height", px(n.height.value))
+	case .Fixed: add(&d, "height", len_css(n, "height", n.height.value))
 	case .Fill:
 		if in_flex && !main_h do add(&d, "flex", "1 1 0")
 		else if in_flex do add(&d, "align-self", "stretch")
@@ -474,10 +747,18 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 	case .Fit:
 		if n.kind != .Text do add(&d, "height", "fit-content")
 	}
+	if n.kind == .Ref {
+		// the instance's element only places and sizes the component root inside it, which
+		// carries every visual property (the instance's own overrides included); written on
+		// both, padding doubled and a fill showed square behind a rounded root
+		if n.opacity < 1 do add(&d, "opacity", num_text(n.opacity))
+		transform_decls(n, &d)
+		return d[:]
+	}
 	if (n.kind == .Frame || n.kind == .Group) && n.layout != .None {
 		add(&d, "display", "flex")
 		add(&d, "flex-direction", "row" if n.layout == .Horizontal else "column")
-		if n.gap != 0 do add(&d, "gap", px(n.gap))
+		if n.gap != 0 || bound_var(n, "gap") != "" do add(&d, "gap", len_css(n, "gap", n.gap))
 		just := [Justify]string{.Start = "flex-start", .Center = "center", .End = "flex-end", .Space_Between = "space-between", .Space_Around = "space-around"}
 		al := [Align]string{.Start = "flex-start", .Center = "center", .End = "flex-end"}
 		if n.justify != .Start do add(&d, "justify-content", just[n.justify])
@@ -485,21 +766,37 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 	} else if n.kind == .Frame || n.kind == .Group {
 		if parent == nil || parent.layout != .None || n.abs_pos do add(&d, "position", "relative")
 	}
-	if n.padding != {} {
+	if n.padding != {} || bound_var(n, "padding", 0) != "" || bound_var(n, "padding", 1) != "" {
 		p := n.padding
-		if p[0] == p[2] && p[1] == p[3] do add(&d, "padding", fmt.tprintf("%s %s", px(p[0]), px(p[1])))
-		else do add(&d, "padding", fmt.tprintf("%s %s %s %s", px(p[0]), px(p[1]), px(p[2]), px(p[3])))
+		s := [4]string{len_css(n, "padding", p[0], 0), len_css(n, "padding", p[1], 1), len_css(n, "padding", p[2], 2), len_css(n, "padding", p[3], 3)}
+		if s[0] == s[2] && s[1] == s[3] do add(&d, "padding", fmt.tprintf("%s %s", s[0], s[1]))
+		else do add(&d, "padding", fmt.tprintf("%s %s %s %s", s[0], s[1], s[2], s[3]))
 	}
 	if n.clip do add(&d, "overflow", "hidden")
 	if n.kind == .Icon && n.has_fill do add(&d, "color", color_css(n, "fill", n.fill))
 	if n.kind != .Text && n.kind != .Icon && n.kind != .Path do fill_decls(g, n, &d)
+	if n.kind == .Path {
+		// SVG paint, inherited by the <path>: a variable stays var(--name)
+		add(&d, "fill", color_css(n, "fill", n.fill) if n.has_fill else "none")
+		if n.has_stroke && n.stroke_width > 0 {
+			add(&d, "stroke", color_css(n, "stroke", n.stroke))
+			add(&d, "stroke-width", px(n.stroke_width))
+			caps := [Line_Cap]string{.Butt = "butt", .Round = "round", .Square = "square"}
+			joins := [Line_Join]string{.Miter = "miter", .Round = "round", .Bevel = "bevel"}
+			if n.line_cap != .Butt do add(&d, "stroke-linecap", caps[n.line_cap])
+			if n.line_join != .Miter do add(&d, "stroke-linejoin", joins[n.line_join])
+		}
+		add(&d, "overflow", "visible")
+	}
 	if n.kind == .Ellipse do add(&d, "border-radius", "50%")
 	else if n.radius != {} {
 		r := n.radius
-		if r[0] == r[1] && r[1] == r[2] && r[2] == r[3] do add(&d, "border-radius", px(r[0]))
-		else do add(&d, "border-radius", fmt.tprintf("%s %s %s %s", px(r[0]), px(r[1]), px(r[2]), px(r[3])))
+		s := [4]string{len_css(n, "cornerRadius", r[0], 0), len_css(n, "cornerRadius", r[1], 1), len_css(n, "cornerRadius", r[2], 2), len_css(n, "cornerRadius", r[3], 3)}
+		if s[0] == s[1] && s[1] == s[2] && s[2] == s[3] do add(&d, "border-radius", s[0])
+		else do add(&d, "border-radius", fmt.tprintf("%s %s %s %s", s[0], s[1], s[2], s[3]))
 	}
-	if n.has_stroke && n.stroke_per_side && n.stroke_width > 0 {
+	if n.kind == .Path {
+	} else if n.has_stroke && n.stroke_per_side && n.stroke_width > 0 {
 		sd := n.stroke_sides
 		add(&d, "border-style", "solid")
 		add(&d, "border-color", color_css(n, "stroke", n.stroke))
@@ -516,12 +813,13 @@ node_decls :: proc(g: ^Gen, n: ^Node, parent_in: ^Node) -> []Decl {
 		if s := prop_string(n, "fontFamily"); strings.has_prefix(s, "$") do fam = fmt.tprintf("var(--%s)", css_name(s[1:]))
 		else if strings.contains(fam, " ") do fam = fmt.tprintf("\"%s\"", fam)
 		add(&d, "font-family", fmt.tprintf("%s, sans-serif", fam))
-		add(&d, "font-size", px(n.font_size))
+		add(&d, "font-size", len_css(n, "fontSize", n.font_size))
 		if n.weight != 400 do add(&d, "font-weight", fmt.tprintf("%d", n.weight))
 		if n.italic do add(&d, "font-style", "italic")
-		if n.letter_spacing != 0 do add(&d, "letter-spacing", px(n.letter_spacing))
+		if n.letter_spacing != 0 || bound_var(n, "letterSpacing") != "" do add(&d, "letter-spacing", len_css(n, "letterSpacing", n.letter_spacing))
 		if n.underline || n.strikethrough do add(&d, "text-decoration", "underline line-through" if n.underline && n.strikethrough else ("underline" if n.underline else "line-through"))
-		add(&d, "line-height", num_text(line_height_of(n)))
+		if lv := bound_var(n, "lineHeight"); lv != "" do add(&d, "line-height", fmt.tprintf("var(--%s)", css_name(lv)))
+		else do add(&d, "line-height", num_text(line_height_of(n)))
 		text_fill_decls(g, n, &d)
 		aligns := [Text_Align]string{.Left = "left", .Center = "center", .Right = "right", .Justify = "justify"}
 		if n.text_align != .Left do add(&d, "text-align", aligns[n.text_align])
@@ -554,13 +852,13 @@ gen_html_node :: proc(g: ^Gen, n: ^Node, indent: int, prefix: string, top: bool)
 	case .Text:
 		fmt.sbprintf(&g.out, "<p class=\"n-%s\">%s</p>\n", cls, html_escape(n.content))
 	case .Path:
-		fmt.sbprintf(&g.out, "<svg class=\"n-%s\" viewBox=\"%s %s %s %s\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%s\" fill=\"%s\"/></svg>\n", cls, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), html_escape(n.geometry), color_css(n, "fill", n.fill) if n.has_fill else "none")
+		fmt.sbprintf(&g.out, "<svg class=\"n-%s\" viewBox=\"%s %s %s %s\" preserveAspectRatio=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%s\" vector-effect=\"non-scaling-stroke\"/></svg>\n", cls, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), html_escape(n.geometry))
 	case .Icon:
 		fmt.sbprintf(&g.out, "<svg class=\"n-%s\" data-icon=\"%s\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%s\"/></svg>\n", cls, html_escape(n.icon), html_escape(n.geometry))
 	case .Ref:
 		root := ghost_root_of(g.doc, n.uid)
 		fmt.sbprintf(&g.out, "<div class=\"n-%s\" data-instance=\"%s\"%s>\n", cls, html_escape(n.ref), theme_attrs(n))
-		if root != nil do gen_html_node(g, root, indent + 1, fmt.tprintf("%s%s-", prefix, n.id), false)
+		if root != nil do gen_html_node(g, root, indent + 1, fmt.tprintf("%s%s-", prefix, n.ghost_of if n.ghost else n.id), false)
 		for _ in 0 ..< indent do strings.write_string(&g.out, "  ")
 		strings.write_string(&g.out, "</div>\n")
 	case .Frame, .Group, .Rectangle, .Ellipse, .Other:
@@ -587,6 +885,77 @@ shadcn_of :: proc(name: string) -> string {
 	return ""
 }
 
+// The components to export: every local one, and a library's only when something
+// exported uses it (directly or inside another component). Each gets a unique React name;
+// a library's carries the alias ("LibButtonPrimary"), so it cannot clash with a
+// local "Button / Primary".
+collect_components :: proc(g: ^Gen) {
+	doc := g.doc
+	used := make(map[int]bool, context.temp_allocator)
+	mark :: proc(doc: ^Document, uid: int, used: ^map[int]bool, depth: int) {
+		if depth > MAX_DEPTH do return
+		for cu in children_of(doc, uid) {
+			c, _ := doc_find_uid(doc, cu)
+			if c == nil || c.ghost do continue
+			if c.kind == .Ref {
+				if comp, _ := doc_find(doc, c.ref); comp != nil && !used[comp.uid] {
+					used[comp.uid] = true
+					mark(doc, comp.uid, used, depth + 1)
+				}
+			}
+			mark(doc, cu, used, depth + 1)
+		}
+	}
+	for &n in doc.nodes do if !n.imported && n.parent == 0 {
+		if n.reusable do used[n.uid] = true
+		if n.kind == .Ref {
+			if comp, _ := doc_find(doc, n.ref); comp != nil && !used[comp.uid] {
+				used[comp.uid] = true
+				mark(doc, comp.uid, &used, 1)
+			}
+		}
+		mark(doc, n.uid, &used, 0)
+	}
+	taken := make(map[string]bool, context.temp_allocator)
+	for &n in doc.nodes {
+		if !n.reusable || !used[n.uid] do continue
+		append(&g.comp_ids, n.uid)
+		name := pascal(node_label(&n))
+		if n.imported do name = fmt.tprintf("%s%s", pascal(library_of(&n)), name)
+		base := name
+		for i := 2; taken[name]; i += 1 do name = fmt.tprintf("%s%d", base, i)
+		taken[name] = true
+		g.names[n.uid] = name
+	}
+}
+
+// The React name of a component.
+react_name :: proc(g: ^Gen, comp: ^Node) -> string {
+	if name, ok := g.names[comp.uid]; ok do return name
+	return pascal(node_label(comp))
+}
+
+// Keys of an override that change how a part looks (not its text, icon or visibility).
+override_styles :: proc(o: Override) -> bool {
+	if o.raw == "" do return false
+	v, err := json.parse_string(o.raw, .JSON5, false, context.temp_allocator)
+	obj, ok := v.(json.Object)
+	if err != nil || !ok do return false
+	for k in obj {
+		switch k {
+		case "content", "name", "enabled", "icon", "iconFontName", "iconFontFamily", "library", "type", "id", "children":
+		case: return true
+		}
+	}
+	return false
+}
+
+// The ghost copy an instance made of one of its component's parts.
+ghost_part :: proc(doc: ^Document, inst_uid: int, part_id: string) -> ^Node {
+	for &gn in doc.ghosts do if gn.ghost_inst == inst_uid && gn.ghost_of == part_id do return &gn
+	return nil
+}
+
 // Props of each component: every descendant id that any instance overrides.
 collect_props :: proc(g: ^Gen) {
 	for n in g.doc.nodes {
@@ -602,6 +971,14 @@ collect_props :: proc(g: ^Gen) {
 			dup := false
 			for p in list do if p == o.id do dup = true
 			if !dup do append(list, strings.clone(o.id, context.temp_allocator))
+			if override_styles(o) {
+				sl, shas := &g.styled[comp.id]
+				if !shas {
+					g.styled[comp.id] = make([dynamic]string, context.temp_allocator)
+					sl = &g.styled[comp.id]
+				}
+				if !slice.contains(sl[:], o.id) do append(sl, strings.clone(o.id, context.temp_allocator))
+			}
 		}
 	}
 }
@@ -692,7 +1069,7 @@ gen_react_components :: proc(g: ^Gen) {
 	for uid in g.comp_ids {
 		n, _ := doc_find_uid(g.doc, uid)
 		if n == nil do continue
-		name := pascal(node_label(n))
+		name := react_name(g, n)
 		props := g.props[n.id]
 		fmt.sbprintf(&g.out, "export type %sProps = {{\n", name)
 		for p in props {
@@ -703,6 +1080,8 @@ gen_react_components :: proc(g: ^Gen) {
 			if target.kind == .Icon do kind = "LucideIcon"
 			fmt.sbprintf(&g.out, "  %s?: %s;\n", camel(p), kind)
 		}
+		styled := g.styled[n.id]
+		for p in styled do fmt.sbprintf(&g.out, "  %sClassName?: string;\n", camel(p))
 		strings.write_string(&g.out, "  children?: React.ReactNode;\n  className?: string;\n};\n\n")
 		fmt.sbprintf(&g.out, "export function %s(props: %sProps) {{\n  return (\n", name, name)
 		gen_react_node(g, n, 2, n, true)
@@ -743,6 +1122,10 @@ var_depends_on :: proc(doc: ^Document, name, axis: string, depth: int) -> bool {
 shown_theme_attrs :: proc(doc: ^Document) -> string {
 	b := strings.builder_make(context.temp_allocator)
 	for a in doc_theme_axes(doc) {
+		switch strings.to_lower(a.name, context.temp_allocator) {
+		case "viewport", "breakpoint", "screen", "device":
+			continue // responsive: media queries pick it, not the window's choice
+		}
 		cur, set := app.theme[a.name]
 		if set && len(a.values) > 0 && cur != a.values[0] do fmt.sbprintf(&b, " data-theme-%s=\"%s\"", css_name(a.name), html_escape(cur))
 	}
@@ -778,12 +1161,18 @@ gen_react_page :: proc(g: ^Gen) {
 			c, _ := doc_find_uid(g.doc, cu)
 			if c == nil do continue
 			if c.kind == .Ref {
-				if comp, _ := doc_find(g.doc, c.ref); comp != nil do used[pascal(node_label(comp))] = true
+				if comp, _ := doc_find(g.doc, c.ref); comp != nil do used[react_name(g, comp)] = true
 			}
 			collect_instances(g, cu, used)
 		}
 	}
-	collect_instances(g, 0, &used)
+	// only what the page renders (not the components page or the libraries' own layers)
+	for root in export_roots(g) {
+		if n, _ := doc_find_uid(g.doc, root); n != nil && n.kind == .Ref {
+			if comp, _ := doc_find(g.doc, n.ref); comp != nil do used[react_name(g, comp)] = true
+		}
+		collect_instances(g, root, &used)
+	}
 	names := make([dynamic]string, context.temp_allocator)
 	for s in used do append(&names, s)
 	slice.sort(names[:])
@@ -796,10 +1185,9 @@ gen_react_page :: proc(g: ^Gen) {
 		strings.write_string(&g.out, " } from \"./components\";\n")
 	}
 	fmt.sbprintf(&g.out, "\nexport default function Page() {{\n  return (\n    <main className=\"relative\"%s>\n", shown_theme_attrs(g.doc))
-	for cu in children_of(g.doc, 0) {
-		if app.page_hidden[cu] do continue
+	for cu in export_roots(g) {
 		n, _ := doc_find_uid(g.doc, cu)
-		if n == nil || !n.enabled || n.reusable do continue
+		if n == nil || !n.enabled do continue
 		gen_react_node(g, n, 3, nil, true)
 	}
 	strings.write_string(&g.out, "    </main>\n  );\n}\n")
@@ -814,6 +1202,7 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 	pad := strings.repeat("  ", indent, context.temp_allocator)
 	is_prop := false
 	prop := ""
+	styled_part := false
 	if comp != nil && n.uid != comp.uid {
 		// copy first: `for p in g.props[key]` iterates through a pointer to the map
 		// slot, which is nil for a component no instance overrides
@@ -822,7 +1211,12 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 			is_prop = true
 			prop = camel(p)
 		}
+		styled := g.styled[comp.id]
+		styled_part = slice.contains(styled[:], n.id)
 	}
+	// a part whose style instances override takes their classes (tailwind-merge wins)
+	cls_attr := fmt.tprintf("className=\"%s\"", cls)
+	if styled_part do cls_attr = fmt.tprintf("className={{cn(\"%s\", props.%sClassName)}}", cls, camel(n.id))
 	open_tag := "div"
 	if top && comp != nil {
 		if s := shadcn_of(node_label(comp)); s != "" do open_tag = s
@@ -835,17 +1229,18 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 	switch n.kind {
 	case .Text:
 		content := jsx_escape(n.content)
-		if is_prop do fmt.sbprintf(&g.out, "%s<p className=\"%s\">{{props.%s ?? \"%s\"}}</p>\n", pad, cls, prop, content)
-		else do fmt.sbprintf(&g.out, "%s<p className=\"%s\">%s</p>\n", pad, cls, content)
+		if is_prop do fmt.sbprintf(&g.out, "%s<p %s>{{props.%s ?? %s}}</p>\n", pad, cls_attr, prop, js_string(n.content))
+		else do fmt.sbprintf(&g.out, "%s<p %s>%s</p>\n", pad, cls_attr, content)
 	case .Path:
-		fmt.sbprintf(&g.out, "%s<svg className=\"%s\" viewBox=\"%s %s %s %s\"><path d=\"%s\" fill=\"%s\" /></svg>\n", pad, cls, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), n.geometry, color_css(n, "fill", n.fill) if n.has_fill else "none")
+		fmt.sbprintf(&g.out, "%s<svg %s viewBox=\"%s %s %s %s\" preserveAspectRatio=\"none\"><path d=\"%s\" vectorEffect=\"non-scaling-stroke\" /></svg>\n", pad, cls_attr, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), n.geometry)
 	case .Icon:
-		if is_prop do fmt.sbprintf(&g.out, "%s{{React.createElement(props.%s ?? %s, {{ className: \"%s\" }})}}\n", pad, prop, pascal(n.icon), cls)
-		else do fmt.sbprintf(&g.out, "%s<%s className=\"%s\" />\n", pad, pascal(n.icon), cls)
+		icon_cls := fmt.tprintf("cn(\"%s\", props.%sClassName)", cls, camel(n.id)) if styled_part else fmt.tprintf("\"%s\"", cls)
+		if is_prop do fmt.sbprintf(&g.out, "%s{{React.createElement(props.%s ?? %s, {{ className: %s }})}}\n", pad, prop, pascal(n.icon), icon_cls)
+		else do fmt.sbprintf(&g.out, "%s<%s %s />\n", pad, pascal(n.icon), cls_attr)
 	case .Ref:
 		target, _ := doc_find(g.doc, n.ref)
 		if target == nil do break
-		name := pascal(node_label(target))
+		name := react_name(g, target)
 		// properties the instance overrides on the component root (fill, radius, size)
 		// travel as classes; tailwind-merge in the component lets them win
 		inst_cls := cls
@@ -868,9 +1263,23 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 		if themed do fmt.sbprintf(&g.out, "%s<div className=\"contents\"%s>\n", pad, theme_attrs(n))
 		fmt.sbprintf(&g.out, "%s<%s className=\"%s\"", pad, name, inst_cls)
 		for o in n.overrides {
-			if o.has_content do fmt.sbprintf(&g.out, " %s=\"%s\"", camel(o.id), jsx_escape(o.content))
+			if o.has_content do fmt.sbprintf(&g.out, " %s={{%s}}", camel(o.id), js_string(o.content))
 			if o.set_enabled do fmt.sbprintf(&g.out, " %s={{%v}}", camel(o.id), o.enabled)
 			if icon := override_icon(o); icon != "" do fmt.sbprintf(&g.out, " %s={{%s}}", camel(o.id), pascal(icon))
+			// a style override: the classes of the overridden part that the component's own
+			// part does not have
+			if override_styles(o) {
+				part := ghost_part(g.doc, n.uid, o.id)
+				orig, _ := doc_find(g.doc, o.id)
+				if part != nil && orig != nil {
+					pp, _ := doc_find_uid(g.doc, part.parent)
+					op, _ := doc_find_uid(g.doc, orig.parent)
+					mine := strings.fields(tailwind(node_decls(g, orig, op)), context.temp_allocator)
+					extra := make([dynamic]string, context.temp_allocator)
+					for c in strings.fields(tailwind(node_decls(g, part, pp)), context.temp_allocator) do if !slice.contains(mine, c) do append(&extra, c)
+					if len(extra) > 0 do fmt.sbprintf(&g.out, " %sClassName=\"%s\"", camel(o.id), strings.join(extra[:], " ", context.temp_allocator))
+				}
+			}
 		}
 		defer if themed do fmt.sbprintf(&g.out, "%s</div>\n", pad)
 		kids := children_of(g.doc, n.uid)
@@ -884,7 +1293,7 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 			fmt.sbprintf(&g.out, "%s</%s>\n", pad, name)
 		}
 	case .Frame, .Group, .Rectangle, .Ellipse, .Other:
-		fmt.sbprintf(&g.out, "%s<%s %s%s>\n", pad, open_tag, class_attr, theme_attrs(n))
+		fmt.sbprintf(&g.out, "%s<%s %s%s>\n", pad, open_tag, class_attr if top && comp != nil else cls_attr, theme_attrs(n))
 		if comp != nil && n.is_slot do fmt.sbprintf(&g.out, "%s  {{props.children}}\n", pad)
 		for cu in children_of(g.doc, n.uid) {
 			if c, _ := doc_find_uid(g.doc, cu); c != nil && !c.ghost do gen_react_node(g, c, indent + 1, comp, false)
@@ -900,10 +1309,12 @@ html_snippet :: proc(uids: []int) -> string {
 	g := Gen{doc = &app.doc, format = .HTML}
 	g.css = strings.builder_make(context.temp_allocator)
 	g.out = strings.builder_make(context.temp_allocator)
-	gen_css_vars(&g)
 	for uid in uids {
 		if n, _ := doc_find_uid(&app.doc, uid); n != nil do gen_html_node(&g, n, 0, "", true)
 	}
-	return fmt.tprintf("<style>\n%s</style>\n%s", strings.to_string(g.css), strings.to_string(g.out))
+	nodes_css := strings.to_string(g.css)
+	g.css = strings.builder_make(context.temp_allocator)
+	gen_css_vars(&g, strings.concatenate({nodes_css, strings.to_string(g.out)}, context.temp_allocator))
+	return fmt.tprintf("<style>\n%s%s</style>\n%s", strings.to_string(g.css), nodes_css, strings.to_string(g.out))
 }
 

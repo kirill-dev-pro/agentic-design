@@ -30,7 +30,7 @@ gestures_install :: proc() {
 }
 
 gesture_scroll :: proc "c" (self: NS.id, cmd: NS.SEL, event: ^NS.Event) {
-	context = runtime.default_context()
+	context = app_context()
 	dx, dy := event->scrollingDelta()
 	if event->hasPreciseScrollingDeltas() do gest.scroll += {f32(dx), f32(dy)}
 	else do gest.lines += {f32(dx), f32(dy)}

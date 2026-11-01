@@ -1066,21 +1066,32 @@ __allocCall :: #force_inline proc(ctx: ^Context) -> ^Call {
 // alloc paths and return the original start position
 __allocPaths :: proc(ctx: ^Context, count: int) -> int {
 	old := len(ctx.paths)
-	resize(&ctx.paths, len(ctx.paths) + count)
+	__grow(&ctx.paths, old + count)
+	resize(&ctx.paths, old + count)
 	return old
+}
+
+// Agentic Design: the per-frame arrays grow by half again when they run out, as upstream
+// NanoVG's C code does. `resize` alone reserves exactly what is asked, so a frame with many
+// paths reallocated on almost every call, and past 256 KB (memory.odin) each step copied
+// the whole array into fresh pages: 340 ms for a thumbnail of a 4,500-layer file.
+__grow :: #force_inline proc(a: ^[dynamic]$T, need: int) {
+	if need > cap(a) do reserve(a, max(need, cap(a) + cap(a) / 2))
 }
 
 // alloc verts and return the original start position
 __allocVerts :: proc(ctx: ^Context, count: int) -> int {
 	old := len(ctx.verts)
-	resize(&ctx.verts, len(ctx.verts) + count)
+	__grow(&ctx.verts, old + count)
+	resize(&ctx.verts, old + count)
 	return old
 }
 
 // alloc uniforms and return the original start position
 __allocFragUniforms :: proc(ctx: ^Context, count: int) -> int {
 	ret := len(ctx.uniforms)
-	resize(&ctx.uniforms, len(ctx.uniforms) + count * ctx.fragSize)
+	__grow(&ctx.uniforms, ret + count * ctx.fragSize)
+	resize(&ctx.uniforms, ret + count * ctx.fragSize)
 	return ret
 }
 
@@ -1340,6 +1351,31 @@ Create :: proc(flags: CreateFlags) -> ^nvg.Context {
 	params.edgeAntiAlias = (.ANTI_ALIAS in flags)
 	ctx.flags = flags
 	return nvg.CreateInternal(params)
+}
+
+// Agentic Design: after a big frame, gives back what the per-frame arrays grew to (they
+// keep the capacity of the largest frame) and gives the buffer objects fresh storage.
+// Call between frames.
+RecycleBuffers :: proc(ctx: ^nvg.Context) {
+	gctx := cast(^Context)ctx.params.userPtr
+	if gctx.vertBuf != 0 {
+		gl.DeleteBuffers(1, &gctx.vertBuf)
+		gl.GenBuffers(1, &gctx.vertBuf)
+	}
+	when GL_USE_UNIFORMBUFFER {
+		if gctx.fragBuf != 0 {
+			gl.DeleteBuffers(1, &gctx.fragBuf)
+			gl.GenBuffers(1, &gctx.fragBuf)
+		}
+	}
+	shrink(&gctx.verts, 0)
+	shrink(&gctx.uniforms, 0)
+	shrink(&gctx.calls, 0)
+	shrink(&gctx.paths, 0)
+	shrink(&ctx.commands, 0)
+	shrink(&ctx.cache.points, 0)
+	shrink(&ctx.cache.paths, 0)
+	shrink(&ctx.cache.verts, 0)
 }
 
 Destroy :: proc(ctx: ^nvg.Context) {

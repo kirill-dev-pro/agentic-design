@@ -101,7 +101,7 @@ place_image :: proc(src: string, at: [2]f32) -> bool {
 
 // Files dropped on the window land where the pointer is.
 drop_callback :: proc "c" (window: glfw.WindowHandle, count: c.int, paths: [^]cstring) {
-	context = runtime.default_context()
+	context = app_context()
 	for i in 0 ..< int(count) do append(&pf.dropped, strings.clone(string(paths[i])))
 }
 

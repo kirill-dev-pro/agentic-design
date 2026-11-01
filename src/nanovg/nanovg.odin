@@ -2450,16 +2450,25 @@ RoundedRectVarying :: proc(
 	if radius_top_left < 0.1 && radius_top_right < 0.1 && radius_bottom_right < 0.1 && radius_bottom_left < 0.1 {
 		Rect(ctx, x, y, w, h)
 	} else {
-		halfw := abs(w) * 0.5
-		halfh := abs(h) * 0.5
-		rxBL  := min(radius_bottom_left, halfw) * math.sign(w)
-		ryBL  := min(radius_bottom_left, halfh) * math.sign(h)
-		rxBR  := min(radius_bottom_right, halfw) * math.sign(w)
-		ryBR  := min(radius_bottom_right, halfh) * math.sign(h)
-		rxTR  := min(radius_top_right, halfw) * math.sign(w)
-		ryTR  := min(radius_top_right, halfh) * math.sign(h)
-		rxTL  := min(radius_top_left, halfw) * math.sign(w)
-		ryTL  := min(radius_top_left, halfh) * math.sign(h)
+		// Agentic Design: radii too big for the box shrink together by one factor and
+		// stay circular, as in CSS and Skia (pen.dev). Clamping x and y separately to
+		// half the width and height made a 999 radius on a pill an ellipse.
+		aw, ah := abs(w), abs(h)
+		tl, tr := max(radius_top_left, 0), max(radius_top_right, 0)
+		br, bl := max(radius_bottom_right, 0), max(radius_bottom_left, 0)
+		f: f32 = 1
+		if tl + tr > aw do f = min(f, aw / (tl + tr))
+		if bl + br > aw do f = min(f, aw / (bl + br))
+		if tl + bl > ah do f = min(f, ah / (tl + bl))
+		if tr + br > ah do f = min(f, ah / (tr + br))
+		rxBL  := bl * f * math.sign(w)
+		ryBL  := bl * f * math.sign(h)
+		rxBR  := br * f * math.sign(w)
+		ryBR  := br * f * math.sign(h)
+		rxTR  := tr * f * math.sign(w)
+		ryTR  := tr * f * math.sign(h)
+		rxTL  := tl * f * math.sign(w)
+		ryTL  := tl * f * math.sign(h)
 		__appendCommands(ctx,
 			__cmdf(.MOVE_TO), x, y + ryTL,
 			__cmdf(.LINE_TO), x, y + h - ryBL,
@@ -3154,6 +3163,9 @@ TextBreakLines :: proc(
 
 	q: fontstash.Quad
 	stopped_early: bool
+	// Agentic Design: at the start of the text and after a newline, leading spaces are
+	// part of the row (indented code, CSS pre-wrap); after a soft wrap they are dropped
+	hard_start := true
 
 	for fontstash.TextIterNext(fs, &iter, &q) {
 		if iter.previousGlyphIndex < 0 && __allocTextAtlas(ctx) { // can not retrieve glyph?
@@ -3216,10 +3228,27 @@ TextBreakLines :: proc(
 			row_width = 0
 			row_min_x = 0
 			row_max_x = 0
+			hard_start = true
 		} else {
-			if row_start == -1 {
+			if row_start == -1 && hard_start && type == .Space {
+				// leading spaces of a paragraph start the row, without visible extent
+				hard_start = false
+				row_start_x = iter.x
+				row_start = iter.str
+				row_end = iter.str
+				row_width = 0
+				row_min_x = 0
+				row_max_x = 0
+				word_start = iter.str
+				word_start_x = iter.x
+				word_min_x = 0
+				break_end = row_start
+				break_width = 0.0
+				break_max_x = 0.0
+			} else if row_start == -1 {
 				// Skip white space until the beginning of the line
 				if type == .Char || type == .CJK {
+					hard_start = false
 					// The current char is the row so far
 					row_start_x = iter.x
 					row_start = iter.str

@@ -57,7 +57,12 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 	glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, 2)
 	glfw.WindowHint_int(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 	glfw.WindowHint_bool(glfw.OPENGL_FORWARD_COMPAT, true)
-	glfw.WindowHint_int(glfw.SAMPLES, 4)
+	// NanoVG antialiases its own edges, and draws with the stencil buffer alone: no
+	// multisampling (4× would hold 4 colour and 4 depth-stencil values per pixel) and no
+	// depth buffer, which together took some 200 MB of video memory on a Retina window
+	glfw.WindowHint_int(glfw.SAMPLES, 0)
+	glfw.WindowHint_int(glfw.DEPTH_BITS, 0)
+	glfw.WindowHint_int(glfw.STENCIL_BITS, 8)
 	glfw.WindowHint_bool(glfw.RESIZABLE, true)
 	glfw.WindowHint_bool(glfw.COCOA_RETINA_FRAMEBUFFER, true)
 	// AGENTIC_QUIET: open behind other windows without taking focus (tests);
@@ -77,7 +82,10 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 	glfw.MakeContextCurrent(pf.window)
 	glfw.SwapInterval(1)
 	pf.refresh = 60
-	if mode := glfw.GetVideoMode(glfw.GetPrimaryMonitor()); mode != nil && mode.refresh_rate > 0 do pf.refresh = f64(mode.refresh_rate)
+	// (no monitor while the displays sleep: GetVideoMode(nil) would crash)
+	if monitor := glfw.GetPrimaryMonitor(); monitor != nil {
+		if mode := glfw.GetVideoMode(monitor); mode != nil && mode.refresh_rate > 0 do pf.refresh = f64(mode.refresh_rate)
+	}
 	glfw.SetKeyCallback(pf.window, key_callback)
 	glfw.SetCharCallback(pf.window, char_callback)
 	glfw.SetDropCallback(pf.window, drop_callback)
@@ -109,12 +117,12 @@ platform_shutdown :: proc() {
 }
 
 framebuffer_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: c.int) {
-	context = runtime.default_context()
+	context = app_context()
 	live_redraw()
 }
 
 window_refresh_callback :: proc "c" (window: glfw.WindowHandle) {
-	context = runtime.default_context()
+	context = app_context()
 	live_redraw()
 }
 
@@ -133,7 +141,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 }
 
 char_callback :: proc "c" (window: glfw.WindowHandle, codepoint: rune) {
-	context = runtime.default_context()
+	context = app_context()
 	append(&pf.chars, codepoint)
 }
 
