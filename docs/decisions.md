@@ -1261,3 +1261,84 @@ promises.
 - Building it needs LLVM's `wasm-ld` (Homebrew's `lld`), which `tools/build_web.sh`
   looks for. Fonts in a `fonts` folder next to a document are only found when the document
   lists them (a web server lists no folders), as in pen.dev.
+
+## 56. A Mac app bundle for Apple Silicon and macOS 14; one version in the code
+
+**Problem.** The app was a bare binary in a build folder that opened files next to the
+repository. Releasing it needs an installable `.app`, a version shown to users and compared
+by updates, and a known oldest macOS.
+
+**Decision.**
+
+- `VERSION` in `src/version.odin` is the only place the version is written. `--version`
+  prints it, Settings shows it, `tools/release/bundle.sh` writes it into Info.plist from the
+  binary's own `--version`, and the release workflow refuses a tag that differs. A build can
+  override it (`-define:VERSION=…`) to make a test update.
+- The bundle is `Agentic Design.app`, id `dev.kcrz.agentic-design`, with the icon, the
+  sample design system in Resources, and `.pen` as a document type. The binary inside works
+  in every mode (`Contents/MacOS/agentic-design mcp`), and agent registration points at it.
+  Installed, the default document is a scratch file in Application Support and the sample
+  is copied there, since the bundle is read-only and replaced by updates.
+- arm64 only. The pinned Odin release has no Intel macOS build, wgpu-native is pinned for
+  arm64, and a universal binary would double the build for few users. macOS 14: the Odin
+  release's GLFW is built for 14.0 (`-minimum-os-version:14.0`; without it the binary
+  required the build machine's macOS). Release builds use the official Odin release, not
+  Homebrew's, whose GLFW is built for the newest macOS.
+
+**Consequences.** Intel Macs and macOS 13 are not supported. A copy run from its download
+folder is translocated by macOS: it refuses to update or register with agents and asks to
+be moved to Applications.
+
+## 57. Updates: a built-in updater over a signed manifest on GitHub Releases
+
+**Problem.** Users should get new versions without reinstalling, safely, without an update
+cutting off an agent mid-call, and test windows must never update.
+
+**Decision.** A small updater in the app (`src/update.odin`) rather than Sparkle 2. Sparkle
+is an Objective-C framework with XPC helpers and its own windows, to be embedded, signed
+and driven through delegates from Odin, for a flow the app can do in a few hundred lines
+with tools macOS already has. The app's way of doing it:
+
+- At launch (after 8 s) and every 24 h, and from Settings ("Check now"), a worker thread
+  fetches `latest.json` and `latest.json.sig` from the latest GitHub release with
+  `/usr/bin/curl`. The Ed25519 signature over the manifest's exact bytes is checked against
+  the public key compiled into the app (`core:crypto/ed25519`) before any field is used;
+  HTTPS alone is never trusted.
+- A newer version's zip is downloaded to `~/Library/Caches/dev.kcrz.agentic-design`, must
+  match the manifest's size and SHA-256, is unpacked with `ditto`, and must have the same
+  bundle id, the manifest's version and a valid code signature (`codesign --verify --deep
+  --strict`). Only then is it offered.
+- Nothing installs without the user's click ("Restart to update"). Then the app waits until
+  no agent request is queued, no capture is pending and none came in for 5 s, copies the
+  new bundle beside the old one, swaps them atomically (`renamex_np(RENAME_SWAP)`; on a
+  volume without it, two renames with a rollback), deletes the old one, saves documents by
+  the normal quit path and relaunches with the open document through a helper that waits
+  for this process to exit.
+- Settings → Updates: the version, "Check for updates automatically" (on by default),
+  "Check now", the state, and the restart button.
+- Test windows (`AGENTIC_QUIET`) never check or install. `AGENTIC_UPDATE_TEST=1` and
+  `AGENTIC_UPDATE_URL` make a test window that does, against a local feed; only such a window
+  accepts the socket's `update` install action.
+- The signing tool (`tools/release/updatesign`) uses the same Odin crypto as the app.
+
+**Consequences.** The private key is the root of trust: it lives outside the repository (a
+GitHub secret for the workflow) and losing it strands installed copies. Found on the way:
+the control socket was inherited by the relaunch helper, so the new window found its port
+taken and ran without a control server; both sockets are now close-on-exec.
+
+## 58. Releases are built by a workflow on tags; signing is optional, the update key is not
+
+**Problem.** Releases should be reproducible and need no maintainer's machine, but code
+signing needs a paid Apple certificate the project may not have yet.
+
+**Decision.** `.github/workflows/release.yml` runs on `v*` tags on an Apple Silicon runner:
+the pinned Odin release (version and SHA-256), the tag checked against `VERSION`, the
+release build and bundle, Developer ID signing with the hardened runtime and notarization
+with stapling when those secrets exist (ad hoc otherwise), the signed `latest.json` checked
+against the app's public key, and a GitHub Release with the dmg, zip, manifest, signature,
+checksums and the notes from `docs/releases/v<version>.md`. The update signing key
+(`UPDATE_SIGNING_KEY`) is required; the Apple secrets are not.
+
+**Consequences.** Until there is a Developer ID certificate, a downloaded first install is
+blocked by Gatekeeper and must be opened by hand once; updates through the app are not
+quarantined and start normally.
