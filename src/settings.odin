@@ -22,6 +22,7 @@ Settings :: struct {
 	snap_pixels:  bool, // whole numbers for positions and sizes set by dragging
 	smart_guides: bool,
 	agent_cursors: bool, // agents' cursors, flashes and placeholder glow (presence.odin)
+	auto_update:  bool, // check for updates at launch and daily (update.odin)
 }
 
 settings := Settings {
@@ -31,6 +32,7 @@ settings := Settings {
 	snap_pixels  = true,
 	smart_guides = true,
 	agent_cursors = true,
+	auto_update  = true,
 }
 
 settings_open, shortcuts_open: bool
@@ -52,6 +54,7 @@ settings_load :: proc() {
 	if b, ok := obj["snapToPixels"].(json.Boolean); ok do settings.snap_pixels = bool(b)
 	if b, ok := obj["smartGuides"].(json.Boolean); ok do settings.smart_guides = bool(b)
 	if b, ok := obj["agentCursors"].(json.Boolean); ok do settings.agent_cursors = bool(b)
+	if b, ok := obj["autoUpdate"].(json.Boolean); ok do settings.auto_update = bool(b)
 }
 
 // Test windows keep the user's settings as they are.
@@ -60,8 +63,8 @@ settings_save :: proc() {
 	_ = os.make_directory_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors,
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update,
 	)
 	_ = os.write_entire_file(settings_path(), text)
 }
@@ -115,7 +118,7 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	saved_pass := ui.overlay_pass
 	ui.overlay_pass = true
 	defer ui.overlay_pass = saved_pass
-	sheet, open := sheet_begin(vg, "Settings", 460, 440)
+	sheet, open := sheet_begin(vg, "Settings", 460, 540)
 	if !open {
 		if ui.focus != "" do field_commit()
 		settings_open = false
@@ -151,6 +154,28 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 		label(vg, x + 28, y + 34, t.hint, TEXT_DIM, 11)
 		y += 58
 	}
+	// updates (update.odin)
+	label(vg, x, y + 10, "Updates", TEXT_FG, 13)
+	label(vg, x + 150, y + 10, fmt.tprintf("Version %s", VERSION), TEXT_DIM, 12)
+	y += 28
+	if checkbox(vg, {x, y, w, 22}, "Check for updates automatically", settings.auto_update) {
+		settings.auto_update = !settings.auto_update
+		settings_save()
+	}
+	y += 34
+	status_x := x
+	#partial switch update_phase() {
+	case .Ready:
+		if button(vg, {x, y, 200, 28}, fmt.tprintf("Restart to update to %s", update.version)) do update_request_install()
+		status_x = x + 212
+	case .Checking, .Downloading, .Installing, .Waiting_For_Agents:
+	case:
+		if update_allowed() && bundle_path() != "" {
+			if button(vg, {x, y, 120, 28}, "Check now") do update_check()
+			status_x = x + 132
+		}
+	}
+	label(vg, status_x, y + 14, update_status_text(), TEXT_DIM, 11)
 	if button(vg, {x, sheet.y + sheet.h - 52, 180, 28}, "Show onboarding again") {
 		settings_open = false
 		onboarding_start(0)
@@ -224,4 +249,21 @@ draw_pixel_grid :: proc(vg: ^nvg.Context) {
 	nvg.StrokeColor(vg, {0.5, 0.5, 0.5, 0.18})
 	nvg.StrokeWidth(vg, 1)
 	nvg.Stroke(vg)
+}
+
+// One line on the state of updates, for the Settings sheet.
+update_status_text :: proc() -> string {
+	if !update_allowed() do return "Off in test windows"
+	if bundle_path() == "" do return "Updates apply to the installed app"
+	switch update_phase() {
+	case .Idle: return "Not checked yet" if settings.auto_update else "Automatic checks are off"
+	case .Checking: return "Checking…"
+	case .Downloading: return "Downloading…"
+	case .Up_To_Date: return "Up to date"
+	case .Ready: return "Downloaded and verified"
+	case .Waiting_For_Agents: return "Installing when the agents pause…"
+	case .Installing: return "Installing…"
+	case .Failed: return update.error
+	}
+	return ""
 }

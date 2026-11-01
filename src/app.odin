@@ -204,6 +204,7 @@ app_main :: proc(path: string) {
 			agent_activity_touch()
 		}
 		agent_activity_tick()
+		update_tick()
 		if app.needs_layout do engine.layout_invalidate()
 		if ran || app.needs_layout {
 			engine.layout_document(&app.doc)
