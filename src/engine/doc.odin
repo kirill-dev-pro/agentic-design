@@ -668,8 +668,15 @@ ghost_clone :: proc(n: Node) -> Node {
 	return c
 }
 
+// The indexes are validated on use. A miss is checked against the array before they are
+// rebuilt: looking up ids that are not there (a new layer's id, a deleted layer) is common,
+// and rebuilding both maps on each such miss made a batch of 7,000 new layers quadratic
+// (22 s in a debug build; docs/performance.md, D43).
 doc_find :: proc(doc: ^Document, id: string) -> (^Node, int) {
 	if i, ok := doc.by_id[id]; ok && i < len(doc.nodes) && doc.nodes[i].id == id do return &doc.nodes[i], i
+	present := false
+	for &n in doc.nodes do if n.id == id {present = true; break}
+	if !present do return nil, -1
 	doc_index(doc)
 	if i, ok := doc.by_id[id]; ok do return &doc.nodes[i], i
 	return nil, -1
@@ -679,6 +686,9 @@ doc_find_uid :: proc(doc: ^Document, uid: int) -> (^Node, int) {
 	if uid == 0 do return nil, -1
 	if i, ok := doc.by_uid[uid]; ok && i < len(doc.nodes) && doc.nodes[i].uid == uid do return &doc.nodes[i], i
 	if i, ok := doc.ghost_by_uid[uid]; ok && i < len(doc.ghosts) && doc.ghosts[i].uid == uid do return &doc.ghosts[i], i
+	present := false
+	for &n in doc.nodes do if n.uid == uid {present = true; break}
+	if !present do return nil, -1
 	doc_index(doc)
 	if i, ok := doc.by_uid[uid]; ok do return &doc.nodes[i], i
 	return nil, -1
@@ -702,6 +712,9 @@ doc_add :: proc(doc: ^Document, n: Node) -> ^Node {
 	node_set_raw(&n, "id", strings.to_string(b))
 	append(&doc.nodes, n)
 	p := &doc.nodes[len(doc.nodes) - 1]
+	// keep the indexes current, so that the layers created after it find it
+	doc.by_uid[p.uid] = len(doc.nodes) - 1
+	doc.by_id[p.id] = len(doc.nodes) - 1
 	node_refresh(doc, p)
 	return p
 }
@@ -1001,17 +1014,30 @@ is_descendant :: proc(doc: ^Document, uid, ancestor: int) -> bool {
 // Deletes the node and everything inside it.
 doc_delete :: proc(doc: ^Document, uid: int) {
 	doc_bump(doc)
-	uids := make([dynamic]int, context.temp_allocator)
-	append(&uids, uid)
-	for n in doc.nodes {
-		if is_descendant(doc, n.uid, uid) do append(&uids, n.uid)
+	// the subtree in one pass (parents come before their children in the array only
+	// mostly, so it repeats until nothing more is found), then one compaction: removing
+	// the layers one by one shifted the array and rebuilt the indexes each time
+	doomed := make(map[int]bool, 64, context.temp_allocator)
+	doomed[uid] = true
+	for {
+		grew := false
+		for &n in doc.nodes do if n.uid not_in doomed && n.parent in doomed {
+			doomed[n.uid] = true
+			grew = true
+		}
+		if !grew do break
 	}
-	for del in uids {
-		_, i := doc_find_uid(doc, del)
-		if i < 0 do continue
-		node_free(&doc.nodes[i])
-		ordered_remove(&doc.nodes, i)
+	kept := 0
+	for i in 0 ..< len(doc.nodes) {
+		if doc.nodes[i].uid in doomed {
+			node_free(&doc.nodes[i])
+			continue
+		}
+		if kept != i do doc.nodes[kept] = doc.nodes[i]
+		kept += 1
 	}
+	resize(&doc.nodes, kept)
+	doc_index(doc)
 }
 
 // Moves a node by changing its authored position. Children follow because
