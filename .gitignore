@@ -5,3 +5,4 @@ designs/fonts/
 
 # wgpu-native, fetched by tools/fetch_wgpu.sh
 src/wgpu/lib/
+dist/
