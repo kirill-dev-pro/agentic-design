@@ -155,6 +155,13 @@ agent_connect :: proc(c: ^Agent_Client) -> bool {
 		c.message = strings.clone("Disabled in test windows")
 		return false
 	}
+	// a quarantined app run from its download folder lives at a temporary path that is
+	// gone after a restart: registering it would point agents at nothing
+	if bundle_translocated() {
+		delete(c.message)
+		c.message = strings.clone("Move Agentic Design to Applications first")
+		return false
+	}
 	exe := mcp_executable()
 	ok := false
 	switch c.config {

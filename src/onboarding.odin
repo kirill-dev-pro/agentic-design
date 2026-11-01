@@ -405,6 +405,9 @@ ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
 			case 1:
 				path := fmt.tprintf("%s/sample-screens.pen", app.files_dir)
 				if !os.exists(path) do path = fmt.tprintf("%s/../designs/sample-screens.pen", os.dir(mcp_executable()))
+				// the installed app ships the sample in Resources (read-only, and replaced
+				// by updates): it opens a copy in Application Support
+				if res := bundle_resources(); res != "" && !pf.quiet do path = sample_install(fmt.tprintf("%s/samples", res))
 				// A test window works on a copy: the fuzzer clicked this card and edited the
 				// repository's own sample, which autosave then wrote (dogfooding Session 9).
 				if pf.quiet do path = sample_copy(path)
@@ -446,6 +449,18 @@ sample_copy :: proc(path: string) -> string {
 	for name in ([?]string{"sample-screens.pen", "sample.lib.pen"}) {
 		dst := fmt.tprintf("%s/%s", dir, name)
 		if !os.exists(dst) do _ = os.copy_file(dst, fmt.tprintf("%s/%s", src_dir, name))
+	}
+	return fmt.tprintf("%s/sample-screens.pen", dir)
+}
+
+// The bundled sample copied once into Application Support/Samples, where it can be
+// edited and autosaved.
+sample_install :: proc(from: string) -> string {
+	dir := fmt.tprintf("%s/Samples", support_dir())
+	_ = os.make_directory_all(dir)
+	for name in ([?]string{"sample-screens.pen", "sample.lib.pen"}) {
+		dst := fmt.tprintf("%s/%s", dir, name)
+		if !os.exists(dst) do _ = os.copy_file(dst, fmt.tprintf("%s/%s", from, name))
 	}
 	return fmt.tprintf("%s/sample-screens.pen", dir)
 }
