@@ -251,11 +251,15 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		tp :: proc(p: [2]f32, n: ^Node, sx, sy: f32) -> [2]f32 {
 			return {n.x + (p.x - n.view_box[0]) * sx, n.y + (p.y - n.view_box[1]) * sy}
 		}
+		windings := path_windings(n)
+		sub := -1
 		for c in n.cmds {
 			switch c.kind {
 			case .Move:
 				p := tp(c.p[2], n, sx, sy)
 				nvg.MoveTo(vg, p.x, p.y)
+				sub += 1
+				if sub < len(windings) do nvg.PathWinding(vg, windings[sub])
 			case .Line:
 				p := tp(c.p[2], n, sx, sy)
 				nvg.LineTo(vg, p.x, p.y)
@@ -271,7 +275,16 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		}
 		nvg.LineCap(vg, LINE_CAPS[n.line_cap])
 		nvg.LineJoin(vg, LINE_JOINS[n.line_join])
-		fill_and_stroke(vg, n)
+		if path_stroke_behind(n) {
+			// an outer stroke under an opaque fill: twice as wide and painted first, so the
+			// fill covers its inner half (CSS paint-order: stroke)
+			nvg.StrokeColor(vg, to_nvg(n.stroke))
+			nvg.StrokeWidth(vg, n.stroke_width * 2)
+			stroke_node(vg, n)
+			fill_paints(vg, n)
+		} else {
+			fill_and_stroke(vg, n)
+		}
 	case .Text:
 		if lod_scale > 0 && n.font_size * lod_scale < 2 do draw_text_bars(vg, n)
 		else do draw_text(vg, n)
@@ -285,6 +298,82 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 	case .Other:
 		draw_placeholder(vg, n, n.type_name)
 	}
+}
+
+// A path's stroke aligned outside its outline, over a fill that hides the inside: drawn as
+// a stroke of twice the width under the fill. pen.dev aligns path strokes inside and
+// outside too; with a fill that does not cover (none, translucent, gradient or image) or
+// for an inside stroke the app still strokes the outline's centre, as it needs clipping
+// to the path for those.
+path_stroke_behind :: proc(n: ^Node) -> bool {
+	if n.stroke_align != .Outer || !n.has_stroke || n.stroke_width <= 0 do return false
+	if n.nfills == 0 do return n.has_fill && n.fill.a == 255
+	for i in 0 ..< n.nfills {
+		p := &n.fills[i]
+		if p.enabled && p.kind == .Color && p.color.a == 255 && p.opacity >= 1 do return true
+	}
+	return false
+}
+
+// The winding NanoVG should give each subpath of a path, so that its stencil fill (front
+// faces count up, back faces down, cover where the count is not 0) applies the path's
+// fill rule, as SVG and pen.dev do. NanoVG forces every subpath to one winding unless told
+// otherwise, which filled the holes of every shape (a ring, an "o" converted to a path).
+// nonzero: each subpath keeps the direction it was written in. evenodd: a subpath inside an
+// odd number of others is a hole; exact for nested contours, overlapping ones are joined.
+path_windings :: proc(n: ^Node) -> []nvg.Winding {
+	polys := make([dynamic][dynamic][2]f32, context.temp_allocator)
+	for c in n.cmds {
+		if c.kind == .Move || len(polys) == 0 {
+			p := make([dynamic][2]f32, context.temp_allocator)
+			append(&polys, p)
+		}
+		cur := &polys[len(polys) - 1]
+		switch c.kind {
+		case .Move, .Line: append(cur, c.p[2])
+		case .Quad: append(cur, c.p[0], c.p[1])
+		case .Cubic: append(cur, c.p[0], c.p[1], c.p[2])
+		case .Close:
+		}
+	}
+	out := make([]nvg.Winding, len(polys), context.temp_allocator)
+	areas := make([]f32, len(polys), context.temp_allocator)
+	biggest := 0
+	for poly, i in polys {
+		// the shoelace sum: positive turns clockwise on screen (y down)
+		for p, k in poly {
+			q := poly[(k + 1) % len(poly)]
+			areas[i] += p.x * q.y - q.x * p.y
+		}
+		if abs(areas[i]) > abs(areas[biggest]) do biggest = i
+	}
+	// NanoVG draws the antialiasing fringe outside a contour it calls CCW and inside a CW
+	// one, so the biggest contour goes CCW; turning every subpath around keeps nonzero's
+	// result (each count only changes sign)
+	flip: f32 = -1 if len(areas) > 0 && areas[biggest] > 0 else 1
+	for poly, i in polys {
+		if !n.even_odd {
+			// NanoVG's polygon area is the negated shoelace sum; CCW asks for a positive one
+			out[i] = .CW if areas[i] * flip > 0 else .CCW
+			continue
+		}
+		depth := 0
+		if len(poly) > 0 {
+			pt := poly[0]
+			for other, j in polys do if j != i && point_in_polygon(pt, other[:]) do depth += 1
+		}
+		out[i] = .CCW if depth % 2 == 0 else .CW
+	}
+	return out
+}
+
+point_in_polygon :: proc(pt: [2]f32, poly: [][2]f32) -> bool {
+	inside := false
+	for k in 0 ..< len(poly) {
+		a, b := poly[k], poly[(k + 1) % len(poly)]
+		if (a.y > pt.y) != (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x do inside = !inside
+	}
+	return inside
 }
 
 LINE_CAPS := [Line_Cap]nvg.LineCapType{.Butt = .BUTT, .Round = .ROUND, .Square = .SQUARE}
@@ -487,6 +576,17 @@ text_decoration :: proc(vg: ^nvg.Context, n: ^Node, anchor, y: f32, halign: nvg.
 	thick := max(n.font_size / 14, 0.5)
 	lh := n.font_size * line_height_of(n)
 	base := y + (lh - n.font_size) / 2 + n.font_size * 0.92 // roughly the baseline
+	if outline_sink != nil {
+		rect :: proc(x, y, w, h: f32) {
+			sink_cmd('M', x, y)
+			sink_cmd('L', x + w, y)
+			sink_cmd('L', x + w, y + h)
+			sink_cmd('L', x, y + h)
+		}
+		if n.underline do rect(x, base + thick, w, thick)
+		if n.strikethrough do rect(x, base - n.font_size * 0.3, w, thick)
+		return
+	}
 	nvg.BeginPath(vg)
 	if n.underline do nvg.Rect(vg, x, base + thick, w, thick)
 	if n.strikethrough do nvg.Rect(vg, x, base - n.font_size * 0.3, w, thick)

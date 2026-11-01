@@ -297,7 +297,7 @@ paste_clipboard :: proc() {
 
 // ---------------------------------------------------------------- context menu
 
-CONTEXT_ITEMS := [?]string{"Rename", "Duplicate", "Copy", "Paste", "Group", "Frame selection", "Add auto layout", "Ungroup", "Create component", "Create instance", "Bring to front", "Send to back", "Export PNG", "Delete"}
+CONTEXT_ITEMS := [?]string{"Rename", "Duplicate", "Copy", "Paste", "Group", "Frame selection", "Add auto layout", "Ungroup", "Create component", "Create instance", "Outline text", "Bring to front", "Send to back", "Export PNG", "Delete"}
 
 context_menu_open :: proc(at: [2]f32) {
 	menu_open("context", {at.x, at.y, 0, 0}, CONTEXT_ITEMS[:])
@@ -322,6 +322,7 @@ context_menu_apply :: proc() {
 			if n, _ := engine.doc_find_uid(&app.doc, uid); n != nil && (n.kind == .Frame || n.kind == .Group) do engine.node_set_bool(&app.doc, n, "reusable", true)
 		}
 	case "Create instance": create_instances()
+	case "Outline text": outline_selected_text()
 	case "Bring to front":
 		push_undo()
 		for uid in app.sel do engine.doc_bring_to_front(&app.doc, uid)

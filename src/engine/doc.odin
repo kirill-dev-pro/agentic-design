@@ -191,6 +191,7 @@ Node :: struct {
 	geometry:     string,
 	view_box:     [4]f32,
 	cmds:         [dynamic]Path_Cmd,
+	even_odd:     bool, // a path's fillRule is "evenodd" (default "nonzero")
 	ref:          string,
 	icon:         string, // icon node: lucide name ("house"); `geometry` holds its path data
 	overrides:    [dynamic]Override, // instance: parsed `descendants`
@@ -1407,6 +1408,7 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 	delete(n.image_url)
 	n.image_url = ""
 	n.view_box = {}
+	n.even_odd = false
 	n.shadow = {}
 	n.is_slot = false
 	n.line_cap, n.line_join = .Butt, .Miter
@@ -1605,6 +1607,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 					append(&n.overrides, ov)
 				}
 			}
+		case "fillRule":
+			n.even_odd = json_str(doc, v) == "evenodd"
 		case "geometry":
 			d := json_str(doc, v)
 			cmds, box, ok := parse_svg_path(d)

@@ -1411,3 +1411,48 @@ canvas screenshots and `get_document` of sample.lib, sample-screens, reddit-ui a
 stress10 are identical. A product landing page we compare places all its tilted cards in
 `layout: "none"` frames, so it is unchanged too; its hero and "Built for this job" frames
 match pen.dev's bounds to 1.94 units, all of it text widths.
+
+## 62. Paths fill by their fill rule and align an outer stroke; text can be outlined into a path
+
+**Problem.** pen.dev drops a stroke on a text layer (an update with `stroke` leaves no key
+on the node, and stroked text draws its fill only), so the outlined `+` and `=` of the HR
+Breakers site cannot be text. A path keeps a stroke, but the app filled every subpath of a
+path as solid: holes vanished (a ring, the counter of an `A`), whatever the path's
+`fillRule`. pen.dev draws both rules.
+
+**Decision.**
+
+- Paths fill by `fillRule` (`nonzero` by default, `evenodd`), read from the file. NanoVG
+  fills with a stencil that counts front faces up and back faces down, which is the
+  nonzero rule as long as each subpath keeps its direction; it used to force them all to
+  one. Each subpath now keeps the direction it was written in, all turned so that the
+  biggest runs counter-clockwise (NanoVG puts the antialiasing fringe outside such a
+  contour; turning every subpath keeps nonzero's result). For `evenodd` a subpath inside
+  an odd number of others becomes a hole: exact for nested contours, overlapping ones
+  are joined. HTML and React export write `fill-rule` for `evenodd` (browsers apply the
+  winding themselves).
+- A path's stroke with `strokeAlignment: "outer"` over a solid opaque fill is drawn as a
+  stroke of twice the width under the fill (CSS `paint-order: stroke`, which export writes),
+  as pen.dev draws it. An inner stroke, or an outer one over a fill that does not cover
+  (none, translucent, a gradient, an image), still follows the outline's centre: drawing
+  those needs clipping to the path, which NanoVG does not have.
+- `outline_text` (an MCP tool and "Outline text" in the context menu) turns text layers
+  into paths, one undo step. The geometry is written by the code that draws the text: a
+  sink in `text_outline.odin` takes the glyph outlines, kerning, letter spacing, fallback
+  fonts, line breaks, alignment, justification and underlines that `draw_text` produces,
+  in the text's own box. The path keeps the text's id, position, box (`width`, `height`
+  and `viewBox [0, 0, w, h]`, so a flex parent lays it out the same), rotation, opacity,
+  fill and effects; text without a fill gets black, which is what it drew. A bold the
+  family lacks, drawn by thickening a lighter face, keeps that look as a stroke of its
+  fill colour. Text inside an instance is refused: outline it in the component.
+
+**Consequences.** A ring with a nonzero and one with an evenodd hole, and an outer stroke
+around a filled +, match pen.dev's export pixel for pixel; a lettermark logo now has the
+counter of its R cut out, as in pen.dev (it was filled). Outlined text fills the same
+shapes as the text: at 16× (where the canvas draws text as outlines too) 0.024 % of pixels
+differ, by at most 38 of 255, where glyphs' antialiasing overlaps (the path is one fill,
+the text one per line); at 1× the canvas draws small text from its glyph atlas, which
+antialiases differently from any vector fill (6 % of pixels). Undo gives back the document
+byte for byte. pen.dev opens the outlined file, keeps the stroke added to it and draws the
+same picture (2 % of pixels at 2×, on edges). An outlined layer is no longer editable as
+text.
