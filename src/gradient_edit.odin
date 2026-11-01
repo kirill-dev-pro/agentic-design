@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:math"
 import nvg "nanovg"
@@ -17,9 +19,9 @@ Grad_Handle :: enum {
 	Radius_Y,
 }
 
-grad_edit_target :: proc() -> (n: ^Node, p: Paint, ok: bool) {
+grad_edit_target :: proc() -> (n: ^engine.Node, p: engine.Paint, ok: bool) {
 	if len(app.sel) != 1 || ui.grad.uid != app.sel[0] || app.editing != 0 do return
-	n, _ = doc_find_uid(&app.doc, app.sel[0])
+	n, _ = engine.doc_find_uid(&app.doc, app.sel[0])
 	if n == nil do return
 	items := fill_items(n)
 	if ui.grad.fill >= len(items) do return
@@ -29,7 +31,7 @@ grad_edit_target :: proc() -> (n: ^Node, p: Paint, ok: bool) {
 }
 
 // Where the handles are, in the node's untransformed page box.
-grad_handles :: proc(n: ^Node, p: Paint) -> (h: [Grad_Handle][2]f32) {
+grad_handles :: proc(n: ^engine.Node, p: engine.Paint) -> (h: [Grad_Handle][2]f32) {
 	if p.kind == .Linear {
 		rad := p.rotation * math.PI / 180
 		dir := [2]f32{-math.sin(rad), -math.cos(rad)}
@@ -49,10 +51,10 @@ grad_handles :: proc(n: ^Node, p: Paint) -> (h: [Grad_Handle][2]f32) {
 }
 
 // The handles in screen space, as drawn.
-grad_screen_handles :: proc(n: ^Node, p: Paint) -> (h: [Grad_Handle][2]f32) {
+grad_screen_handles :: proc(n: ^engine.Node, p: engine.Paint) -> (h: [Grad_Handle][2]f32) {
 	h = grad_handles(n, p)
-	m, tr := node_transform(n)
-	for &q, k in h do if k != .None do q = to_screen(xform_point(m, q) if tr else q)
+	m, tr := engine.node_transform(n)
+	for &q, k in h do if k != .None do q = to_screen(engine.xform_point(m, q) if tr else q)
 	return
 }
 
@@ -100,14 +102,14 @@ draw_gradient_handles :: proc(vg: ^nvg.Context) {
 	if p.kind == .Linear {
 		line(vg, h[.Start], h[.End])
 		// the stops along the line
-		for k in 0 ..< p.nstops do dot(vg, h[.Start] + (h[.End] - h[.Start]) * p.stops[k].pos, to_nvg(p.stops[k].color))
+		for k in 0 ..< p.nstops do dot(vg, h[.Start] + (h[.End] - h[.Start]) * p.stops[k].pos, engine.to_nvg(p.stops[k].color))
 		return
 	}
 	line(vg, h[.Center], h[.Radius_X])
 	line(vg, h[.Center], h[.Radius_Y])
-	dot(vg, h[.Center], to_nvg(p.stops[0].color))
-	dot(vg, h[.Radius_X], to_nvg(p.stops[p.nstops - 1].color))
-	dot(vg, h[.Radius_Y], to_nvg(p.stops[p.nstops - 1].color))
+	dot(vg, h[.Center], engine.to_nvg(p.stops[0].color))
+	dot(vg, h[.Radius_X], engine.to_nvg(p.stops[p.nstops - 1].color))
+	dot(vg, h[.Radius_Y], engine.to_nvg(p.stops[p.nstops - 1].color))
 }
 
 // Moves a handle to a page point: a linear end keeps the other end where it is; the
@@ -116,7 +118,7 @@ grad_drag :: proc(handle: Grad_Handle, page: [2]f32) {
 	n, p, ok := grad_edit_target()
 	if !ok do return
 	q := page
-	if m, tr := node_transform(n); tr do q = xform_point(xform_inverse(m), q)
+	if m, tr := engine.node_transform(n); tr do q = engine.xform_point(engine.xform_inverse(m), q)
 	w, h := max(n.w, 1e-3), max(n.h, 1e-3)
 	norm := [2]f32{(q.x - n.x) / w, (q.y - n.y) / h}
 	hs := grad_handles(n, p)

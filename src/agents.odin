@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:os"
@@ -128,19 +130,19 @@ agent_entry_json :: proc(cfg: Agent_Config, exe: string) -> string {
 	switch cfg {
 	case .Opencode:
 		strings.write_string(&b, `{"type": "local", "command": [`)
-		json_write_string(&b, exe)
+		engine.json_write_string(&b, exe)
 		strings.write_string(&b, `, "mcp"], "enabled": true}`)
 	case .Vscode:
 		strings.write_string(&b, `{"type": "stdio", "command": `)
-		json_write_string(&b, exe)
+		engine.json_write_string(&b, exe)
 		strings.write_string(&b, `, "args": ["mcp"]}`)
 	case .Claude_Code:
 		strings.write_string(&b, `{"type": "stdio", "command": `)
-		json_write_string(&b, exe)
+		engine.json_write_string(&b, exe)
 		strings.write_string(&b, `, "args": ["mcp"], "env": {}}`)
 	case .Mcp_Servers, .Codex:
 		strings.write_string(&b, `{"command": `)
-		json_write_string(&b, exe)
+		engine.json_write_string(&b, exe)
 		strings.write_string(&b, `, "args": ["mcp"]}`)
 	}
 	return strings.to_string(b)
@@ -319,7 +321,7 @@ toml_config_put :: proc(path, exe: string) -> bool {
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, header)
 	strings.write_string(&b, "\ncommand = ")
-	json_write_string(&b, exe) // a TOML basic string has the same escapes
+	engine.json_write_string(&b, exe) // a TOML basic string has the same escapes
 	strings.write_string(&b, "\nargs = [ \"mcp\" ]\n")
 	table := strings.to_string(b)
 	out: string

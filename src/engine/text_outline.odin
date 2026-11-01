@@ -1,8 +1,8 @@
-package agentic_design
+package engine
 
 import "core:math"
-import "fontstash"
-import nvg "nanovg"
+import "../fontstash"
+import nvg "../nanovg"
 import stbtt "vendor:stb/truetype"
 
 // Large text drawn as glyph outlines. Glyphs come from a bitmap atlas and are rasterised at
@@ -68,7 +68,7 @@ glyph_outline :: proc(font_index: int, font: ^fontstash.Font, glyph: i32) -> Gly
 // thickens the glyphs as Skia (FreeType) does for a bold that the family lacks: the outline
 // grows by font size / 24 in all, half on each side, and the advances stay the same.
 draw_text_outlines :: proc(vg: ^nvg.Context, n: ^Node, x, y: f32, text: string, embolden := false) {
-	fs := &app.vg.fs
+	fs := &renderer.fs
 	face := font_face(n.font_family, n.weight, n.italic)
 	fi := fontstash.GetFontByName(fs, face)
 	if fi < 0 do return

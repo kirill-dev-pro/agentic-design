@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:bufio"
 import "core:bytes"
 import "core:encoding/json"
@@ -106,7 +108,7 @@ mcp_handle :: proc(line: string) {
 		}
 		version := string(params["protocolVersion"].(json.String) or_else "2025-06-18")
 		fmt.sbprintf(&b, `"result":{{"protocolVersion":"%s","capabilities":{{"tools":{{}}}},"serverInfo":{{"name":"agentic-design","version":"0.2.0"}},"instructions":`, version)
-		json_write_string(&b, MCP_INSTRUCTIONS)
+		engine.json_write_string(&b, MCP_INSTRUCTIONS)
 		strings.write_string(&b, "}}")
 	case "ping":
 		strings.write_string(&b, `"result":{}}`)
@@ -133,14 +135,14 @@ mcp_handle :: proc(line: string) {
 mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 	tool_error :: proc(b: ^strings.Builder, msg: string) {
 		strings.write_string(b, `{"isError":true,"content":[{"type":"text","text":`)
-		json_write_string(b, msg)
+		engine.json_write_string(b, msg)
 		strings.write_string(b, "}]}")
 	}
 	agent := strings.builder_make(context.temp_allocator)
 	fmt.sbprintf(&agent, `{{"id":"%d","client":`, posix.getpid())
-	json_write_string(&agent, mcp_client)
+	engine.json_write_string(&agent, mcp_client)
 	strings.write_string(&agent, `,"title":`)
-	json_write_string(&agent, mcp_client_title)
+	engine.json_write_string(&agent, mcp_client_title)
 	strings.write_string(&agent, "}")
 	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s}}`, name, args_json, strings.to_string(agent))
 	response, ok := app_request(request)
@@ -163,7 +165,7 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 		if md, has := ro["markdown"].(json.String); has {
 			// a guide: the text itself, not JSON around it
 			strings.write_string(b, `{"content":[{"type":"text","text":`)
-			json_write_string(b, string(md))
+			engine.json_write_string(b, string(md))
 			strings.write_string(b, "}]}")
 			return
 		}
@@ -172,15 +174,15 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 			if sc, ok := ro["scale"].(json.Float); ok do caption = fmt.tprintf("%s at scale %v", caption, sc)
 			if note, ok := ro["note"].(json.String); ok do caption = fmt.tprintf("%s (%s)", caption, note)
 			fmt.sbprintf(b, `{{"content":[{{"type":"image","mimeType":"image/png","data":"%s"}},{{"type":"text","text":`, png)
-			json_write_string(b, caption)
+			engine.json_write_string(b, caption)
 			strings.write_string(b, "}]}")
 			return
 		}
 	}
 	text := strings.builder_make(context.temp_allocator)
-	write_json_value(&text, result)
+	engine.write_json_value(&text, result)
 	strings.write_string(b, `{"content":[{"type":"text","text":`)
-	json_write_string(b, strings.to_string(text))
+	engine.json_write_string(b, strings.to_string(text))
 	strings.write_string(b, "}]}")
 }
 

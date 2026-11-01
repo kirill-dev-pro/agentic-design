@@ -16,7 +16,7 @@ dev-2026-10. Kept in the repository so the following fixes can be applied:
 - nanovg: glyphs are rasterised at most `MAX_GLYPH_PIXELS` (256) high (`__textScale`); larger
   text is drawn scaled up. At high zoom, glyphs of several hundred pixels used to fill the
   atlas and the rest of the frame's text vanished. Text that big on screen is drawn from
-  its glyph outlines instead (`src/text_outline.odin`), so it stays sharp.
+  its glyph outlines instead (`src/engine/text_outline.odin`), so it stays sharp.
 - nanovg: `QuadTo` placed its control points with `2 / 3`, an integer division that is 0
   in Odin, so every quadratic curve was a straight line (glyph outlines, SVG `Q`/`T`).
   Now `2.0 / 3.0`.

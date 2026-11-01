@@ -1031,3 +1031,42 @@ the whole ~170 ms, and #47 removes it.
 
 **Consequences.** Latency tests start the window as an agent does and let it idle before
 timing (`tools/perf/agentlat.py`), and compare builds on the same kind of window.
+
+## 51. The engine is a package of its own, set up by its host through a few globals
+
+**Problem.** The app is to run on WebGPU, in the browser and later on other platforms,
+and native apps for phones should share its rendering. The code that reads, lays out and
+draws a `.pen` document lived in the same package as the window, the interface and the
+socket, and reached into `app` for the NanoVG context, the open document, its path, the
+theme, the hidden pages and the flag that asks for a layout. Nothing of it could be built
+without the rest.
+
+**Decision.** Seventeen files moved to `src/engine/` (package `engine`), and the drawing
+and transform code moved out of `app.odin` into `src/engine/draw.odin`. The engine
+imports nothing from the app. What it used to read from `app` is now set by the host in
+`src/engine/engine.odin`: `renderer`, `current`, `hidden`, `theme` and `allocator`. A
+`Document` carries its `path`. A layout request is `layout_invalidate()` (the
+`layout_epoch` that layout already compared). The draw order of top-level layers is
+passed to blur in `Blur_View.order`. The app's side of pages, libraries, fonts, file
+dialogs and export, which needs the window or the tabs, stayed in the app in
+`*_ui.odin` files. The app names engine symbols with the `engine.` prefix (Odin has
+no `using` for imports).
+
+Map iteration order changes between runs, and two outputs depended on it: the order of
+a component's props in the React export (the `descendants` of an instance were read in
+map order) and the font list in the guide. Both now go through `sorted_keys`, so the same
+document gives the same output every time. When two override paths of one instance name
+the same part, the later one in key order wins (before, it was whichever the map gave).
+
+**Consequences.**
+
+- Before the move and after it, documents, lint, HTML export and every screenshot of the
+  two Sample files were compared: identical, except up to 1 in 255 on about 0.01 % of
+  text pixels after the sorting change (glyphs reach the atlas in another order). Undo,
+  the session and presence scripts, the scripted run and two fuzz passes under lldb
+  pass. Idle CPU and memory at start (273 MB) are unchanged.
+- The engine is still single-threaded and keeps its state in globals: one engine per
+  process. A C API for other languages, if phones need it, goes on top of this package.
+- The next step puts a renderer interface between `draw.odin` and NanoVG's GL backend, so
+  that a WebGPU backend can replace it.
+

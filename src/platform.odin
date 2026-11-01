@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "base:runtime"
 import "core:c"
 import "core:os"

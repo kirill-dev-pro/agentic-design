@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:math"
@@ -44,7 +46,7 @@ draw_ui :: proc() {
 
 // ---------------------------------------------------------------- icons
 
-kind_icon :: proc(n: ^Node) -> Icon {
+kind_icon :: proc(n: ^engine.Node) -> Icon {
 	switch n.kind {
 	case .Frame:
 		switch n.layout {
@@ -108,14 +110,6 @@ draw_tab_bar :: proc(vg: ^nvg.Context) {
 	if icon_button(vg, {x + 2, 8, 28, 28}, .Plus) do new_document()
 }
 
-file_title :: proc(path: string) -> string {
-	base := os.base(path)
-	if strings.has_suffix(base, ".pen") do base = base[:len(base) - 4]
-	return base
-}
-
-// ---------------------------------------------------------------- sidebar
-
 draw_sidebar :: proc(vg: ^nvg.Context) {
 	panel := Rect{0, TAB_H, LEFT_W, app.screen.y - TAB_H}
 	fill_rect(vg, panel, PANEL_BG)
@@ -125,14 +119,14 @@ draw_sidebar :: proc(vg: ^nvg.Context) {
 	y := TAB_H + 22
 	draw_icon(vg, .File, 24, y, TEXT_FG, 15)
 	if ui.focus == "filename" && ui.focus_uid == 0 {
-		field(vg, 0, "filename", "", {36, y - 12, LEFT_W - 52, 24}, file_title(app.file_path))
+		field(vg, 0, "filename", "", {36, y - 12, LEFT_W - 52, 24}, engine.file_title(app.file_path))
 	} else {
-		label(vg, 40, y, file_title(app.file_path), TEXT_FG, 13)
+		label(vg, 40, y, engine.file_title(app.file_path), TEXT_FG, 13)
 		hdr := Rect{16, y - 14, LEFT_W - 32, 28}
 		if clicked(hdr) {
 			double := ui.tree_click_uid == -2 && time.duration_seconds(time.since(ui.tree_click)) < 0.35
 			ui.tree_click, ui.tree_click_uid = time.now(), -2
-			if double do field_focus(0, "filename", file_title(app.file_path))
+			if double do field_focus(0, "filename", engine.file_title(app.file_path))
 		}
 	}
 
@@ -179,7 +173,7 @@ draw_pages :: proc(vg: ^nvg.Context, y: ^f32) {
 	else if clicked(hdr) do ui.pages_shut = !ui.pages_shut
 	y^ += ROW_H
 	if ui.pages_shut do return
-	pages := doc_pages(&app.doc)
+	pages := engine.doc_pages(&app.doc)
 	for page, i in pages {
 		r := Rect{8, y^, LEFT_W - 16, ROW_H}
 		current := i == app.page
@@ -214,27 +208,27 @@ page_menu_index: int
 page_menu_apply :: proc() {
 	if pick, ok := menu_take("page"); ok {
 		i := page_menu_index
-		pages := doc_pages(&app.doc)
+		pages := engine.doc_pages(&app.doc)
 		if i < 0 || i >= len(pages) do return
 		switch pick {
 		case 0: field_focus(0, fmt.tprintf("page.name:%d", i), pages[i].name)
 		case 1:
 			// duplicate: copy every top-level layer of the page onto a new one
 			push_undo()
-			append(&app.doc.pages, Page{name = fmt.aprintf("%s copy", pages[i].name)})
-			doc_pages_write(&app.doc)
+			append(&app.doc.pages, engine.Page{name = fmt.aprintf("%s copy", pages[i].name)})
+			engine.doc_pages_write(&app.doc)
 			ni := len(app.doc.pages) - 1
 			tops := make([dynamic]int, context.temp_allocator)
-			for &n in app.doc.nodes do if n.parent == 0 && page_of_top(&app.doc, n.id) == i do append(&tops, n.uid)
+			for &n in app.doc.nodes do if n.parent == 0 && engine.page_of_top(&app.doc, n.id) == i do append(&tops, n.uid)
 			for uid in tops {
 				if nuid := duplicate_tree(uid, -1, 0); nuid != 0 {
-					if c, _ := doc_find_uid(&app.doc, nuid); c != nil {
+					if c, _ := engine.doc_find_uid(&app.doc, nuid); c != nil {
 						c.page_seen = true
 						append(&app.doc.pages[ni].ids, strings.clone(c.id))
 					}
 				}
 			}
-			doc_pages_write(&app.doc)
+			engine.doc_pages_write(&app.doc)
 			page_switch(ni)
 			mark_dirty()
 		case 3:
@@ -251,10 +245,10 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 	if first != ui.last_sel {
 		ui.last_sel = first
 		ui.insp_scroll = 0
-		if n, _ := doc_find_uid(&app.doc, first); n != nil {
+		if n, _ := engine.doc_find_uid(&app.doc, first); n != nil {
 			for p := n.parent; p != 0; {
 				ui.expanded[p] = true
-				pn, _ := doc_find_uid(&app.doc, p)
+				pn, _ := engine.doc_find_uid(&app.doc, p)
 				if pn == nil do break
 				p = pn.parent
 			}
@@ -268,8 +262,8 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 		container: bool,
 	}
 	rows := make([dynamic]Row, context.temp_allocator)
-	row :: proc(vg: ^nvg.Context, n: ^Node, depth: int, y: ^f32, rows: ^[dynamic]Row) {
-		if depth > MAX_DEPTH do return
+	row :: proc(vg: ^nvg.Context, n: ^engine.Node, depth: int, y: ^f32, rows: ^[dynamic]Row) {
+		if depth > engine.MAX_DEPTH do return
 		r := Rect{8, y^, LEFT_W - 16, ROW_H}
 		append(rows, Row{n.uid, r, depth, n.kind == .Frame || n.kind == .Group})
 		sel := is_selected(n.uid)
@@ -286,18 +280,18 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 		renaming := ui.focus == "name" && ui.focus_uid == n.uid && ui.rename_tree
 		eye := Rect{r.x + r.w - 28, r.y + 3, 24, 24}
 		if renaming {
-			field(vg, n.uid, "name", "", {x + 30, r.y + 3, r.w - (x + 30 - r.x) - 4, 24}, n.name, placeholder = node_label(n))
+			field(vg, n.uid, "name", "", {x + 30, r.y + 3, r.w - (x + 30 - r.x) - 4, 24}, n.name, placeholder = engine.node_label(n))
 		} else {
 			nvg.Save(vg)
 			nvg.IntersectScissor(vg, r.x, r.y, r.w - 32, r.h)
-			label(vg, x + 36, r.y + ROW_H / 2, node_label(n), TEXT_DIM if !n.enabled else TEXT_FG, 12)
+			label(vg, x + 36, r.y + ROW_H / 2, engine.node_label(n), TEXT_DIM if !n.enabled else TEXT_FG, 12)
 			nvg.Restore(vg)
 		}
 		if (in_rect(r, app.mouse) || !n.enabled) && !renaming {
 			if icon_button(vg, eye, .Eye if n.enabled else .Eye_Off) {
 				push_undo()
-				if n.enabled do node_set_bool(&app.doc, n, "enabled", false)
-				else do node_unset(&app.doc, n, "enabled")
+				if n.enabled do engine.node_set_bool(&app.doc, n, "enabled", false)
+				else do engine.node_unset(&app.doc, n, "enabled")
 			}
 		}
 		if r.y + r.h > TAB_H + 88 && !renaming && !in_rect(eye, app.mouse) && clicked(r) {
@@ -361,7 +355,7 @@ draw_layer_matches :: proc(vg: ^nvg.Context, needle: string, y: ^f32) {
 	count := 0
 	for &n in app.doc.nodes {
 		if !on_page(n.uid) do continue
-		hay := strings.to_lower(fmt.tprintf("%s\x00%s\x00%s", node_label(&n), n.content, n.type_name), context.temp_allocator)
+		hay := strings.to_lower(fmt.tprintf("%s\x00%s\x00%s", engine.node_label(&n), n.content, n.type_name), context.temp_allocator)
 		if !strings.contains(hay, needle) do continue
 		count += 1
 		r := Rect{8, y^, LEFT_W - 16, ROW_H}
@@ -372,10 +366,10 @@ draw_layer_matches :: proc(vg: ^nvg.Context, needle: string, y: ^f32) {
 		else do draw_icon(vg, kind_icon(&n), r.x + 20, r.y + ROW_H / 2, TEXT_DIM, 14)
 		nvg.Save(vg)
 		nvg.IntersectScissor(vg, r.x, r.y, r.w - 8, r.h)
-		name := node_label(&n)
+		name := engine.node_label(&n)
 		label(vg, r.x + 36, r.y + ROW_H / 2, name, TEXT_FG, 12)
-		if p, _ := doc_find_uid(&app.doc, n.parent); p != nil {
-			label(vg, r.x + 44 + text_width(vg, name, 12), r.y + ROW_H / 2, node_label(p), TEXT_DIM, 11)
+		if p, _ := engine.doc_find_uid(&app.doc, n.parent); p != nil {
+			label(vg, r.x + 44 + text_width(vg, name, 12), r.y + ROW_H / 2, engine.node_label(p), TEXT_DIM, 11)
 		}
 		nvg.Restore(vg)
 		if r.y + r.h > TAB_H + 88 && clicked(r) {
@@ -416,7 +410,7 @@ draw_variables :: proc(vg: ^nvg.Context, y: ^f32) {
 			if _, taken := app.doc.vars[name]; !taken do break
 			name = fmt.tprintf("%s%d", base[pick], i)
 		}
-		doc_set_variable_themed(&app.doc, name, kinds[pick], defaults[pick])
+		engine.doc_set_variable_themed(&app.doc, name, kinds[pick], defaults[pick])
 		mark_dirty()
 	}
 	y^ += ROW_H
@@ -438,12 +432,12 @@ draw_variables :: proc(vg: ^nvg.Context, y: ^f32) {
 		kind := "string"
 		switch v.kind {
 		case .Color:
-			fill_rect(vg, {r.x + 10, r.y + 8, 14, 14}, to_nvg(v.color), 3)
+			fill_rect(vg, {r.x + 10, r.y + 8, 14, 14}, engine.to_nvg(v.color), 3)
 			stroke_rect(vg, {r.x + 10, r.y + 8, 14, 14}, {1, 1, 1, 0.12}, 3)
-			value = color_hex(v.color)[1:]
+			value = engine.color_hex(v.color)[1:]
 			kind = "color"
 		case .Number:
-			value = num_text(v.number)
+			value = engine.num_text(v.number)
 			kind = "number"
 			draw_icon(vg, .Font_Size, r.x + 17, r.y + 15, TEXT_DIM, 12)
 		case .String:
@@ -463,7 +457,7 @@ draw_variables :: proc(vg: ^nvg.Context, y: ^f32) {
 	}
 	if remove != "" {
 		push_undo()
-		doc_remove_variable(&app.doc, remove)
+		engine.doc_remove_variable(&app.doc, remove)
 		mark_dirty()
 	}
 	y^ += 6
@@ -471,7 +465,7 @@ draw_variables :: proc(vg: ^nvg.Context, y: ^f32) {
 
 // Theme axes: a dropdown per axis with the shown value, "+" adds a value or an axis.
 draw_theme_axes :: proc(vg: ^nvg.Context, y: ^f32) {
-	axes := doc_theme_axes(&app.doc)
+	axes := engine.doc_theme_axes(&app.doc)
 	label(vg, 20, y^ + ROW_H / 2, "Theme", TEXT_FG, 13)
 	if icon_button(vg, {LEFT_W - 40, y^ + 1, 28, 28}, .Plus, tip = "Add theme value") {
 		items := make([dynamic]string, context.temp_allocator)
@@ -482,12 +476,12 @@ draw_theme_axes :: proc(vg: ^nvg.Context, y: ^f32) {
 	if pick, ok := menu_take("newtheme"); ok {
 		push_undo()
 		if len(axes) == 0 {
-			theme_add_value(&app.doc, "mode", "light")
-			theme_add_value(&app.doc, "mode", "dark")
+			engine.theme_add_value(&app.doc, "mode", "light")
+			engine.theme_add_value(&app.doc, "mode", "dark")
 		} else if pick < len(axes) {
 			a := axes[pick]
 			name := fmt.tprintf("%s%d", a.name, len(a.values) + 1)
-			theme_add_value(&app.doc, a.name, name)
+			engine.theme_add_value(&app.doc, a.name, name)
 			field_focus(0, fmt.tprintf("theme.value:%s", a.name), name)
 		}
 		mark_dirty()
@@ -504,14 +498,14 @@ draw_theme_axes :: proc(vg: ^nvg.Context, y: ^f32) {
 		key := fmt.tprintf("theme.value:%s", a.name)
 		dd := Rect{r.x + r.w * 0.4, r.y + 2, r.w * 0.6 - 4, 26}
 		if ui.focus == key && ui.focus_uid == 0 {
-			field(vg, 0, key, "", dd, app.theme[a.name])
+			field(vg, 0, key, "", dd, engine.theme[a.name])
 		} else {
 			cur := -1
-			for v, i in a.values do if v == app.theme[a.name] do cur = i
+			for v, i in a.values do if v == engine.theme[a.name] do cur = i
 			if pick, ok := dropdown_menu(vg, fmt.tprintf("theme:%s", a.name), dd, a.values[:], cur); ok {
-				delete(app.theme[a.name])
-				app.theme[strings.clone(a.name)] = strings.clone(a.values[pick])
-				doc_retheme(&app.doc)
+				delete(engine.theme[a.name])
+				engine.theme[strings.clone(a.name)] = strings.clone(a.values[pick])
+				engine.doc_retheme(&app.doc)
 			}
 			if mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) && hovered(dd) {
 				page_menu_index = -1
@@ -522,7 +516,7 @@ draw_theme_axes :: proc(vg: ^nvg.Context, y: ^f32) {
 		y^ += ROW_H
 	}
 	if pick, ok := menu_take("theme-axis"); ok && pick == 0 {
-		field_focus(0, fmt.tprintf("theme.value:%s", theme_menu_axis), app.theme[theme_menu_axis])
+		field_focus(0, fmt.tprintf("theme.value:%s", theme_menu_axis), engine.theme[theme_menu_axis])
 	}
 	y^ += 6
 	fill_rect(vg, {16, y^, LEFT_W - 32, 1}, PANEL_LINE)
@@ -640,14 +634,14 @@ draw_inspector_content :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 		if button(vg, {x, y^, half, 28}, "Duplicate") do duplicate_selection()
 		if button(vg, {x + half + 8, y^, half, 28}, "Delete") {
 			push_undo()
-			for uid in app.sel do doc_delete(&app.doc, uid)
+			for uid in app.sel do engine.doc_delete(&app.doc, uid)
 			clear(&app.sel)
 		}
 		y^ += 36
 		return
 	}
 
-	n, _ := doc_find_uid(&app.doc, app.sel[0])
+	n, _ := engine.doc_find_uid(&app.doc, app.sel[0])
 	if n == nil do return
 	if ui.focus != "" && ui.focus_uid != n.uid do field_commit()
 	draw_node_properties(vg, n, x, right, y)
@@ -657,7 +651,7 @@ draw_page_section :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 	w := right - x
 	section(vg, x, y, "Page")
 	// background color of the canvas
-	hex := color_hex(from_nvg(app.canvas_bg))[1:]
+	hex := engine.color_hex(from_nvg(app.canvas_bg))[1:]
 	r := Rect{x, y^, w - 56, 28}
 	fill_rect(vg, {r.x + 8, r.y + 7, 14, 14}, app.canvas_bg, 3)
 	field(vg, 0, "canvas", "", {r.x + 26, r.y, r.w - 26, r.h}, hex, true)
@@ -704,12 +698,12 @@ draw_page_section :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 	}
 }
 
-draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32) {
+draw_node_properties :: proc(vg: ^nvg.Context, n: ^engine.Node, x, right: f32, y: ^f32) {
 	w := right - x
 	half := (w - 8) / 2
-	title := n.type_name if n.kind == .Other else KIND_LABELS[n.kind]
+	title := n.type_name if n.kind == .Other else engine.KIND_LABELS[n.kind]
 	section(vg, x, y, title, n.id)
-	field(vg, n.uid, "name", "", {x, y^, w, 28}, n.name, placeholder = node_label(n))
+	field(vg, n.uid, "name", "", {x, y^, w, 28}, n.name, placeholder = engine.node_label(n))
 	y^ += 40
 	if n.kind == .Ref {
 		draw_instance_section(vg, n, x, w, y)
@@ -720,11 +714,11 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 			label(vg, x, y^ + 14, "Component origin", {0.85, 0.45, 0.95, 1})
 			if button(vg, {x + w - 120, y^, 120, 28}, "Make plain layer") {
 				push_undo()
-				node_unset(&app.doc, n, "reusable")
+				engine.node_unset(&app.doc, n, "reusable")
 			}
 		} else if button(vg, {x, y^, w, 28}, "Create component  ⌘⌥K") {
 			push_undo()
-			node_set_bool(&app.doc, n, "reusable", true)
+			engine.node_set_bool(&app.doc, n, "reusable", true)
 		}
 		y^ += 36
 	}
@@ -738,7 +732,7 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 	draw_appearance(vg, n, x, w, y)
 
 	if n.kind == .Frame || n.kind == .Group {
-		axes := doc_theme_axes(&app.doc)
+		axes := engine.doc_theme_axes(&app.doc)
 		if len(axes) > 0 {
 			section(vg, x, y, "Theme")
 			for a in axes {
@@ -752,7 +746,7 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 				label(vg, x, y^ + 14, a.name, TEXT_DIM, 11)
 				if pick, ok := dropdown_menu(vg, fmt.tprintf("node-theme:%s", a.name), {x + half + 8, y^, half, 28}, items[:], cur); ok {
 					push_undo()
-					node_set_theme(&app.doc, n, a.name, "" if pick == 0 else a.values[pick - 1])
+					engine.node_set_theme(&app.doc, n, a.name, "" if pick == 0 else a.values[pick - 1])
 					mark_dirty()
 				}
 				y^ += 36
@@ -767,31 +761,31 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 	if n.kind != .Text {
 		if section_toggle(vg, x, y, "Stroke", n.has_stroke) {
 			push_undo()
-			if n.has_stroke do node_unset(&app.doc, n, "stroke")
+			if n.has_stroke do engine.node_unset(&app.doc, n, "stroke")
 			else {
-				node_set_stroke(&app.doc, n, {0, 0, 0, 255})
+				engine.node_set_stroke(&app.doc, n, {0, 0, 0, 255})
 				// inside the box, like the strokes pen.dev writes: the node's bounds stay
 				// its bounds
-				if n.kind != .Path && n.kind != .Text && prop_index(n, "strokeAlignment") < 0 do node_set_string(&app.doc, n, "strokeAlignment", "inner")
+				if n.kind != .Path && n.kind != .Text && engine.prop_index(n, "strokeAlignment") < 0 do engine.node_set_string(&app.doc, n, "strokeAlignment", "inner")
 			}
 		}
 		if n.has_stroke {
-			field(vg, n.uid, "strokeWidth", "", {x, y^, half, 28}, num_text(n.stroke_width), icon = .Stroke_Width, numeric = true)
-			aligns := [Stroke_Align]string {
+			field(vg, n.uid, "strokeWidth", "", {x, y^, half, 28}, engine.num_text(n.stroke_width), icon = .Stroke_Width, numeric = true)
+			aligns := [engine.Stroke_Align]string {
 				.Inner  = "Inside",
 				.Center = "Center",
 				.Outer  = "Outside",
 			}
 			if dropdown(vg, {x + half + 8, y^, half, 28}, aligns[n.stroke_align]) {
 				push_undo()
-				next := Stroke_Align((int(n.stroke_align) + 1) % len(Stroke_Align))
-				if obj, ok := old_stroke_object(n); ok {
-					names := [Stroke_Align]string{.Inner = "inside", .Center = "center", .Outer = "outside"}
+				next := engine.Stroke_Align((int(n.stroke_align) + 1) % len(engine.Stroke_Align))
+				if obj, ok := engine.old_stroke_object(n); ok {
+					names := [engine.Stroke_Align]string{.Inner = "inside", .Center = "center", .Outer = "outside"}
 					obj["align"] = json.String(names[next])
-					node_set(&app.doc, n, "stroke", obj)
+					engine.node_set(&app.doc, n, "stroke", obj)
 				} else {
-					names := [Stroke_Align]string{.Inner = "inner", .Center = "center", .Outer = "outer"}
-					node_set_string(&app.doc, n, "strokeAlignment", names[next])
+					names := [engine.Stroke_Align]string{.Inner = "inner", .Center = "center", .Outer = "outer"}
+					engine.node_set_string(&app.doc, n, "strokeAlignment", names[next])
 				}
 			}
 			y^ += 36
@@ -805,27 +799,27 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 
 	if n.kind == .Text {
 		section(vg, x, y, "Typography")
-		fonts_scan()
+		engine.fonts_scan()
 		fam_items := make([dynamic]string, context.temp_allocator)
 		append(&fam_items, "Default (Arial)")
-		append(&fam_items, ..family_names[:])
+		append(&fam_items, ..engine.family_names[:])
 		cur := 0
-		for name, i in family_names do if strings.equal_fold(name, n.font_family) do cur = i + 1
+		for name, i in engine.family_names do if strings.equal_fold(name, n.font_family) do cur = i + 1
 		shown := n.font_family if n.font_family != "" else "Default (Arial)"
 		if n.font_family != "" && cur == 0 do shown = fmt.tprintf("%s (missing)", n.font_family)
 		if dropdown(vg, {x, y^, w - 32, 28}, shown) do menu_open("font", {x, y^, w - 32, 28}, fam_items[:], cur, searchable = true, font_preview = true)
 		if lucide_button(vg, {x + w - 28, y^ + 2, 24, 24}, "file-plus", false, "Add a font file to the document: copied into fonts/ next to it and listed in its fonts, as pen.dev does (or drop a font file)") do import_font_dialog()
 		if pick, ok := menu_take("font"); ok {
 			push_undo()
-			if pick == 0 do node_unset(&app.doc, n, "fontFamily")
-			else do node_set_string(&app.doc, n, "fontFamily", family_names[pick - 1])
+			if pick == 0 do engine.node_unset(&app.doc, n, "fontFamily")
+			else do engine.node_set_string(&app.doc, n, "fontFamily", engine.family_names[pick - 1])
 		}
 		y^ += 36
-		field(vg, n.uid, "fontSize", "", {x, y^, half, 28}, num_text(n.font_size), icon = .Font_Size, numeric = true)
-		if pick, ok := dropdown_menu(vg, "weight", {x + half + 8, y^, half, 28}, WEIGHT_NAMES[:], clamp((n.weight + 50) / 100 - 1, 0, 8)); ok {
+		field(vg, n.uid, "fontSize", "", {x, y^, half, 28}, engine.num_text(n.font_size), icon = .Font_Size, numeric = true)
+		if pick, ok := dropdown_menu(vg, "weight", {x + half + 8, y^, half, 28}, engine.WEIGHT_NAMES[:], clamp((n.weight + 50) / 100 - 1, 0, 8)); ok {
 			push_undo()
-			if pick == 3 do node_unset(&app.doc, n, "fontWeight")
-			else do node_set_string(&app.doc, n, "fontWeight", fmt.tprintf("%d", (pick + 1) * 100))
+			if pick == 3 do engine.node_unset(&app.doc, n, "fontWeight")
+			else do engine.node_set_string(&app.doc, n, "fontWeight", fmt.tprintf("%d", (pick + 1) * 100))
 		}
 		y^ += 36
 		draw_typography_details(vg, n, x, w, y)
@@ -840,16 +834,16 @@ draw_node_properties :: proc(vg: ^nvg.Context, n: ^Node, x, right: f32, y: ^f32)
 	if button(vg, {x, y^, half, 28}, "Duplicate") do duplicate_selection()
 	if button(vg, {x + half + 8, y^, half, 28}, "Delete") {
 		push_undo()
-		doc_delete(&app.doc, n.uid)
+		engine.doc_delete(&app.doc, n.uid)
 		prune_selection()
 	}
 	y^ += 36
 }
 
 // Instance: which component, jump to it, detach, and the overrides as parameters.
-draw_instance_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
+draw_instance_section :: proc(vg: ^nvg.Context, n: ^engine.Node, x, w: f32, y: ^f32) {
 	half := (w - 8) / 2
-	comp := instance_component(&app.doc, n)
+	comp := engine.instance_component(&app.doc, n)
 	section(vg, x, y, "Component")
 	if comp == nil {
 		label(vg, x, y^ + 8, fmt.tprintf("\"%s\" was not found", n.ref), TEXT_DIM)
@@ -862,7 +856,7 @@ draw_instance_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 	draw_icon(vg, .Component, r.x + 14, r.y + 14, TEXT_DIM, 13)
 	nvg.Save(vg)
 	nvg.IntersectScissor(vg, r.x, r.y, r.w - 8, r.h)
-	label(vg, r.x + 28, r.y + 14, node_label(comp), TEXT_FG)
+	label(vg, r.x + 28, r.y + 14, engine.node_label(comp), TEXT_FG)
 	nvg.Restore(vg)
 	y^ += 36
 	if button(vg, {x, y^, half, 28}, "Go to component") do go_to_component(n)
@@ -872,12 +866,12 @@ draw_instance_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 	// parameters: texts and visibility of the component's parts
 	section(vg, x, y, "Parameters")
 	count := 0
-	walk :: proc(vg: ^nvg.Context, inst: ^Node, uid: int, depth: int, x, w: f32, y: ^f32, count: ^int) {
-		if depth > MAX_DEPTH do return
-		for cu in children_of(&app.doc, uid) {
-			c, _ := doc_find_uid(&app.doc, cu)
+	walk :: proc(vg: ^nvg.Context, inst: ^engine.Node, uid: int, depth: int, x, w: f32, y: ^f32, count: ^int) {
+		if depth > engine.MAX_DEPTH do return
+		for cu in engine.children_of(&app.doc, uid) {
+			c, _ := engine.doc_find_uid(&app.doc, cu)
 			if c == nil || c.ghost do continue
-			ov: Override
+			ov: engine.Override
 			for o in inst.overrides do if o.id == c.id do ov = o
 			name := c.name if c.name != "" else c.id
 			if c.kind == .Text {
@@ -891,8 +885,8 @@ draw_instance_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 				on := ov.enabled if ov.set_enabled else c.enabled
 				if checkbox(vg, {x, y^, w, 22}, name, on) {
 					push_undo()
-					if on do override_set(&app.doc, inst, c.id, "enabled", json.Boolean(false))
-					else do override_set(&app.doc, inst, c.id, "enabled", nil)
+					if on do engine.override_set(&app.doc, inst, c.id, "enabled", json.Boolean(false))
+					else do engine.override_set(&app.doc, inst, c.id, "enabled", nil)
 					mark_dirty()
 				}
 				y^ += 26
@@ -901,7 +895,7 @@ draw_instance_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 			if c.kind == .Frame || c.kind == .Group do walk(vg, inst, cu, depth + 1, x, w, y, count)
 			if c.kind == .Ref {
 				// parts of a nested instance can be overridden too (path "a/b" matches by its last id)
-				if nested := instance_component(&app.doc, c); nested != nil do walk(vg, inst, nested.uid, depth + 1, x, w, y, count)
+				if nested := engine.instance_component(&app.doc, c); nested != nil do walk(vg, inst, nested.uid, depth + 1, x, w, y, count)
 			}
 		}
 	}
@@ -915,7 +909,7 @@ draw_instance_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 }
 
 // Flex: alignment grid, direction, gap, padding, absolute/clip.
-draw_flex_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
+draw_flex_section :: proc(vg: ^nvg.Context, n: ^engine.Node, x, w: f32, y: ^f32) {
 	section(vg, x, y, "Layout")
 	grid := Rect{x, y^, 120, 96}
 	fill_rect(vg, grid, FIELD_BG, 8)
@@ -942,10 +936,10 @@ draw_flex_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 				push_undo()
 				justify := [?]string{"start", "center", "end"}
 				align := [?]string{"start", "center", "end"}
-				if main == 0 do node_unset(&app.doc, n, "justifyContent")
-				else do node_set_string(&app.doc, n, "justifyContent", justify[main])
-				if cross == 0 do node_unset(&app.doc, n, "alignItems")
-				else do node_set_string(&app.doc, n, "alignItems", align[cross])
+				if main == 0 do engine.node_unset(&app.doc, n, "justifyContent")
+				else do engine.node_set_string(&app.doc, n, "justifyContent", justify[main])
+				if cross == 0 do engine.node_unset(&app.doc, n, "alignItems")
+				else do engine.node_set_string(&app.doc, n, "alignItems", align[cross])
 			}
 		}
 	}
@@ -955,7 +949,7 @@ draw_flex_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 	seg := Rect{cx, y^, cw, 28}
 	fill_rect(vg, seg, FIELD_BG, 6)
 	Dir_Button :: struct {
-		dir:  Layout_Dir,
+		dir:  engine.Layout_Dir,
 		icon: Icon,
 	}
 	dirs := [?]Dir_Button{{.None, .X}, {.Vertical, .Arrow_Down}, {.Horizontal, .Arrow_Right}}
@@ -964,17 +958,17 @@ draw_flex_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 		r := Rect{seg.x + 2 + f32(i) * third, seg.y + 2, third, seg.h - 4}
 		if icon_button(vg, r, d.icon, n.layout == d.dir) && n.layout != d.dir {
 			push_undo()
-			node_set_string(&app.doc, n, "layout", KIND_LAYOUT_NAMES[d.dir])
+			engine.node_set_string(&app.doc, n, "layout", KIND_LAYOUT_NAMES[d.dir])
 		}
 	}
-	field(vg, n.uid, "gap", "", {cx, y^ + 34, cw, 28}, num_text(n.gap), icon = .Gap, numeric = true)
+	field(vg, n.uid, "gap", "", {cx, y^ + 34, cw, 28}, engine.num_text(n.gap), icon = .Gap, numeric = true)
 	justify := n.justify
 	if dropdown(vg, {cx, y^ + 68, cw, 28}, "Space between" if justify == .Space_Between else ("Space around" if justify == .Space_Around else "Packed")) {
 		push_undo()
 		switch justify {
-		case .Start, .Center, .End: node_set_string(&app.doc, n, "justifyContent", "space_between")
-		case .Space_Between: node_set_string(&app.doc, n, "justifyContent", "space_around")
-		case .Space_Around: node_unset(&app.doc, n, "justifyContent")
+		case .Start, .Center, .End: engine.node_set_string(&app.doc, n, "justifyContent", "space_between")
+		case .Space_Between: engine.node_set_string(&app.doc, n, "justifyContent", "space_around")
+		case .Space_Around: engine.node_unset(&app.doc, n, "justifyContent")
 		}
 	}
 	y^ += 104
@@ -985,10 +979,10 @@ draw_flex_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 		q := (w - 24) / 4
 		names := [?]string{"padding.t", "padding.r", "padding.b", "padding.l"}
 		labels := [?]string{"T", "R", "B", "L"}
-		for key, i in names do field(vg, n.uid, key, labels[i], {x + f32(i) * (q + 8), y^, q, 28}, num_text(n.padding[i]), numeric = true)
+		for key, i in names do field(vg, n.uid, key, labels[i], {x + f32(i) * (q + 8), y^, q, 28}, engine.num_text(n.padding[i]), numeric = true)
 	} else {
-		field(vg, n.uid, "padding.v", "", {x, y^, half - 16, 28}, num_text(n.padding[0]), icon = .Pad_V, numeric = true)
-		field(vg, n.uid, "padding.h", "", {x + half + 8 - 16, y^, half - 16, 28}, num_text(n.padding[1]), icon = .Pad_H, numeric = true)
+		field(vg, n.uid, "padding.v", "", {x, y^, half - 16, 28}, engine.num_text(n.padding[0]), icon = .Pad_V, numeric = true)
+		field(vg, n.uid, "padding.h", "", {x + half + 8 - 16, y^, half - 16, 28}, engine.num_text(n.padding[1]), icon = .Pad_H, numeric = true)
 	}
 	if icon_button(vg, {x + w - 24, y^ + 2, 24, 24}, .Expand, ui.pad_all) do ui.pad_all = !ui.pad_all
 	y^ += 36
@@ -1000,17 +994,17 @@ draw_flex_section :: proc(vg: ^nvg.Context, n: ^Node, x, w: f32, y: ^f32) {
 draw_selection_colors :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 	Entry :: struct {
 		label: string,
-		color: Color,
+		color: engine.Color,
 		count: int,
 	}
 	entries := make([dynamic]Entry, context.temp_allocator)
-	add :: proc(entries: ^[dynamic]Entry, label: string, c: Color) {
+	add :: proc(entries: ^[dynamic]Entry, label: string, c: engine.Color) {
 		for &e in entries do if e.label == label {e.count += 1; return}
 		append(entries, Entry{label, c, 1})
 	}
 	visit :: proc(entries: ^[dynamic]Entry, uid: int, depth: int) {
-		if depth > MAX_DEPTH do return
-		n, _ := doc_find_uid(&app.doc, uid)
+		if depth > engine.MAX_DEPTH do return
+		n, _ := engine.doc_find_uid(&app.doc, uid)
 		if n == nil do return
 		if n.has_fill do add(entries, color_label(n, "fill", n.fill), n.fill)
 		if n.has_stroke do add(entries, color_label(n, "stroke", n.stroke), n.stroke)
@@ -1022,7 +1016,7 @@ draw_selection_colors :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 	section(vg, x, y, "Selection colors")
 	for e in entries {
 		r := Rect{x, y^, w, 28}
-		fill_rect(vg, {r.x + 8, r.y + 7, 14, 14}, to_nvg(e.color), 3)
+		fill_rect(vg, {r.x + 8, r.y + 7, 14, 14}, engine.to_nvg(e.color), 3)
 		stroke_rect(vg, {r.x + 8, r.y + 7, 14, 14}, {1, 1, 1, 0.12}, 3)
 		chip(vg, r.x + 28, r.y + 5, e.label, strings.has_prefix(e.label, "$"))
 		label(vg, r.x + r.w - 10, r.y + 14, fmt.tprintf("%d", e.count), TEXT_DIM, 11, false, .RIGHT)
@@ -1033,24 +1027,24 @@ draw_selection_colors :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 }
 
 // "$name" for variable references, "RRGGBB" otherwise.
-color_label :: proc(n: ^Node, key: string, c: Color) -> string {
-	if s := prop_string(n, key); strings.has_prefix(s, "$") do return s
+color_label :: proc(n: ^engine.Node, key: string, c: engine.Color) -> string {
+	if s := engine.prop_string(n, key); strings.has_prefix(s, "$") do return s
 	if key == "stroke" {
-		if obj, ok := old_stroke_object(n); ok {
+		if obj, ok := engine.old_stroke_object(n); ok {
 			if s, is_str := obj["fill"].(json.String); is_str && strings.has_prefix(string(s), "$") do return string(s)
 		}
 	}
-	return color_hex(c)[1:]
+	return engine.color_hex(c)[1:]
 }
 
 // Swatch + value for a color property; variables show as a chip, hex as a field.
 // Swatch + value + chevron, like a dropdown: the swatch and the chevron open the
 // color picker (with the document's colors); the hex text can be typed into.
-color_row :: proc(vg: ^nvg.Context, n: ^Node, key: string, x, w, y: f32, c: Color) {
+color_row :: proc(vg: ^nvg.Context, n: ^engine.Node, key: string, x, w, y: f32, c: engine.Color) {
 	r := Rect{x, y, w, 28}
 	fill_rect(vg, r, FIELD_BG, 6)
 	sw := Rect{r.x + 6, r.y + 6, 16, 16}
-	fill_rect(vg, sw, to_nvg(c), 4)
+	fill_rect(vg, sw, engine.to_nvg(c), 4)
 	stroke_rect(vg, sw, {1, 1, 1, 0.15}, 4)
 	chev := Rect{r.x + r.w - 26, r.y, 26, r.h}
 	picker_key := fmt.tprintf("picker:%s:%d", key, n.uid)
@@ -1062,31 +1056,31 @@ color_row :: proc(vg: ^nvg.Context, n: ^Node, key: string, x, w, y: f32, c: Colo
 		bound := color_label(n, key, c)
 		if key == "shadow.color" {
 			bound = ""
-			if obj, _, _, ok := shadow_object(n); ok do bound = string(obj["color"].(json.String) or_else "")
+			if obj, _, _, ok := engine.shadow_object(n); ok do bound = string(obj["color"].(json.String) or_else "")
 		}
 		picker_open(picker_key, {r.x, r.y, r.w, r.h}, c, bound if strings.has_prefix(bound, "$") else "")
 	}
 	if picked, ref, changed := picker_take(picker_key); changed {
-		value := ref if ref != "" else color_hex(picked)
+		value := ref if ref != "" else engine.color_hex(picked)
 		switch key {
-		case "fill": node_set_string(&app.doc, n, "fill", value)
+		case "fill": engine.node_set_string(&app.doc, n, "fill", value)
 		case "stroke":
-			if obj, old := old_stroke_object(n); old {
+			if obj, old := engine.old_stroke_object(n); old {
 				obj["fill"] = json.String(value)
-				node_set(&app.doc, n, "stroke", obj)
+				engine.node_set(&app.doc, n, "stroke", obj)
 			} else {
-				node_set_string(&app.doc, n, "stroke", value)
+				engine.node_set_string(&app.doc, n, "stroke", value)
 			}
-		case "shadow.color": shadow_set(&app.doc, n, "color", 0, value)
+		case "shadow.color": engine.shadow_set(&app.doc, n, "color", 0, value)
 		case: inspector_color_set(n, key, value)
 		}
 		mark_dirty()
 	}
 	shown := color_label(n, key, c)
-	if l, ok := inspector_color_label(n, key); ok do shown = l if l != "" else color_hex(c)[1:]
+	if l, ok := inspector_color_label(n, key); ok do shown = l if l != "" else engine.color_hex(c)[1:]
 	if key == "shadow.color" {
-		shown = color_hex(c)[1:]
-		if obj, _, _, ok := shadow_object(n); ok {
+		shown = engine.color_hex(c)[1:]
+		if obj, _, _, ok := engine.shadow_object(n); ok {
 			if v, is_str := obj["color"].(json.String); is_str && strings.has_prefix(string(v), "$") do shown = string(v)
 		}
 	}
@@ -1115,22 +1109,22 @@ color_variable_names :: proc() -> []string {
 
 // ---------------------------------------------------------------- widgets
 
-KIND_LAYOUT_NAMES := [Layout_Dir]string {
+KIND_LAYOUT_NAMES := [engine.Layout_Dir]string {
 	.None       = "none",
 	.Horizontal = "horizontal",
 	.Vertical   = "vertical",
 }
 
-size_text :: proc(spec: Size_Spec, computed: f32) -> string {
+size_text :: proc(spec: engine.Size_Spec, computed: f32) -> string {
 	switch spec.mode {
 	case .Fixed:
 	case .Fit: return "fit_content"
 	case .Fill: return "fill_container"
 	}
-	return num_text(computed)
+	return engine.num_text(computed)
 }
 
-from_nvg :: proc(c: nvg.Color) -> Color {
+from_nvg :: proc(c: nvg.Color) -> engine.Color {
 	return {u8(c.r * 255 + 0.5), u8(c.g * 255 + 0.5), u8(c.b * 255 + 0.5), u8(c.a * 255 + 0.5)}
 }
 
@@ -1170,7 +1164,7 @@ field_apply :: proc() {
 		}
 		if strings.has_prefix(ui.focus, "var.name:") {
 			push_undo()
-			doc_rename_variable(&app.doc, ui.focus[len("var.name:"):], strings.trim_space(text))
+			engine.doc_rename_variable(&app.doc, ui.focus[len("var.name:"):], strings.trim_space(text))
 			mark_dirty()
 			return
 		}
@@ -1182,14 +1176,14 @@ field_apply :: proc() {
 			value := strings.trim_space(text)
 			if kind == "color" && !strings.has_prefix(value, "#") do value = fmt.tprintf("#%s", value)
 			push_undo()
-			doc_set_variable_themed(&app.doc, name, kind, value)
+			engine.doc_set_variable_themed(&app.doc, name, kind, value)
 			mark_dirty()
 			return
 		}
 		if strings.has_prefix(ui.focus, "theme.value:") {
 			axis := ui.focus[len("theme.value:"):]
 			push_undo()
-			theme_rename_value(&app.doc, axis, app.theme[axis], strings.trim_space(text))
+			engine.theme_rename_value(&app.doc, axis, engine.theme[axis], strings.trim_space(text))
 			mark_dirty()
 			return
 		}
@@ -1199,19 +1193,19 @@ field_apply :: proc() {
 		}
 		if ui.focus == "canvas" {
 			hex := text if strings.has_prefix(text, "#") else fmt.tprintf("#%s", text)
-			if c, ok := parse_color(hex); ok do app.canvas_bg = to_nvg(c)
+			if c, ok := engine.parse_color(hex); ok do app.canvas_bg = engine.to_nvg(c)
 			else do set_status("Not a color: %s", text)
 		}
 		return
 	}
-	n, _ := doc_find_uid(&app.doc, ui.focus_uid)
+	n, _ := engine.doc_find_uid(&app.doc, ui.focus_uid)
 	if n == nil do return
 	push_undo()
 	if strings.has_prefix(ui.focus, "ov.content:") {
 		id := ui.focus[len("ov.content:"):]
-		orig, _ := doc_find(&app.doc, id)
-		if orig != nil && text == orig.content do override_set(&app.doc, n, id, "content", nil)
-		else do override_set(&app.doc, n, id, "content", json.String(text))
+		orig, _ := engine.doc_find(&app.doc, id)
+		if orig != nil && text == orig.content do engine.override_set(&app.doc, n, id, "content", nil)
+		else do engine.override_set(&app.doc, n, id, "content", json.String(text))
 		return
 	}
 	if strings.has_prefix(ui.focus, "padding.") {
@@ -1229,7 +1223,7 @@ field_apply :: proc() {
 		case "padding.b": pad[2] = f
 		case "padding.l": pad[3] = f
 		}
-		node_set_padding(&app.doc, n, pad)
+		engine.node_set_padding(&app.doc, n, pad)
 		return
 	}
 	if strings.has_prefix(ui.focus, "shadow.") {
@@ -1237,10 +1231,10 @@ field_apply :: proc() {
 		t := strings.trim_space(text)
 		if key == "color" {
 			hex := t if strings.has_prefix(t, "#") else fmt.tprintf("#%s", t)
-			if _, ok := parse_color(hex); ok do shadow_set(&app.doc, n, "color", 0, hex)
+			if _, ok := engine.parse_color(hex); ok do engine.shadow_set(&app.doc, n, "color", 0, hex)
 			else do set_status("Not a color: %s", t)
 		} else if f, ok := strconv.parse_f32(t); ok {
-			shadow_set(&app.doc, n, key, f)
+			engine.shadow_set(&app.doc, n, key, f)
 		} else {
 			set_status("invalid number")
 		}
@@ -1251,7 +1245,7 @@ field_apply :: proc() {
 	if (ui.focus == "fill" || ui.focus == "stroke") && len(text) >= 6 && !strings.has_prefix(text, "#") && !strings.has_prefix(text, "$") {
 		text = fmt.tprintf("#%s", text)
 	}
-	if err := node_set_text(&app.doc, n, ui.focus, text); err != "" do set_status("%s", err)
+	if err := engine.node_set_text(&app.doc, n, ui.focus, text); err != "" do set_status("%s", err)
 }
 
 // ---------------------------------------------------------------- menus
@@ -1262,12 +1256,12 @@ export_pending: bool
 
 export_scale: f32 = 2
 export_path: string
-export_format: Export_Format
+export_format: engine.Export_Format
 copy_png_pending: bool
 
 // Exports the selection (or everything) on the next frame: at `scale`, as `format`, into
 // `path` (default ~/Downloads/<file> - <layer>.<ext>).
-export_request :: proc(scale: f32 = 2, path := "", format := Export_Format.PNG) {
+export_request :: proc(scale: f32 = 2, path := "", format := engine.Export_Format.PNG) {
 	export_pending = true
 	export_scale = scale
 	export_format = format
@@ -1281,13 +1275,13 @@ copy_png_render :: proc() {
 	copy_png_pending = false
 	r, ok := bounds_of(app.sel[:])
 	if !ok do return
-	target: ^Node
-	if len(app.sel) == 1 do target, _ = doc_find_uid(&app.doc, app.sel[0])
+	target: ^engine.Node
+	if len(app.sel) == 1 do target, _ = engine.doc_find_uid(&app.doc, app.sel[0])
 	pixels, w, h, rok := render_region(r, 2, target, {1, 1, 1, 1})
 	if !rok do return
-	png, pok := png_encode(pixels, w, h)
+	png, pok := engine.png_encode(pixels, w, h)
 	if !pok do return
-	clipboard_set(png, "public.png")
+	engine.clipboard_set(png, "public.png")
 	set_status("Copied as PNG (%d × %d)", w, h)
 }
 
@@ -1301,8 +1295,8 @@ export_render :: proc() {
 		set_status("Nothing to export")
 		return
 	}
-	target: ^Node
-	if len(uids) == 1 do target, _ = doc_find_uid(&app.doc, uids[0])
+	target: ^engine.Node
+	if len(uids) == 1 do target, _ = engine.doc_find_uid(&app.doc, uids[0])
 	pad: f32 = 0 if target != nil else 20
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
 	pixels, w, h, rok := render_region(r, export_scale, target, {1, 1, 1, 1})
@@ -1310,14 +1304,14 @@ export_render :: proc() {
 		set_status("Export failed")
 		return
 	}
-	png, pok := encode_image(pixels, w, h, export_format, export_scale)
+	png, pok := engine.encode_image(pixels, w, h, export_format, export_scale)
 	if !pok {
 		set_status("Export failed")
 		return
 	}
-	name := file_title(app.file_path)
-	if target != nil do name = fmt.tprintf("%s - %s", name, node_label(target))
-	path := fmt.tprintf("%s/%s.%s", downloads_dir(), name, EXPORT_EXTENSIONS[export_format])
+	name := engine.file_title(app.file_path)
+	if target != nil do name = fmt.tprintf("%s - %s", name, engine.node_label(target))
+	path := fmt.tprintf("%s/%s.%s", downloads_dir(), name, engine.EXPORT_EXTENSIONS[export_format])
 	if export_path != "" do path = export_path
 	if err := os.write_entire_file(path, png); err != nil {
 		set_status("Export failed: %v", err)
@@ -1342,7 +1336,7 @@ layers_drag :: proc(vg: ^nvg.Context, rows: []$T) {
 			f := (app.mouse.y - r.r.y) / r.r.h
 			place = -1 if f < 0.3 else (1 if f > 0.7 else 0)
 			if place == 0 && !r.container do place = -1 if f < 0.5 else 1
-			if r.uid == d.uid || is_descendant(&app.doc, r.uid, d.uid) {
+			if r.uid == d.uid || engine.is_descendant(&app.doc, r.uid, d.uid) {
 				target = 0
 				break
 			}
@@ -1366,19 +1360,19 @@ layers_drag :: proc(vg: ^nvg.Context, rows: []$T) {
 
 // Moves a layer next to (place -1 above, 1 below in the tree) or into (0) a target.
 layer_move :: proc(uid, target, place: int) {
-	n, _ := doc_find_uid(&app.doc, uid)
-	t, _ := doc_find_uid(&app.doc, target)
+	n, _ := engine.doc_find_uid(&app.doc, uid)
+	t, _ := engine.doc_find_uid(&app.doc, target)
 	if n == nil || t == nil || n.ghost || t.ghost do return
 	push_undo()
 	parent := t.uid if place == 0 else t.parent
-	if parent != n.parent do doc_reparent(&app.doc, uid, parent)
+	if parent != n.parent do engine.doc_reparent(&app.doc, uid, parent)
 	if place == 0 do return // reparenting puts it on top, the first row inside
 	// the tree lists siblings top-most first: above a row = after it in z-order
-	doc_bump(&app.doc)
-	moved := make([dynamic]Node, context.temp_allocator)
+	engine.doc_bump(&app.doc)
+	moved := make([dynamic]engine.Node, context.temp_allocator)
 	for i := 0; i < len(app.doc.nodes); {
 		m := app.doc.nodes[i]
-		if m.uid == uid || is_descendant(&app.doc, m.uid, uid) {
+		if m.uid == uid || engine.is_descendant(&app.doc, m.uid, uid) {
 			append(&moved, m)
 			ordered_remove(&app.doc.nodes, i)
 		} else {
@@ -1388,6 +1382,6 @@ layer_move :: proc(uid, target, place: int) {
 	at := len(app.doc.nodes)
 	for m, i in app.doc.nodes do if m.uid == target do at = i + (1 if place < 0 else 0)
 	inject_at(&app.doc.nodes, at, ..moved[:])
-	doc_index(&app.doc)
+	engine.doc_index(&app.doc)
 	mark_dirty()
 }

@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "base:runtime"
 import "core:math"

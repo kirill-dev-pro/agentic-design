@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
@@ -31,7 +33,7 @@ draw_components_panel :: proc(vg: ^nvg.Context, y: ^f32) {
 	count := 0
 	for &n in app.doc.nodes {
 		if !n.reusable do continue
-		name := node_label(&n)
+		name := engine.node_label(&n)
 		if needle != "" && !strings.contains(strings.to_lower(name, context.temp_allocator), needle) do continue
 		count += 1
 		row := Rect{x - 6, y^, w + 12, 52}
@@ -47,21 +49,21 @@ draw_components_panel :: proc(vg: ^nvg.Context, y: ^f32) {
 			nvg.Translate(vg, pv.x + (pv.w - n.w * s) / 2, pv.y + (pv.h - n.h * s) / 2)
 			nvg.Scale(vg, s, s)
 			nvg.Translate(vg, -n.x, -n.y)
-			saved := cull_rect
-			cull_rect = {}
-			draw_node_tree(vg, &n, 1, 0)
-			cull_rect = saved
+			saved := engine.cull_rect
+			engine.cull_rect = {}
+			engine.draw_node_tree(vg, &n, 1, 0)
+			engine.cull_rect = saved
 			nvg.Restore(vg)
 		}
 		label(vg, pv.x + pv.w + 10, y^ + 19, name, TEXT_FG, 12)
-		page := fmt.tprintf("Library · %s", library_of(&n)) if n.imported else doc_pages(&app.doc)[page_of_component(&n)].name
+		page := fmt.tprintf("Library · %s", engine.library_of(&n)) if n.imported else engine.doc_pages(&app.doc)[page_of_component(&n)].name
 		label(vg, pv.x + pv.w + 10, y^ + 36, page, TEXT_DIM, 11)
 		if hover && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
 			double := ui.tree_click_uid == n.uid && time.duration_seconds(time.since(ui.tree_click)) < 0.35
 			ui.tree_click, ui.tree_click_uid = time.now(), n.uid
 			if double {
 				comp_drag.uid = 0
-				if n.imported do set_status("%s comes from the library \"%s\"; edit it in that file", name, library_of(&n))
+				if n.imported do set_status("%s comes from the library \"%s\"; edit it in that file", name, engine.library_of(&n))
 				else do focus_node(n.uid)
 			} else {
 				comp_drag = {uid = n.uid, start = app.mouse}
@@ -88,7 +90,7 @@ draw_libraries :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 	label(vg, x, y^ + 12, "Libraries", TEXT_FG, 13)
 	if lucide_button(vg, {x + w - 26, y^, 24, 24}, "plus", false, "Import a library (.lib.pen or any .pen file)") do import_library_dialog()
 	y^ += 32
-	imports := doc_imports(&app.doc)
+	imports := engine.doc_imports(&app.doc)
 	if len(imports) == 0 {
 		label(vg, x, y^ + 8, "No imported libraries", TEXT_DIM, 12)
 		y^ += 24
@@ -106,19 +108,19 @@ draw_libraries :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 }
 
 // Page of a component (its top-level ancestor's page).
-page_of_component :: proc(n: ^Node) -> int {
+page_of_component :: proc(n: ^engine.Node) -> int {
 	top := n
 	for top.parent != 0 {
-		p, _ := doc_find_uid(&app.doc, top.parent)
+		p, _ := engine.doc_find_uid(&app.doc, top.parent)
 		if p == nil do break
 		top = p
 	}
-	return page_of_top(&app.doc, top.id)
+	return engine.page_of_top(&app.doc, top.id)
 }
 
 // Selects a node, switching to its page and zooming to it.
 focus_node :: proc(uid: int) {
-	n, _ := doc_find_uid(&app.doc, uid)
+	n, _ := engine.doc_find_uid(&app.doc, uid)
 	if n == nil do return
 	if pg := page_of_component(n); pg != app.page do page_switch(pg)
 	clear(&app.sel)
@@ -135,7 +137,7 @@ components_drag_update :: proc() {
 	if mouse_down(glfw.MOUSE_BUTTON_LEFT) do return
 	uid, moved := comp_drag.uid, comp_drag.moved
 	comp_drag = {}
-	comp, _ := doc_find_uid(&app.doc, uid)
+	comp, _ := engine.doc_find_uid(&app.doc, uid)
 	if comp == nil do return
 	if moved && !in_rect(app.canvas, app.mouse) do return
 	at := to_page(app.mouse) if moved else to_page({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2})
@@ -144,15 +146,15 @@ components_drag_update :: proc() {
 
 // Adds an instance of `comp` at page position `at` (top-left), inside the frame under
 // `drop` when there is one.
-insert_instance :: proc(comp: ^Node, at: [2]f32, drop: [2]f32) {
+insert_instance :: proc(comp: ^engine.Node, at: [2]f32, drop: [2]f32) {
 	push_undo()
 	parent := 0
 	if drop != {} {
 		if hit := hit_test(drop); hit != 0 {
 			for p := hit; p != 0; {
-				pn, _ := doc_find_uid(&app.doc, p)
+				pn, _ := engine.doc_find_uid(&app.doc, p)
 				if pn == nil do break
-				if pn.kind == .Frame && !pn.reusable && pn.uid != comp.uid && !is_descendant(&app.doc, pn.uid, comp.uid) {
+				if pn.kind == .Frame && !pn.reusable && pn.uid != comp.uid && !engine.is_descendant(&app.doc, pn.uid, comp.uid) {
 					parent = pn.uid
 					break
 				}
@@ -160,28 +162,28 @@ insert_instance :: proc(comp: ^Node, at: [2]f32, drop: [2]f32) {
 			}
 		}
 	}
-	inst: Node
+	inst: engine.Node
 	inst.parent = parent
-	node_set_raw(&inst, "type", `"ref"`)
+	engine.node_set_raw(&inst, "type", `"ref"`)
 	b := strings.builder_make(context.temp_allocator)
-	json_write_string(&b, comp.id)
-	node_set_raw(&inst, "ref", strings.to_string(b))
-	ox, oy := parent_origin(&app.doc, parent)
-	node_set_raw(&inst, "x", num_text(at.x - ox))
-	node_set_raw(&inst, "y", num_text(at.y - oy))
-	added := doc_add(&app.doc, inst)
+	engine.json_write_string(&b, comp.id)
+	engine.node_set_raw(&inst, "ref", strings.to_string(b))
+	ox, oy := engine.parent_origin(&app.doc, parent)
+	engine.node_set_raw(&inst, "x", engine.num_text(at.x - ox))
+	engine.node_set_raw(&inst, "y", engine.num_text(at.y - oy))
+	added := engine.doc_add(&app.doc, inst)
 	clear(&app.sel)
 	append(&app.sel, added.uid)
 	mark_dirty()
-	set_status("Added %s", node_label(comp))
+	set_status("Added %s", engine.node_label(comp))
 }
 
 draw_component_drag_ghost :: proc(vg: ^nvg.Context) {
 	if comp_drag.uid == 0 || !comp_drag.moved do return
-	comp, _ := doc_find_uid(&app.doc, comp_drag.uid)
+	comp, _ := engine.doc_find_uid(&app.doc, comp_drag.uid)
 	if comp == nil do return
 	r := Rect{app.mouse.x + 12, app.mouse.y + 12, 0, 26}
-	name := node_label(comp)
+	name := engine.node_label(comp)
 	r.w = text_width(vg, name, 12) + 20
 	fill_rect(vg, r, {0.55, 0.42, 1.0, 0.95}, 6)
 	label(vg, r.x + 10, r.y + 13, fmt.tprintf("%s", name), {1, 1, 1, 1}, 12)

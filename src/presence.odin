@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:hash"
@@ -89,7 +91,7 @@ PRESENCE_BLUE :: nvg.Color{96.0 / 255, 125.0 / 255, 1, 1} // #607dff
 
 // The cursor glyph (24 × 24, tip at 4,5) and its label, as pen.dev draws them.
 CURSOR_PATH :: "M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"
-cursor_cmds: [dynamic]Path_Cmd
+cursor_cmds: [dynamic]engine.Path_Cmd
 
 Agent_Info :: struct {
 	id, client, title: string,
@@ -206,9 +208,9 @@ Node_Sig :: struct {
 
 // The document's layers (not instance copies or library layers) as they stand, to tell
 // afterwards what a request created, changed or deleted.
-doc_signature :: proc(doc: ^Document) -> map[int]Node_Sig {
+doc_signature :: proc(doc: ^engine.Document) -> map[int]Node_Sig {
 	sig := make(map[int]Node_Sig, len(doc.nodes), context.temp_allocator)
-	for &n in doc.nodes do if !n.ghost && !n.imported do sig[n.uid] = {doc_signature_hash(&n), n.parent, node_page_box(&n)}
+	for &n in doc.nodes do if !n.ghost && !n.imported do sig[n.uid] = {doc_signature_hash(&n), n.parent, engine.node_page_box(&n)}
 	return sig
 }
 
@@ -251,7 +253,7 @@ presence_after_request :: proc(obj: json.Object, before: map[int]Node_Sig, ok: b
 				inside := false
 				for p := n.parent; p != 0; {
 					if p in created {inside = true; break}
-					pn, _ := doc_find_uid(doc, p)
+					pn, _ := engine.doc_find_uid(doc, p)
 					if pn == nil do break
 					p = pn.parent
 				}
@@ -262,15 +264,15 @@ presence_after_request :: proc(obj: json.Object, before: map[int]Node_Sig, ok: b
 		}
 		// deleted layers (not those whose parent went with them)
 		for uid, s in before {
-			if n, _ := doc_find_uid(doc, uid); n != nil do continue
+			if n, _ := engine.doc_find_uid(doc, uid); n != nil do continue
 			if s.parent in before {
-				if pn, _ := doc_find_uid(doc, s.parent); pn == nil do continue // went with its parent
+				if pn, _ := engine.doc_find_uid(doc, s.parent); pn == nil do continue // went with its parent
 			}
 			append(&touched, Visit{box = s.box, uid = -1})
 			append(&scan, false)
 		}
 		if method == "reorder" {
-			if n, _ := doc_find(doc, string(params["id"].(json.String) or_else "")); n != nil {
+			if n, _ := engine.doc_find(doc, string(params["id"].(json.String) or_else "")); n != nil {
 				append(&touched, Visit{uid = n.uid})
 				append(&scan, false)
 			}
@@ -296,7 +298,7 @@ presence_after_request :: proc(obj: json.Object, before: map[int]Node_Sig, ok: b
 	presence_schedule(c, touched[:], scan[:], now, flash = !(method == "select"))
 }
 
-doc_signature_hash :: proc(n: ^Node) -> u64 {
+doc_signature_hash :: proc(n: ^engine.Node) -> u64 {
 	h := hash.fnv64a(transmute([]u8)n.id)
 	parent := n.parent
 	h = hash.fnv64a(mem.ptr_to_bytes(&parent), h)
@@ -308,10 +310,10 @@ doc_signature_hash :: proc(n: ^Node) -> u64 {
 }
 
 // On a page that is shown.
-node_shown :: proc(n: ^Node) -> bool {
+node_shown :: proc(n: ^engine.Node) -> bool {
 	top := n
 	for top.parent != 0 {
-		p, _ := doc_find_uid(&app.doc, top.parent)
+		p, _ := engine.doc_find_uid(&app.doc, top.parent)
 		if p == nil do break
 		top = p
 	}
@@ -464,9 +466,9 @@ presence_tick :: proc(now: f64) {
 			ordered_remove(&c.visits, 0)
 			box := v.box
 			if v.uid != 0 {
-				n, _ := doc_find_uid(&app.doc, v.uid)
+				n, _ := engine.doc_find_uid(&app.doc, v.uid)
 				if n == nil do continue
-				box = node_page_box(n)
+				box = engine.node_page_box(n)
 			}
 			cursor_activate(c, pick_target(box), now)
 		}
@@ -509,9 +511,9 @@ draw_presence_effects :: proc(vg: ^nvg.Context) {
 		if t < 0 do continue
 		box := f.box
 		if f.uid != 0 {
-			n, _ := doc_find_uid(&app.doc, f.uid)
+			n, _ := engine.doc_find_uid(&app.doc, f.uid)
 			if n == nil do continue
-			box = node_page_box(n)
+			box = engine.node_page_box(n)
 		}
 		if box[2] * app.zoom <= 1 && box[3] * app.zoom <= 1 do continue
 		hold := f32(FLASH_HOLD_LONG if f.long else FLASH_HOLD)
@@ -565,7 +567,7 @@ draw_presence_effects :: proc(vg: ^nvg.Context) {
 draw_placeholders :: proc(vg: ^nvg.Context, now: f64, moving: bool) {
 	for &n in app.doc.nodes {
 		if n.kind != .Frame || n.ghost || !n.enabled do continue
-		i := prop_index(&n, "placeholder")
+		i := engine.prop_index(&n, "placeholder")
 		if i < 0 || n.props[i].raw != "true" || !node_shown(&n) do continue
 		a := to_screen({n.x, n.y})
 		w, h := n.w * app.zoom, n.h * app.zoom
@@ -598,7 +600,7 @@ draw_placeholders :: proc(vg: ^nvg.Context, now: f64, moving: bool) {
 // at its edge, pointing the way.
 draw_cursors :: proc(vg: ^nvg.Context) {
 	if !settings.agent_cursors do return
-	if len(cursor_cmds) == 0 do cursor_cmds, _, _ = parse_svg_path(CURSOR_PATH)
+	if len(cursor_cmds) == 0 do cursor_cmds, _, _ = engine.parse_svg_path(CURSOR_PATH)
 	now := glfw.GetTime()
 	cv := app.canvas
 	for &c in cursors {
@@ -622,7 +624,7 @@ draw_cursors :: proc(vg: ^nvg.Context) {
 		for pass in 0 ..< 2 {
 			nvg.BeginPath(vg)
 			off := [2]f32{0, 1} if pass == 0 else {0, 0}
-			for cmd in cursor_cmds do path_cmd(vg, cmd, {4 - (p.x + off.x), 5 - (p.y + off.y)}, 1, 1)
+			for cmd in cursor_cmds do engine.path_cmd(vg, cmd, {4 - (p.x + off.x), 5 - (p.y + off.y)}, 1, 1)
 			if pass == 0 {
 				nvg.StrokeColor(vg, {0, 0, 0, 0.35})
 				nvg.StrokeWidth(vg, 3)

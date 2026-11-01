@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:os"
@@ -45,7 +47,7 @@ onboarding_maybe_start :: proc() {
 
 // Inter when it is installed (the onboarding's type), else the interface font.
 ob_face :: proc(weight: int) -> string {
-	if family_find("Inter") != nil do return font_face("Inter", weight, false)
+	if engine.family_find("Inter") != nil do return engine.font_face("Inter", weight, false)
 	return "ui-bold" if weight >= 600 && ui_bold_loaded else "ui"
 }
 
@@ -72,15 +74,15 @@ ob_para :: proc(vg: ^nvg.Context, x, y, w: f32, text: string, size: f32, color: 
 	nvg.TextLineHeight(vg, 1)
 }
 
-lucide_cache: map[string][dynamic]Path_Cmd
+lucide_cache: map[string][dynamic]engine.Path_Cmd
 
 // A lucide icon centred at (cx, cy).
 draw_lucide :: proc(vg: ^nvg.Context, name: string, cx, cy, size: f32, color: nvg.Color, stroke: f32 = 2) {
 	cmds, ok := lucide_cache[name]
 	if !ok {
-		d, found := icon_path("lucide", name)
+		d, found := engine.icon_path("lucide", name)
 		if !found do return
-		parsed, _, pok := parse_svg_path(d)
+		parsed, _, pok := engine.parse_svg_path(d)
 		if !pok do return
 		lucide_cache[strings.clone(name)] = parsed
 		cmds = parsed
@@ -90,7 +92,7 @@ draw_lucide :: proc(vg: ^nvg.Context, name: string, cx, cy, size: f32, color: nv
 	nvg.Translate(vg, cx - size / 2, cy - size / 2)
 	nvg.Scale(vg, s, s)
 	nvg.BeginPath(vg)
-	for c in cmds do path_cmd(vg, c, {0, 0}, 1, 1)
+	for c in cmds do engine.path_cmd(vg, c, {0, 0}, 1, 1)
 	nvg.LineCap(vg, .ROUND)
 	nvg.LineJoin(vg, .ROUND)
 	nvg.StrokeColor(vg, color)
@@ -427,7 +429,7 @@ ob_step_start :: proc(vg: ^nvg.Context, body: Rect) {
 		row := Rect{body.x, ry + f32(i) * 36, body.w, 32}
 		if hovered(row) do fill_rect(vg, row, HOVER_BG, 8)
 		draw_lucide(vg, "file", row.x + 18, row.y + 16, 15, TEXT_DIM, 1.6)
-		ob_text(vg, row.x + 38, row.y + 16, file_title(r.path), 14, TEXT_FG, 500)
+		ob_text(vg, row.x + 38, row.y + 16, engine.file_title(r.path), 14, TEXT_FG, 500)
 		ob_text(vg, row.x + row.w - 12, row.y + 16, r.path, 12, TEXT_DIM, 400, .RIGHT)
 		if clicked(row) {
 			onboarding_finish()

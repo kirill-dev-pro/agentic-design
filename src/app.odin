@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:fmt"
 import "core:math"
 import "core:os"
@@ -70,7 +72,7 @@ Rect :: struct {
 
 App :: struct {
 	vg:            ^nvg.Context,
-	doc:           Document,
+	doc:           engine.Document,
 	file_path:     string,
 	dirty:         bool,
 	last_change:   time.Time,
@@ -81,8 +83,8 @@ App :: struct {
 	hover:         int,
 	drag:          Drag,
 	editing:       int,
-	undo_stack:    [dynamic]Snapshot,
-	redo_stack:    [dynamic]Snapshot,
+	undo_stack:    [dynamic]engine.Snapshot,
+	redo_stack:    [dynamic]engine.Snapshot,
 	screen:        [2]f32,
 	dpr:           f32,
 	mouse:         [2]f32,
@@ -99,7 +101,6 @@ App :: struct {
 	move_start:    [dynamic][2]f32,
 	perf:          [8]f64, // milliseconds of the last frame's phases (debug)
 	needs_layout:  bool, // the tree changed since the last layout pass
-	theme:         map[string]string, // chosen value per theme axis
 	page:          int, // shown page of the active document
 	page_hidden:   map[int]bool, // top-level uids on other pages (rebuilt per frame)
 	tabs:          [dynamic]Tab,
@@ -111,7 +112,7 @@ app: App
 
 app_main :: proc(path: string) {
 	context.allocator = big_allocator() // memory.odin: big blocks go back to the system when freed
-	lod_off = os.get_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
+	engine.lod_off = os.get_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
 	use_big_allocator_for_temp()
 	posix_ignore_sigpipe()
 
@@ -131,13 +132,19 @@ app_main :: proc(path: string) {
 	gl.load_up_to(3, 2, glfw.gl_set_proc_address)
 
 	app.vg = nvgl.Create({.ANTI_ALIAS, .STENCIL_STROKES})
+	// the engine draws with the window's NanoVG context, on the open document (tabs are
+	// swapped into app.doc), and skips the pages the window does not show
+	engine.renderer = app.vg
+	engine.current = &app.doc
+	engine.hidden = &app.page_hidden
+	engine.allocator = big_allocator()
 	font_atlas_init(app.vg)
 	load_fonts(app.vg)
 	app.zoom = 1
 	app.cam = {-80, -60}
 	app.canvas_bg = CANVAS_BG
 	app.tab = -1
-	app.files_dir = strings.clone(os.dir(absolute_path(path)))
+	app.files_dir = strings.clone(os.dir(engine.absolute_path(path)))
 	// no field takes the keyboard until the user picks one (0 would focus the first
 	// field drawn, now the layer search)
 	ui.tab_target = -1
@@ -175,14 +182,14 @@ app_main :: proc(path: string) {
 		frames_drawn += 1
 		if platform_had_input() do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
 		fb := frame_size()
-		if added := fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
+		if added := engine.fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
 		if libraries_refresh() do set_status("A library changed on disk; its components were read again")
 
 		// drawing instances re-lays out their components in place, so refresh
 		// the boxes before requests read them and again before input
 		t0 := time.tick_now()
-		if app.needs_layout do layout_invalidate()
-		layout_document(&app.doc)
+		if app.needs_layout do engine.layout_invalidate()
+		engine.layout_document(&app.doc)
 		app.needs_layout = false
 		ran := process_requests()
 		if ran {
@@ -190,9 +197,9 @@ app_main :: proc(path: string) {
 			agent_activity_touch()
 		}
 		agent_activity_tick()
-		if app.needs_layout do layout_invalidate()
+		if app.needs_layout do engine.layout_invalidate()
 		if ran || app.needs_layout {
-			layout_document(&app.doc)
+			engine.layout_document(&app.doc)
 			app.needs_layout = false
 		}
 		pages_sync()
@@ -201,8 +208,8 @@ app_main :: proc(path: string) {
 		handle_drops()
 		handle_input()
 		if app.needs_layout {
-			layout_invalidate()
-			layout_document(&app.doc)
+			engine.layout_invalidate()
+			engine.layout_document(&app.doc)
 			app.needs_layout = false
 		}
 		autosave()
@@ -230,7 +237,7 @@ app_main :: proc(path: string) {
 	else do app_log("exit: window closed")
 	if app.dirty do save_document(app.file_path)
 	for &t in app.tabs do if t.dirty && t.path != "" {
-		data := doc_serialize(&t.doc)
+		data := engine.doc_serialize(&t.doc)
 		_ = os.write_entire_file(t.path, data)
 		delete(data)
 	}
@@ -256,7 +263,7 @@ frame_draw :: proc(fb: [2]i32, capture: bool) -> (t3, t4, t5, t6: time.Tick) {
 	defer drawing_frame = false
 	if app.tab >= 0 {
 		c := app.canvas
-		blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg})
+		engine.blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg, order = app.draw_order[:]})
 	}
 	gl.Viewport(0, 0, fb.x, fb.y)
 	bg := app.canvas_bg if app.tab >= 0 else PANEL_BG
@@ -286,7 +293,7 @@ live_redraw :: proc() {
 	free_all(context.temp_allocator)
 	fb := frame_size()
 	if fb.x <= 0 || fb.y <= 0 do return
-	layout_document(&app.doc)
+	engine.layout_document(&app.doc)
 	build_draw_order()
 	frame_draw(fb, false)
 }
@@ -344,7 +351,7 @@ font_atlas_trim :: proc(vg: ^nvg.Context) {
 load_fonts :: proc(vg: ^nvg.Context) {
 	// mapped, not read into memory (map_file)
 	font :: proc(vg: ^nvg.Context, name, path: string) -> int {
-		data, ok := map_file(path)
+		data, ok := engine.map_file(path)
 		if !ok do return -1
 		return nvg.CreateFontMem(vg, name, data, false)
 	}
@@ -404,8 +411,8 @@ autosave :: proc() {
 
 save_document :: proc(path: string) -> bool {
 	if path == "" do return false
-	pages_prune(&app.doc)
-	data := doc_serialize(&app.doc)
+	engine.pages_prune(&app.doc)
+	data := engine.doc_serialize(&app.doc)
 	defer delete(data)
 	_ = os.make_directory_all(os.dir(path))
 	if err := os.write_entire_file(path, data); err != nil {
@@ -429,12 +436,12 @@ push_undo :: proc() {
 		mark_dirty()
 		return
 	}
-	append(&app.undo_stack, doc_snapshot(&app.doc))
+	append(&app.undo_stack, engine.doc_snapshot(&app.doc))
 	if len(app.undo_stack) > 200 {
-		free_snapshot(app.undo_stack[0])
+		engine.free_snapshot(app.undo_stack[0])
 		ordered_remove(&app.undo_stack, 0)
 	}
-	for s in app.redo_stack do free_snapshot(s)
+	for s in app.redo_stack do engine.free_snapshot(s)
 	clear(&app.redo_stack)
 	mark_dirty()
 }
@@ -442,10 +449,10 @@ push_undo :: proc() {
 undo :: proc() {
 	if len(app.undo_stack) == 0 do return
 	app.needs_layout = true
-	append(&app.redo_stack, doc_snapshot(&app.doc))
+	append(&app.redo_stack, engine.doc_snapshot(&app.doc))
 	snap := pop(&app.undo_stack)
-	doc_restore(&app.doc, snap)
-	free_snapshot(snap)
+	engine.doc_restore(&app.doc, snap)
+	engine.free_snapshot(snap)
 	prune_selection()
 	mark_dirty()
 }
@@ -453,20 +460,20 @@ undo :: proc() {
 redo :: proc() {
 	if len(app.redo_stack) == 0 do return
 	app.needs_layout = true
-	append(&app.undo_stack, doc_snapshot(&app.doc))
+	append(&app.undo_stack, engine.doc_snapshot(&app.doc))
 	snap := pop(&app.redo_stack)
-	doc_restore(&app.doc, snap)
-	free_snapshot(snap)
+	engine.doc_restore(&app.doc, snap)
+	engine.free_snapshot(snap)
 	prune_selection()
 	mark_dirty()
 }
 
 prune_selection :: proc() {
 	for i := 0; i < len(app.sel); {
-		if n, _ := doc_find_uid(&app.doc, app.sel[i]); n == nil do ordered_remove(&app.sel, i)
+		if n, _ := engine.doc_find_uid(&app.doc, app.sel[i]); n == nil do ordered_remove(&app.sel, i)
 		else do i += 1
 	}
-	if n, _ := doc_find_uid(&app.doc, app.editing); n == nil do app.editing = 0
+	if n, _ := engine.doc_find_uid(&app.doc, app.editing); n == nil do app.editing = 0
 }
 
 // ---------------------------------------------------------------- coordinates
@@ -500,95 +507,14 @@ bounds_of :: proc(uids: []int) -> (r: [4]f32, ok: bool) {
 	lo := [2]f32{math.F32_MAX, math.F32_MAX}
 	hi := [2]f32{-math.F32_MAX, -math.F32_MAX}
 	for uid in uids {
-		n, _ := doc_find_uid(&app.doc, uid)
+		n, _ := engine.doc_find_uid(&app.doc, uid)
 		if n == nil do continue
-		b := node_page_box(n)
+		b := engine.node_page_box(n)
 		lo = {min(lo.x, b[0]), min(lo.y, b[1])}
 		hi = {max(hi.x, b[0] + b[2]), max(hi.y, b[1] + b[3])}
 		ok = true
 	}
 	return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}, ok
-}
-
-// ---------------------------------------------------------------- transforms
-
-// An affine transform as NanoVG stores it: x' = a x + c y + e, y' = b x + d y + f.
-Xform :: [6]f32
-
-XFORM_IDENTITY :: Xform{1, 0, 0, 1, 0, 0}
-
-// a · b: b applies first.
-xform_mul :: proc(a, b: Xform) -> Xform {
-	return {
-		a[0] * b[0] + a[2] * b[1],
-		a[1] * b[0] + a[3] * b[1],
-		a[0] * b[2] + a[2] * b[3],
-		a[1] * b[2] + a[3] * b[3],
-		a[0] * b[4] + a[2] * b[5] + a[4],
-		a[1] * b[4] + a[3] * b[5] + a[5],
-	}
-}
-
-xform_inverse :: proc(m: Xform) -> Xform {
-	det := m[0] * m[3] - m[1] * m[2]
-	if abs(det) < 1e-12 do return XFORM_IDENTITY
-	a, b, c, d := m[3] / det, -m[1] / det, -m[2] / det, m[0] / det
-	return {a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])}
-}
-
-xform_point :: proc(m: Xform, p: [2]f32) -> [2]f32 {
-	return {m[0] * p.x + m[2] * p.y + m[4], m[1] * p.x + m[3] * p.y + m[5]}
-}
-
-// Where a node's untransformed page box is drawn: its own rotation and flips and those
-// of its ancestors, each around that node's top-left corner (as draw_node_tree applies
-// them).
-node_transform :: proc(n: ^Node) -> (m: Xform, transformed: bool) {
-	chain: [MAX_DEPTH]^Node
-	count := 0
-	for cur := n; cur != nil && count < MAX_DEPTH; {
-		chain[count] = cur
-		count += 1
-		if cur.parent == 0 do break
-		cur, _ = doc_find_uid(&app.doc, cur.parent)
-	}
-	m = XFORM_IDENTITY
-	for i := count - 1; i >= 0; i -= 1 {
-		a := chain[i]
-		if a.rotation == 0 && !a.flip_x && !a.flip_y do continue
-		transformed = true
-		t := -a.rotation * math.PI / 180
-		cs, sn := math.cos(t), math.sin(t)
-		sx: f32 = -1 if a.flip_x else 1
-		sy: f32 = -1 if a.flip_y else 1
-		// T(x, y) · R · S · T(-x, -y)
-		local := Xform{cs * sx, sn * sx, -sn * sy, cs * sy, 0, 0}
-		local[4] = a.x - (local[0] * a.x + local[2] * a.y)
-		local[5] = a.y - (local[1] * a.x + local[3] * a.y)
-		m = xform_mul(m, local)
-	}
-	return
-}
-
-// The corners of a node as drawn, in page coordinates (TL, TR, BR, BL).
-node_corners :: proc(n: ^Node) -> (c: [4][2]f32, transformed: bool) {
-	c = {{n.x, n.y}, {n.x + n.w, n.y}, {n.x + n.w, n.y + n.h}, {n.x, n.y + n.h}}
-	m, tr := node_transform(n)
-	if !tr do return c, false
-	for &p in c do p = xform_point(m, p)
-	return c, true
-}
-
-// The page-space box around a node as drawn.
-node_page_box :: proc(n: ^Node) -> [4]f32 {
-	c, tr := node_corners(n)
-	if !tr do return {n.x, n.y, n.w, n.h}
-	lo, hi := c[0], c[0]
-	for p in c[1:] {
-		lo = {min(lo.x, p.x), min(lo.y, p.y)}
-		hi = {max(hi.x, p.x), max(hi.y, p.y)}
-	}
-	return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}
 }
 
 all_uids :: proc(top_level_only: bool) -> []int {
@@ -608,9 +534,9 @@ all_uids :: proc(top_level_only: bool) -> []int {
 build_draw_order :: proc() {
 	clear(&app.draw_order)
 	walk :: proc(parent: int, depth: int) {
-		if depth > MAX_DEPTH do return
-		for cu in children_of(&app.doc, parent) {
-			n, _ := doc_find_uid(&app.doc, cu)
+		if depth > engine.MAX_DEPTH do return
+		for cu in engine.children_of(&app.doc, parent) {
+			n, _ := engine.doc_find_uid(&app.doc, cu)
 			if n == nil || !n.enabled do continue
 			if parent == 0 && app.page_hidden[cu] do continue
 			append(&app.draw_order, n.uid)
@@ -618,423 +544,6 @@ build_draw_order :: proc() {
 		}
 	}
 	walk(0, 0)
-}
-
-to_nvg :: proc(c: Color, opacity: f32 = 1) -> nvg.Color {
-	return {f32(c[0]) / 255, f32(c[1]) / 255, f32(c[2]) / 255, f32(c[3]) / 255 * opacity}
-}
-
-// The part of the page the canvas shows (page coordinates); nodes outside it are not
-// drawn. Zero while rendering offscreen (screenshots, thumbnails, export).
-cull_rect: [4]f32
-
-// True when a node's box, grown by its stroke and shadow, can be seen.
-node_visible :: proc(n: ^Node) -> bool {
-	if cull_rect[2] <= 0 || n.rotation != 0 || n.flip_x || n.flip_y do return true
-	m := n.stroke_width + 2
-	if n.shadow.has do m += abs(n.shadow.offset.x) + abs(n.shadow.offset.y) + n.shadow.blur + n.shadow.spread
-	for e in n.effects[:n.neffects] {
-		if e.kind == .Drop_Shadow do m = max(m, n.stroke_width + 2 + abs(e.offset.x) + abs(e.offset.y) + e.blur + e.spread)
-		if e.kind == .Blur do m = max(m, n.stroke_width + 2 + e.blur * 1.5)
-	}
-	return n.x - m < cull_rect[0] + cull_rect[2] && n.x + n.w + m > cull_rect[0] &&
-	       n.y - m < cull_rect[1] + cull_rect[3] && n.y + n.h + m > cull_rect[1]
-}
-
-// Draws a node and, for frames and groups, its children.
-draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force := false) {
-	if (!n.enabled && !force) || depth > MAX_DEPTH do return
-	// capturing what lies behind a background blur: stop at its layer
-	if blur_stopped do return
-	if blur_stop != 0 && n.uid == blur_stop {
-		blur_stopped = true
-		return
-	}
-	// Off-screen nodes are skipped: besides the work, their glyphs would take atlas space
-	// (at high zoom a few large glyphs fill it and the rest of the text disappears).
-	// Children may overflow an unclipped container, so only leaves and clipping frames
-	// are culled by their own box.
-	if !node_visible(n) {
-		#partial switch n.kind {
-		case .Group, .Ref: // children may lie outside
-		case .Frame: if n.clip do return
-		case: return
-		}
-	}
-	if lod_scale > 0 && n.w * lod_scale < 0.5 && n.h * lod_scale < 0.5 && n.kind != .Frame && n.kind != .Group && n.kind != .Ref do return
-	if blur_active && n.uid != blur_self {
-		if r, ok := blur_layer[n.uid]; ok {
-			draw_blurred_layer(vg, r, alpha)
-			return
-		}
-	}
-	doc := &app.doc
-	a := alpha * n.opacity
-	nvg.Save(vg)
-	defer nvg.Restore(vg)
-	nvg.GlobalAlpha(vg, a)
-	// rotation (counter-clockwise) and flips apply to the node and everything inside it,
-	// both around its top-left corner as pen.dev renders them
-	saved_cull := cull_rect
-	defer cull_rect = saved_cull
-	if n.rotation != 0 || n.flip_x || n.flip_y {
-		nvg.Translate(vg, n.x, n.y)
-		if n.rotation != 0 do nvg.Rotate(vg, -n.rotation * math.PI / 180)
-		if n.flip_x || n.flip_y do nvg.Scale(vg, -1 if n.flip_x else 1, -1 if n.flip_y else 1)
-		nvg.Translate(vg, -n.x, -n.y)
-		// the children land turned or mirrored, so their own boxes cannot be culled
-		cull_rect = {}
-	}
-	// NanoVG's Odin port traps on a closed path whose points all coincide, so boxes
-	// without any extent (empty fit_content frames, zero-size shapes) are not outlined.
-	flat := n.w < 1e-3 && n.h < 1e-3
-
-	switch n.kind {
-	case .Frame, .Rectangle:
-		if !flat && node_visible(n) do draw_box(vg, n)
-		if n.kind == .Frame {
-			if n.clip do nvg.IntersectScissor(vg, n.x, n.y, n.w, n.h)
-			for cu in children_for_layout(doc, n.uid) {
-				if c, _ := doc_find_uid(doc, cu); c != nil do draw_node_tree(vg, c, a, depth + 1)
-			}
-		}
-	case .Group:
-		for cu in children_for_layout(doc, n.uid) {
-			if c, _ := doc_find_uid(doc, cu); c != nil do draw_node_tree(vg, c, a, depth + 1)
-		}
-	case .Ellipse:
-		if flat do return
-		cx, cy := n.x + n.w / 2, n.y + n.h / 2
-		draw_drop_shadows(vg, n, min(n.w, n.h) / 2)
-		nvg.BeginPath(vg)
-		nvg.Ellipse(vg, cx, cy, n.w / 2, n.h / 2)
-		fill_backdrop(vg, n)
-		fill_paints(vg, n)
-		draw_inner_shadows(vg, n, min(n.w, n.h) / 2)
-		if n.has_stroke && n.stroke_width > 0 {
-			inset: f32
-			#partial switch n.stroke_align {
-			case .Inner: inset = n.stroke_width / 2
-			case .Outer: inset = -n.stroke_width / 2
-			}
-			nvg.BeginPath(vg)
-			nvg.Ellipse(vg, cx, cy, max(n.w / 2 - inset, 0), max(n.h / 2 - inset, 0))
-			nvg.StrokeColor(vg, to_nvg(n.stroke))
-			nvg.StrokeWidth(vg, n.stroke_width)
-			nvg.Stroke(vg)
-		}
-	case .Path, .Icon:
-		if n.kind == .Icon && len(n.cmds) == 0 {
-			draw_placeholder(vg, n, "icon")
-			return
-		}
-		if len(n.cmds) == 0 || flat do return
-		sx := n.w / n.view_box[2]
-		sy := n.h / n.view_box[3]
-		if n.kind == .Icon && lod_scale > 0 && min(n.w, n.h) * lod_scale < 6 {
-			// a few points across: its strokes are a smudge of its colour
-			color := to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255})
-			s := min(n.w, n.h) * 0.5
-			nvg.BeginPath(vg)
-			nvg.Rect(vg, n.x + (n.w - s) / 2, n.y + (n.h - s) / 2, s, s)
-			nvg.FillColor(vg, {color.r, color.g, color.b, color.a * 0.6})
-			nvg.Fill(vg)
-			return
-		}
-		if n.kind == .Icon {
-			// uniform scale, centred, like an SVG with preserveAspectRatio
-			s := min(sx, sy)
-			nvg.Translate(vg, n.x + (n.w - 24 * s) / 2, n.y + (n.h - 24 * s) / 2)
-			nvg.Scale(vg, s, s)
-			color := to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255})
-			// lucide draws dots as zero-length segments with round caps ("M12 8h.01");
-			// NanoVG drops those, so they are filled as circles instead
-			dots := make([dynamic][2]f32, context.temp_allocator)
-			nvg.BeginPath(vg)
-			for c, i in n.cmds {
-				if c.kind == .Move && i + 1 < len(n.cmds) && n.cmds[i + 1].kind == .Line {
-					next_is_new := i + 2 >= len(n.cmds) || n.cmds[i + 2].kind == .Move
-					d := n.cmds[i + 1].p[2] - c.p[2]
-					if next_is_new && d.x * d.x + d.y * d.y < 0.25 {
-						append(&dots, c.p[2])
-						continue
-					}
-				}
-				if c.kind == .Line && i > 0 && n.cmds[i - 1].kind == .Move && len(dots) > 0 && dots[len(dots) - 1] == n.cmds[i - 1].p[2] do continue
-				path_cmd(vg, c, {0, 0}, 1, 1)
-			}
-			nvg.LineCap(vg, .ROUND)
-			nvg.LineJoin(vg, .ROUND)
-			nvg.StrokeColor(vg, color)
-			nvg.StrokeWidth(vg, 2)
-			nvg.Stroke(vg)
-			if len(dots) > 0 {
-				nvg.BeginPath(vg)
-				for d in dots do nvg.Circle(vg, d.x, d.y, 1)
-				nvg.FillColor(vg, color)
-				nvg.Fill(vg)
-			}
-			return
-		}
-		nvg.BeginPath(vg)
-		tp :: proc(p: [2]f32, n: ^Node, sx, sy: f32) -> [2]f32 {
-			return {n.x + (p.x - n.view_box[0]) * sx, n.y + (p.y - n.view_box[1]) * sy}
-		}
-		for c in n.cmds {
-			switch c.kind {
-			case .Move:
-				p := tp(c.p[2], n, sx, sy)
-				nvg.MoveTo(vg, p.x, p.y)
-			case .Line:
-				p := tp(c.p[2], n, sx, sy)
-				nvg.LineTo(vg, p.x, p.y)
-			case .Cubic:
-				c1, c2, p := tp(c.p[0], n, sx, sy), tp(c.p[1], n, sx, sy), tp(c.p[2], n, sx, sy)
-				nvg.BezierTo(vg, c1.x, c1.y, c2.x, c2.y, p.x, p.y)
-			case .Quad:
-				c1, p := tp(c.p[0], n, sx, sy), tp(c.p[1], n, sx, sy)
-				nvg.QuadTo(vg, c1.x, c1.y, p.x, p.y)
-			case .Close:
-				nvg.ClosePath(vg)
-			}
-		}
-		nvg.LineCap(vg, LINE_CAPS[n.line_cap])
-		nvg.LineJoin(vg, LINE_JOINS[n.line_join])
-		fill_and_stroke(vg, n)
-	case .Text:
-		if lod_scale > 0 && n.font_size * lod_scale < 2 do draw_text_bars(vg, n)
-		else do draw_text(vg, n)
-	case .Ref:
-		root := ghost_root_of(doc, n.uid)
-		if root == nil {
-			draw_placeholder(vg, n, fmt.tprintf("ref %s", n.ref))
-			return
-		}
-		draw_node_tree(vg, root, a, depth + 1, force = true)
-	case .Other:
-		draw_placeholder(vg, n, n.type_name)
-	}
-}
-
-LINE_CAPS := [Line_Cap]nvg.LineCapType{.Butt = .BUTT, .Round = .ROUND, .Square = .SQUARE}
-LINE_JOINS := [Line_Join]nvg.LineCapType{.Miter = .MITER, .Round = .ROUND, .Bevel = .BEVEL}
-
-// Adds one parsed path command, mapping its points from `origin` with a scale.
-path_cmd :: proc(vg: ^nvg.Context, c: Path_Cmd, origin: [2]f32, sx, sy: f32) {
-	tp :: proc(p, origin: [2]f32, sx, sy: f32) -> [2]f32 {
-		return {(p.x - origin.x) * sx, (p.y - origin.y) * sy}
-	}
-	switch c.kind {
-	case .Move:
-		p := tp(c.p[2], origin, sx, sy)
-		nvg.MoveTo(vg, p.x, p.y)
-	case .Line:
-		p := tp(c.p[2], origin, sx, sy)
-		nvg.LineTo(vg, p.x, p.y)
-	case .Cubic:
-		c1, c2, p := tp(c.p[0], origin, sx, sy), tp(c.p[1], origin, sx, sy), tp(c.p[2], origin, sx, sy)
-		nvg.BezierTo(vg, c1.x, c1.y, c2.x, c2.y, p.x, p.y)
-	case .Quad:
-		c1, p := tp(c.p[0], origin, sx, sy), tp(c.p[1], origin, sx, sy)
-		nvg.QuadTo(vg, c1.x, c1.y, p.x, p.y)
-	case .Close:
-		nvg.ClosePath(vg)
-	}
-}
-
-// Fills and strokes a rectangle-like node with its corner radii.
-draw_box :: proc(vg: ^nvg.Context, n: ^Node) {
-	draw_drop_shadows(vg, n, n.radius[0])
-	nvg.BeginPath(vg)
-	rounded_rect(vg, n.x, n.y, n.w, n.h, n.radius)
-	fill_backdrop(vg, n)
-	if n.nfills > 0 {
-		fill_paints(vg, n)
-	} else if n.has_fill {
-		if n.image_url == "" || !image_fill(vg, n) {
-			nvg.FillColor(vg, to_nvg(n.fill))
-			nvg.Fill(vg)
-		}
-	}
-	draw_inner_shadows(vg, n, n.radius[0])
-	if n.has_stroke && n.stroke_per_side && n.stroke_width > 0 {
-		// per-side widths, drawn inside the box like CSS borders: the rounded box with
-		// the inner box (inset by each side's width) cut out
-		t, rt, b, l := n.stroke_sides[0], n.stroke_sides[1], n.stroke_sides[2], n.stroke_sides[3]
-		r := n.radius
-		inner := [4]f32{max(r[0] - max(t, l), 0), max(r[1] - max(t, rt), 0), max(r[2] - max(b, rt), 0), max(r[3] - max(b, l), 0)}
-		nvg.BeginPath(vg)
-		if r == {} {
-			// square corners: one band per side (a cut-out would leave an antialiasing
-			// hairline along the sides without a border)
-			if t > 0 do nvg.Rect(vg, n.x, n.y, n.w, t)
-			if b > 0 do nvg.Rect(vg, n.x, n.y + n.h - b, n.w, b)
-			if l > 0 do nvg.Rect(vg, n.x, n.y + t, l, n.h - t - b)
-			if rt > 0 do nvg.Rect(vg, n.x + n.w - rt, n.y + t, rt, n.h - t - b)
-		} else {
-			rounded_rect(vg, n.x, n.y, n.w, n.h, r)
-			if n.w - l - rt > 0 && n.h - t - b > 0 {
-				rounded_rect(vg, n.x + l, n.y + t, n.w - l - rt, n.h - t - b, inner)
-				nvg.PathWinding(vg, .CW)
-			}
-		}
-		nvg.FillColor(vg, to_nvg(n.stroke))
-		nvg.Fill(vg)
-	} else if n.has_stroke && n.stroke_width > 0 {
-		inset: f32
-		switch n.stroke_align {
-		case .Center:
-		case .Inner: inset = n.stroke_width / 2
-		case .Outer: inset = -n.stroke_width / 2
-		}
-		r := n.radius
-		for &v in r do v = max(v - inset, 0)
-		nvg.BeginPath(vg)
-		rounded_rect(vg, n.x + inset, n.y + inset, n.w - inset * 2, n.h - inset * 2, r)
-		nvg.StrokeColor(vg, to_nvg(n.stroke))
-		nvg.StrokeWidth(vg, n.stroke_width)
-		nvg.Stroke(vg)
-	}
-}
-
-// Screen points per page unit while the live canvas draws, 0 elsewhere (screenshots,
-// exports, thumbnails, blur buffers). Above 0, details too small to see are simplified:
-// text under 2 points becomes grey bars, icons under 6 points a dot of their colour,
-// corners under a third of a point square, leaves under half a point are skipped.
-lod_scale: f32
-lod_off: bool // AGENTIC_NO_LOD=1 draws every detail (measurements)
-
-rounded_rect :: proc(vg: ^nvg.Context, x, y, w, h: f32, r: [4]f32) {
-	if r == {} || lod_scale > 0 && max(max(r[0], r[1]), max(r[2], r[3])) * lod_scale < 0.35 do nvg.Rect(vg, x, y, w, h)
-	else do nvg.RoundedRectVarying(vg, x, y, w, h, r[0], r[1], r[2], r[3])
-}
-
-fill_and_stroke :: proc(vg: ^nvg.Context, n: ^Node) {
-	fill_paints(vg, n)
-	if n.has_stroke && n.stroke_width > 0 {
-		nvg.StrokeColor(vg, to_nvg(n.stroke))
-		nvg.StrokeWidth(vg, n.stroke_width)
-		nvg.Stroke(vg)
-	}
-}
-
-// Text too small to read on screen: a bar per line in its colour.
-draw_text_bars :: proc(vg: ^nvg.Context, n: ^Node) {
-	rows := len(text_lines(n, n.w))
-	if rows == 0 do return
-	lh := n.font_size * line_height_of(n)
-	color := to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255})
-	nvg.BeginPath(vg)
-	for i in 0 ..< rows {
-		w := n.w if i < rows - 1 else n.w * (0.6 if rows > 1 else 1)
-		nvg.Rect(vg, n.x, n.y + f32(i) * lh + lh * 0.3, w, lh * 0.4)
-	}
-	nvg.FillColor(vg, {color.r, color.g, color.b, color.a * 0.45})
-	nvg.Fill(vg)
-}
-
-draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
-	set_font(vg, n)
-	nvg.FillColor(vg, to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255}))
-	halign: nvg.AlignHorizontal = .LEFT
-	anchor := n.x
-	switch n.text_align {
-	case .Left, .Justify:
-	case .Center:
-		halign = .CENTER
-		anchor = n.x + n.w / 2
-	case .Right:
-		halign = .RIGHT
-		anchor = n.x + n.w
-	}
-	nvg.TextAlign(vg, halign, .TOP)
-	// lines were broken at document scale by the layout pass; draw them one by one so
-	// wrapping and widths do not drift with the zoom level
-	rows := text_lines(n, n.w if n.growth != .Auto else -1)
-	y := n.y + half_leading(vg, n)
-	if n.growth == .Fixed_Width_Height && n.text_valign != .Start {
-		free := n.h - f32(len(rows)) * n.font_size * line_height_of(n)
-		y += free / 2 if n.text_valign == .Center else free
-	}
-	justify := n.text_align == .Justify && n.growth != .Auto
-	for row, i in rows {
-		a, b := clamp(row[0], 0, len(n.content)), clamp(row[1], 0, len(n.content))
-		if b > a {
-			line := n.content[a:b]
-			// the last line of a paragraph keeps its natural spacing
-			last := i == len(rows) - 1 || strings.has_suffix(line, "\n") || (b < len(n.content) && n.content[b] == '\n')
-			if justify && !last && draw_justified(vg, n, y, line) {
-				if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, line, n.w)
-			} else {
-				text_run(vg, n, anchor, y, line, halign)
-				if n.underline || n.strikethrough do text_decoration(vg, n, anchor, y, halign, line)
-			}
-		}
-		y += n.font_size * line_height_of(n)
-	}
-}
-
-// One line spread over the box width: the space left over goes between the words.
-// Returns false for a line with a single word, which is drawn as it is.
-draw_justified :: proc(vg: ^nvg.Context, n: ^Node, y: f32, line: string) -> bool {
-	words := strings.fields(strings.trim_space(line), context.temp_allocator)
-	if len(words) < 2 do return false
-	widths := make([]f32, len(words), context.temp_allocator)
-	total: f32
-	for w, i in words {
-		widths[i] = nvg.TextBounds(vg, 0, 0, w)
-		total += widths[i]
-	}
-	gap := (n.w - total) / f32(len(words) - 1)
-	x := n.x
-	for w, i in words {
-		text_run(vg, n, x, y, w)
-		x += widths[i] + gap
-	}
-	return true
-}
-
-// Underline and strikethrough for one drawn line of text.
-text_decoration :: proc(vg: ^nvg.Context, n: ^Node, anchor, y: f32, halign: nvg.AlignHorizontal, line: string, width: f32 = -1) {
-	w := width if width >= 0 else nvg.TextBounds(vg, 0, 0, line)
-	x := anchor
-	#partial switch halign {
-	case .CENTER: x -= w / 2
-	case .RIGHT: x -= w
-	}
-	thick := max(n.font_size / 14, 0.5)
-	lh := n.font_size * line_height_of(n)
-	base := y + (lh - n.font_size) / 2 + n.font_size * 0.92 // roughly the baseline
-	nvg.BeginPath(vg)
-	if n.underline do nvg.Rect(vg, x, base + thick, w, thick)
-	if n.strikethrough do nvg.Rect(vg, x, base - n.font_size * 0.3, w, thick)
-	nvg.Fill(vg)
-}
-
-// Node types this app does not render (scripts, browsers, ...).
-draw_placeholder :: proc(vg: ^nvg.Context, n: ^Node, label: string) {
-	if n.w < 1e-3 && n.h < 1e-3 do return
-	if n.has_fill {
-		nvg.BeginPath(vg)
-		nvg.Rect(vg, n.x, n.y, n.w, n.h)
-		nvg.FillColor(vg, to_nvg(n.fill, 0.35))
-		nvg.Fill(vg)
-	}
-	nvg.BeginPath(vg)
-	nvg.Rect(vg, n.x + 0.5, n.y + 0.5, n.w - 1, n.h - 1)
-	nvg.StrokeColor(vg, {0.5, 0.5, 0.55, 0.6})
-	nvg.StrokeWidth(vg, 1)
-	nvg.Stroke(vg)
-	if n.w >= 40 && n.h >= 14 {
-		nvg.FontFace(vg, "sans")
-		nvg.FontSize(vg, 10)
-		nvg.TextAlign(vg, .CENTER, .MIDDLE)
-		nvg.FillColor(vg, {0.4, 0.4, 0.45, 0.9})
-		nvg.Save(vg)
-		nvg.IntersectScissor(vg, n.x, n.y, n.w, n.h)
-		nvg.Text(vg, n.x + n.w / 2, n.y + n.h / 2, label)
-		nvg.Restore(vg)
-	}
 }
 
 draw_canvas :: proc() {
@@ -1065,16 +574,16 @@ draw_canvas :: proc() {
 	nvg.Scale(vg, app.zoom, app.zoom)
 	nvg.Translate(vg, -app.cam.x, -app.cam.y)
 	tl, br := to_page({c.x, c.y}), to_page({c.x + c.w, c.y + c.h})
-	cull_rect = {tl.x, tl.y, br.x - tl.x, br.y - tl.y}
-	blur_active = true
-	lod_scale = 0 if lod_off else app.zoom
-	for cu in children_of(&app.doc, 0) {
+	engine.cull_rect = {tl.x, tl.y, br.x - tl.x, br.y - tl.y}
+	engine.blur_active = true
+	engine.lod_scale = 0 if engine.lod_off else app.zoom
+	for cu in engine.children_of(&app.doc, 0) {
 		if app.page_hidden[cu] do continue
-		if c, _ := doc_find_uid(&app.doc, cu); c != nil do draw_node_tree(vg, c, 1, 0)
+		if c, _ := engine.doc_find_uid(&app.doc, cu); c != nil do engine.draw_node_tree(vg, c, 1, 0)
 	}
-	lod_scale = 0
-	blur_active = false
-	cull_rect = {}
+	engine.lod_scale = 0
+	engine.blur_active = false
+	engine.cull_rect = {}
 	nvg.Restore(vg)
 	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
 
@@ -1086,26 +595,26 @@ draw_canvas :: proc() {
 		if n.parent != 0 || !n.enabled || !(n.kind == .Frame || n.kind == .Group) || app.page_hidden[n.uid] do continue
 		p := to_screen({n.x, n.y})
 		if ui.focus == "name" && ui.focus_uid == n.uid && ui.rename_canvas {
-			field(vg, n.uid, "name", "", {p.x - 4, p.y - 30, 200, 24}, n.name, placeholder = node_label(&n))
+			field(vg, n.uid, "name", "", {p.x - 4, p.y - 30, 200, 24}, n.name, placeholder = engine.node_label(&n))
 			nvg.FontFace(vg, "ui")
 			nvg.FontSize(vg, 12)
 			nvg.TextAlign(vg, .LEFT, .BOTTOM)
 			continue
 		}
 		nvg.FillColor(vg, ACCENT if is_selected(n.uid) else TEXT_DIM)
-		nvg.Text(vg, p.x, p.y - 7, node_label(&n))
+		nvg.Text(vg, p.x, p.y - 7, engine.node_label(&n))
 	}
 
 	draw_pixel_grid(vg)
 	// hover + selection overlays
 	if app.hover != 0 && !is_selected(app.hover) && app.drag.kind == .None {
-		if n, _ := doc_find_uid(&app.doc, app.hover); n != nil do outline_node(n, 1.5)
+		if n, _ := engine.doc_find_uid(&app.doc, app.hover); n != nil do outline_node(n, 1.5)
 	}
 	for uid in app.sel {
-		if n, _ := doc_find_uid(&app.doc, uid); n != nil do outline_node(n, 1)
+		if n, _ := engine.doc_find_uid(&app.doc, uid); n != nil do outline_node(n, 1)
 	}
 	if len(app.sel) == 1 && app.editing == 0 {
-		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil && resizable(n) && !pen_active() {
+		if n, _ := engine.doc_find_uid(&app.doc, app.sel[0]); n != nil && resizable(n) && !pen_active() {
 			for h in 0 ..< 8 {
 				p := handle_pos(n, h)
 				nvg.BeginPath(vg)
@@ -1139,7 +648,7 @@ draw_canvas :: proc() {
 
 	// size badge under a single selection, Paper style: "Fill 1440 × Fit 296"
 	if len(app.sel) == 1 && app.drag.kind != .Pan {
-		if n, _ := doc_find_uid(&app.doc, app.sel[0]); n != nil {
+		if n, _ := engine.doc_find_uid(&app.doc, app.sel[0]); n != nil {
 			text := fmt.tprintf("%s × %s", size_label(n.width, n.w), size_label(n.height, n.h))
 			nvg.FontFace(vg, "ui")
 			nvg.FontSize(vg, 11)
@@ -1156,16 +665,16 @@ draw_canvas :: proc() {
 	}
 	// text caret
 	if app.editing != 0 {
-		if n, _ := doc_find_uid(&app.doc, app.editing); n != nil && (int(time.now()._nsec / 500_000_000) % 2 == 0) {
+		if n, _ := engine.doc_find_uid(&app.doc, app.editing); n != nil && (int(time.now()._nsec / 500_000_000) % 2 == 0) {
 			nvg.Save(vg)
-			set_font(vg, n)
+			engine.set_font(vg, n)
 			lines := strings.split(n.content, "\n", context.temp_allocator)
 			last := lines[len(lines) - 1]
 			w := nvg.TextBounds(vg, 0, 0, last)
 			nvg.Restore(vg)
-			p := to_screen({n.x + w, n.y + f32(len(lines) - 1) * n.font_size * line_height_of(n)})
+			p := to_screen({n.x + w, n.y + f32(len(lines) - 1) * n.font_size * engine.line_height_of(n)})
 			nvg.BeginPath(vg)
-			nvg.Rect(vg, p.x + 1, p.y, 1.5, n.font_size * line_height_of(n) * app.zoom)
+			nvg.Rect(vg, p.x + 1, p.y, 1.5, n.font_size * engine.line_height_of(n) * app.zoom)
 			nvg.FillColor(vg, ACCENT)
 			nvg.Fill(vg)
 		}
@@ -1201,13 +710,13 @@ draw_measurements :: proc(vg: ^nvg.Context) {
 	target := hit_test(to_page(app.mouse))
 	if target == 0 || is_selected(target) {
 		// over the selection itself: measure to its parent
-		n, _ := doc_find_uid(&app.doc, app.sel[0])
+		n, _ := engine.doc_find_uid(&app.doc, app.sel[0])
 		if n == nil || n.parent == 0 do return
 		target = n.parent
 	}
-	tn, _ := doc_find_uid(&app.doc, target)
+	tn, _ := engine.doc_find_uid(&app.doc, target)
 	if tn == nil do return
-	b := node_page_box(tn)
+	b := engine.node_page_box(tn)
 	// the other box, outlined
 	p0, p1 := to_screen({b[0], b[1]}), to_screen({b[0] + b[2], b[1] + b[3]})
 	nvg.BeginPath(vg)
@@ -1249,7 +758,7 @@ measure_line :: proc(vg: ^nvg.Context, axis: int, from, to, across: f32) {
 	nvg.StrokeColor(vg, MEASURE)
 	nvg.StrokeWidth(vg, 1)
 	nvg.Stroke(vg)
-	text := num_text(to - from)
+	text := engine.num_text(to - from)
 	nvg.FontFace(vg, "ui")
 	nvg.FontSize(vg, 11)
 	tw := nvg.TextBounds(vg, 0, 0, text) + 10
@@ -1265,13 +774,13 @@ measure_line :: proc(vg: ^nvg.Context, axis: int, from, to, across: f32) {
 	nvg.Text(vg, m.x, m.y, text)
 }
 
-size_label :: proc(spec: Size_Spec, computed: f32) -> string {
+size_label :: proc(spec: engine.Size_Spec, computed: f32) -> string {
 	switch spec.mode {
-	case .Fit: return fmt.tprintf("Fit %s", num_text(computed))
-	case .Fill: return fmt.tprintf("Fill %s", num_text(computed))
+	case .Fit: return fmt.tprintf("Fit %s", engine.num_text(computed))
+	case .Fill: return fmt.tprintf("Fill %s", engine.num_text(computed))
 	case .Fixed:
 	}
-	return num_text(computed)
+	return engine.num_text(computed)
 }
 
 // Selection colours as in pen.dev: magenta for a component origin, violet for an
@@ -1279,18 +788,18 @@ size_label :: proc(spec: Size_Spec, computed: f32) -> string {
 COMPONENT_COLOR :: nvg.Color{0.85, 0.27, 0.93, 1}
 INSTANCE_COLOR :: nvg.Color{0.55, 0.42, 1.0, 1}
 
-selection_color :: proc(n: ^Node) -> nvg.Color {
+selection_color :: proc(n: ^engine.Node) -> nvg.Color {
 	if n.reusable do return COMPONENT_COLOR
 	if n.kind == .Ref do return INSTANCE_COLOR
 	return ACCENT
 }
 
-outline_node :: proc(n: ^Node, width: f32) {
+outline_node :: proc(n: ^engine.Node, width: f32) {
 	vg := app.vg
 	a := to_screen({n.x, n.y})
 	if n.w * app.zoom < 0.5 && n.h * app.zoom < 0.5 do return // see draw_node_tree
 	nvg.BeginPath(vg)
-	if m, tr := node_transform(n); tr {
+	if m, tr := engine.node_transform(n); tr {
 		// turned or mirrored: outline the box (or ellipse) where it is drawn
 		steps := 48 if n.kind == .Ellipse else 4
 		for i in 0 ..< steps {
@@ -1301,7 +810,7 @@ outline_node :: proc(n: ^Node, width: f32) {
 			} else {
 				p = [4][2]f32{{n.x, n.y}, {n.x + n.w, n.y}, {n.x + n.w, n.y + n.h}, {n.x, n.y + n.h}}[i]
 			}
-			s := to_screen(xform_point(m, p))
+			s := to_screen(engine.xform_point(m, p))
 			if i == 0 do nvg.MoveTo(vg, s.x, s.y)
 			else do nvg.LineTo(vg, s.x, s.y)
 		}
@@ -1322,8 +831,8 @@ outline_node :: proc(n: ^Node, width: f32) {
 
 // Resize handles work on the axis-aligned box; turned or mirrored layers are resized
 // from the inspector.
-resizable :: proc(n: ^Node) -> bool {
-	_, tr := node_transform(n)
+resizable :: proc(n: ^engine.Node) -> bool {
+	_, tr := engine.node_transform(n)
 	return !tr
 }
 
@@ -1333,7 +842,7 @@ is_selected :: proc(uid: int) -> bool {
 }
 
 // Handles: 0 TL, 1 T, 2 TR, 3 R, 4 BR, 5 B, 6 BL, 7 L (screen space)
-handle_pos :: proc(n: ^Node, h: int) -> [2]f32 {
+handle_pos :: proc(n: ^engine.Node, h: int) -> [2]f32 {
 	a := to_screen({n.x, n.y})
 	b := to_screen({n.x + n.w, n.y + n.h})
 	m := (a + b) / 2

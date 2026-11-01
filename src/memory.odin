@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "base:runtime"
 import "core:fmt"
 import "core:strings"
@@ -125,25 +127,25 @@ memory_trim :: proc() -> uint {
 // work measures instead of guessing. Sizes are estimates of the data structures (the
 // allocator's overhead and the GPU's own copies are not counted).
 
-node_bytes :: proc(n: ^Node) -> int {
-	b := size_of(Node) + len(n.id) + len(n.name) + len(n.content) + len(n.font_family) + len(n.type_name)
-	b += cap(n.props) * size_of(Prop)
+node_bytes :: proc(n: ^engine.Node) -> int {
+	b := size_of(engine.Node) + len(n.id) + len(n.name) + len(n.content) + len(n.font_family) + len(n.type_name)
+	b += cap(n.props) * size_of(engine.Prop)
 	for p in n.props do b += len(p.key) + len(p.raw)
 	return b
 }
 
 // A step's own part: its list of layers (the records it shares are counted once, in
 // undo_records_bytes).
-snapshot_bytes :: proc(s: Snapshot) -> int {
+snapshot_bytes :: proc(s: engine.Snapshot) -> int {
 	return len(s.nodes) * size_of(rawptr)
 }
 
 undo_records_bytes :: proc() -> int {
 	b := 0
-	for _, r in node_records do b += size_of(Node_Record) + node_bytes(&r.node) - size_of(Node)
-	for _, r in header_records {
-		b += size_of(Header_Record) + len(r.lib_vars)
-		for p in r.props do b += len(p.key) + len(p.raw) + size_of(Prop)
+	for _, r in engine.node_records do b += size_of(engine.Node_Record) + node_bytes(&r.node) - size_of(engine.Node)
+	for _, r in engine.header_records {
+		b += size_of(engine.Header_Record) + len(r.lib_vars)
+		for p in r.props do b += len(p.key) + len(p.raw) + size_of(engine.Prop)
 	}
 	return b
 }
@@ -164,16 +166,16 @@ api_memory :: proc(b: ^strings.Builder) {
 		for s in t.redo_stack do tabs_b += snapshot_bytes(s)
 	}
 	text_b := 0
-	for _, m in text_cache do text_b += size_of(Text_Metrics) + len(m.rows) * size_of([2]int)
+	for _, m in engine.text_cache do text_b += size_of(engine.Text_Metrics) + len(m.rows) * size_of([2]int)
 	outline_b := 0
-	for _, o in outline_cache do outline_b += len(o.verts) * size_of(o.verts[0]) + len(o.signs)
+	for _, o in engine.outline_cache do outline_b += len(o.verts) * size_of(o.verts[0]) + len(o.signs)
 	fonts_b, glyphs := 0, 0
 	for f in app.vg.fs.fonts {
 		fonts_b += len(f.loadedData)
 		glyphs += len(f.glyphs)
 	}
 	blur_px := 0
-	for bb in blur_buffers do blur_px += bb.w * bb.h * 2
+	for bb in engine.blur_buffers do blur_px += bb.w * bb.h * 2
 	temp := (^runtime.Default_Temp_Allocator)(context.temp_allocator.data)
 	temp_cap := 0
 	if temp != nil do temp_cap = int(temp.arena.total_capacity)
@@ -193,35 +195,15 @@ api_memory :: proc(b: ^strings.Builder) {
 	for k, n in by_site {
 		if !first do strings.write_byte(b, ',')
 		first = false
-		json_write_string(b, k)
+		engine.json_write_string(b, k)
 		fmt.sbprintf(b, ":%d", n)
 	}
 	strings.write_string(b, "},")
 	fmt.sbprintf(
 		b,
 		`"node_size":%d,"nodes":%d,"nodes_bytes":%d,"ghosts":%d,"ghosts_bytes":%d,"undo":%d,"undo_bytes":%d,"undo_records":%d,"undo_records_bytes":%d,"redo":%d,"redo_bytes":%d,"other_tabs_bytes":%d,"text_cache":%d,"text_cache_bytes":%d,"outline_cache":%d,"outline_bytes":%d,"fonts":%d,"font_data_bytes":%d,"glyphs":%d,"atlas":[%d,%d],"images":%d,"gradient_textures":%d,"thumbnails":%d,"blur_buffers":%d,"blur_texture_bytes":%d,"var_instances":%d,"temp_arena_bytes":%d,"framebuffer":[%d,%d]}}`,
-		size_of(Node), len(doc.nodes), nodes_b, len(doc.ghosts), ghosts_b, len(app.undo_stack), undo_b, len(node_records), undo_records_bytes(), len(app.redo_stack), redo_b, tabs_b,
-		len(text_cache), text_b, len(outline_cache), outline_b, len(app.vg.fs.fonts), fonts_b, glyphs, app.vg.fs.width, app.vg.fs.height,
-		len(images), len(gradient_images), len(thumbs), len(blur_buffers), blur_px * 4, len(var_instances), temp_cap, fb.x, fb.y,
+		size_of(engine.Node), len(doc.nodes), nodes_b, len(doc.ghosts), ghosts_b, len(app.undo_stack), undo_b, len(engine.node_records), undo_records_bytes(), len(app.redo_stack), redo_b, tabs_b,
+		len(engine.text_cache), text_b, len(engine.outline_cache), outline_b, len(app.vg.fs.fonts), fonts_b, glyphs, app.vg.fs.width, app.vg.fs.height,
+		len(engine.images), len(engine.gradient_images), len(thumbs), len(engine.blur_buffers), blur_px * 4, len(engine.var_instances), temp_cap, fb.x, fb.y,
 	)
 }
-
-// A file mapped read-only into memory: its pages are the file's, clean, and the system
-// drops and rereads them as it likes; they do not count against the app as a copy read
-// into memory does. Fonts are used this way (the system UI font alone is 9 MB).
-map_file :: proc(path: string) -> ([]u8, bool) {
-	cpath := strings.clone_to_cstring(path, context.temp_allocator)
-	fd := posix.open(cpath, {})
-	if fd < 0 do return nil, false
-	defer posix.close(fd)
-	st: posix.stat_t
-	if posix.fstat(fd, &st) != .OK || st.st_size <= 0 do return nil, false
-	p := posix.mmap(nil, uint(st.st_size), {.READ}, {.PRIVATE}, fd, 0)
-	if p == posix.MAP_FAILED do return nil, false
-	return ([^]u8)(p)[:int(st.st_size)], true
-}
-
-unmap_file :: proc(data: []u8) {
-	if len(data) > 0 do posix.munmap(raw_data(data), uint(len(data)))
-}
-

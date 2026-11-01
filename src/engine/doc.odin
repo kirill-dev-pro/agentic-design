@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:encoding/json"
 import "core:fmt"
@@ -318,6 +318,7 @@ Document :: struct {
 	resolve_theme: map[string]string, // theme used while parsing the node being refreshed
 	building_ghosts: bool, // refreshes inside ghost expansion must not bump the version
 	lib_vars:        string, // variables of imported libraries, renamed "alias:name" (JSON)
+	path:            string, // the file, for what lies next to it (images, fonts); set by the host
 }
 
 // Property overrides an instance applies to one node of its component.
@@ -834,6 +835,7 @@ doc_destroy :: proc(doc: ^Document) {
 	delete(doc.theme_axes)
 	delete(doc.resolve_theme)
 	delete(doc.lib_vars)
+	delete(doc.path)
 	doc^ = {}
 }
 
@@ -1094,7 +1096,7 @@ node_label :: proc(n: ^Node) -> string {
 	if n.kind == .Other && n.type_name != "" do return n.type_name
 	if n.kind == .Icon && n.icon != "" do return n.icon
 	if n.kind == .Ref {
-		if comp, _ := doc_find(&app.doc, n.ref); comp != nil && comp.uid != n.uid do return node_label(comp)
+		if comp, _ := doc_find(current, n.ref); comp != nil && comp.uid != n.uid do return node_label(comp)
 	}
 	return KIND_LABELS[n.kind]
 }
@@ -1541,8 +1543,9 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 			}
 		case "descendants":
 			if desc, is_obj := v.(json.Object); is_obj {
-				for path, o in desc {
-					over, over_obj := o.(json.Object)
+				// in key order: two paths can name the same part, and the later one wins
+				for path in sorted_keys(desc) {
+					over, over_obj := desc[path].(json.Object)
 					if !over_obj do continue
 					id := path
 					if i := strings.last_index_byte(path, '/'); i >= 0 do id = path[i + 1:]

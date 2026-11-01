@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:slice"
@@ -28,8 +30,8 @@ variables_table_open :: proc() {
 
 // The raw value of a variable for one value of an axis (other axes at their defaults):
 // the entry that names exactly that value, or the default entry.
-var_cell :: proc(name, axis, value: string, is_default: bool) -> (raw: json.Value, resolved: Var, ok: bool) {
-	vars := doc_variables(&app.doc)
+var_cell :: proc(name, axis, value: string, is_default: bool) -> (raw: json.Value, resolved: engine.Var, ok: bool) {
+	vars := engine.doc_variables(&app.doc)
 	def, has := vars[name].(json.Object)
 	if !has do return
 	v := def["value"]
@@ -53,9 +55,9 @@ var_cell :: proc(name, axis, value: string, is_default: bool) -> (raw: json.Valu
 	saved := make(map[string]string, context.temp_allocator)
 	for k, s in app.doc.resolve_theme do saved[k] = s
 	clear(&app.doc.resolve_theme)
-	for a in doc_theme_axes(&app.doc) do if len(a.values) > 0 do app.doc.resolve_theme[a.name] = a.values[0]
+	for a in engine.doc_theme_axes(&app.doc) do if len(a.values) > 0 do app.doc.resolve_theme[a.name] = a.values[0]
 	if axis != "" do app.doc.resolve_theme[axis] = value
-	resolved, ok = var_get(&app.doc, name)
+	resolved, ok = engine.var_get(&app.doc, name)
 	clear(&app.doc.resolve_theme)
 	for k, s in saved do app.doc.resolve_theme[k] = s
 	return
@@ -64,17 +66,17 @@ var_cell :: proc(name, axis, value: string, is_default: bool) -> (raw: json.Valu
 // Sets a variable's value for one value of an axis (the default value writes the
 // untagged entry); other themed values stay as they are.
 var_set_for :: proc(name, kind, text, axis, value: string, is_default: bool) {
-	vars := doc_variables(&app.doc)
+	vars := engine.doc_variables(&app.doc)
 	def, has := vars[name].(json.Object)
 	if !has do return
-	lit := variable_literal(kind, text)
+	lit := engine.variable_literal(kind, text)
 	if strings.has_prefix(text, "$") do lit = json.String(text)
 	arr, is_arr := def["value"].(json.Array)
 	if !is_arr {
 		if is_default || axis == "" {
 			def["value"] = lit
 			vars[name] = def
-			doc_write_variables(&app.doc, vars)
+			engine.doc_write_variables(&app.doc, vars)
 			return
 		}
 		arr = make(json.Array, 0, 2, context.temp_allocator)
@@ -109,7 +111,7 @@ var_set_for :: proc(name, kind, text, axis, value: string, is_default: bool) {
 	}
 	def["value"] = arr
 	vars[name] = def
-	doc_write_variables(&app.doc, vars)
+	engine.doc_write_variables(&app.doc, vars)
 }
 
 draw_variables_table :: proc(vg: ^nvg.Context) {
@@ -137,7 +139,7 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 	}
 
 	// axis tabs, search, add
-	axes := doc_theme_axes(&app.doc)
+	axes := engine.doc_theme_axes(&app.doc)
 	if vtable.axis >= len(axes) do vtable.axis = 0
 	tx := sheet.x + 24
 	ty := sheet.y + 58
@@ -151,7 +153,7 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 	}
 	if lucide_button(vg, {tx + 2, ty + 2, 24, 24}, "plus", false, "Add a theme axis") {
 		push_undo()
-		theme_add_value(&app.doc, fmt.tprintf("axis%d", len(axes) + 1), "default")
+		engine.theme_add_value(&app.doc, fmt.tprintf("axis%d", len(axes) + 1), "default")
 		mark_dirty()
 	}
 	sr := Rect{sheet.x + sheet.w - 24 - 220 - 8 - 140, ty, 220, 28}
@@ -169,10 +171,10 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 		base := [4]string{"color.new", "number.new", "string.new", "boolean.new"}
 		name := base[pick]
 		for i := 2; i < 100; i += 1 {
-			if _, taken := doc_variables(&app.doc)[name]; !taken do break
+			if _, taken := engine.doc_variables(&app.doc)[name]; !taken do break
 			name = fmt.tprintf("%s%d", base[pick], i)
 		}
-		doc_set_variable(&app.doc, name, kinds[pick], defaults[pick])
+		engine.doc_set_variable(&app.doc, name, kinds[pick], defaults[pick])
 		mark_dirty()
 	}
 
@@ -198,14 +200,14 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 	if axis_name != "" {
 		if lucide_button(vg, {table.x + table.w - 26, table.y, 24, 24}, "plus", false, fmt.tprintf("Add a %s value", axis_name)) {
 			push_undo()
-			theme_add_value(&app.doc, axis_name, fmt.tprintf("%s%d", "value", len(values) + 1))
+			engine.theme_add_value(&app.doc, axis_name, fmt.tprintf("%s%d", "value", len(values) + 1))
 			mark_dirty()
 		}
 	}
 	fill_rect(vg, {table.x, table.y + 26, table.w, 1}, PANEL_LINE)
 
 	body := Rect{table.x, table.y + 30, table.w, table.h - 30}
-	vars := doc_variables(&app.doc)
+	vars := engine.doc_variables(&app.doc)
 	names := make([dynamic]string, 0, len(vars), context.temp_allocator)
 	needle := strings.to_lower(strings.trim_space(vtable.search), context.temp_allocator)
 	for name in vars do if needle == "" || strings.contains(strings.to_lower(name, context.temp_allocator), needle) do append(&names, name)
@@ -233,14 +235,14 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 			shown := ""
 			#partial switch x in raw {
 			case json.String: shown = string(x)
-			case json.Float: shown = num_text(f32(x))
+			case json.Float: shown = engine.num_text(f32(x))
 			case json.Integer: shown = fmt.tprintf("%d", x)
 			case json.Boolean: shown = "true" if x else "false"
 			}
 			tx2 := cell.x + 6
 			if ok && resolved.kind == .Color {
 				sw := Rect{cell.x + 6, cell.y + 6, 14, 14}
-				fill_rect(vg, sw, to_nvg(resolved.color), 3)
+				fill_rect(vg, sw, engine.to_nvg(resolved.color), 3)
 				stroke_rect(vg, sw, {1, 1, 1, 0.15}, 3)
 				tx2 = cell.x + 24
 			}
@@ -255,7 +257,7 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 	if content > body.h do vtable.scroll = scrollbar(vg, "vtable", body, content, vtable.scroll)
 	if remove != "" {
 		push_undo()
-		doc_remove_variable(&app.doc, remove)
+		engine.doc_remove_variable(&app.doc, remove)
 		mark_dirty()
 	}
 }
@@ -270,7 +272,7 @@ variables_table_apply :: proc(key, text: string) -> bool {
 	if kind == "color" && !strings.has_prefix(t, "#") && !strings.has_prefix(t, "$") do t = fmt.tprintf("#%s", t)
 	push_undo()
 	var_set_for(name, kind, t, axis, value, column == "0")
-	doc_retheme(&app.doc)
+	engine.doc_retheme(&app.doc)
 	mark_dirty()
 	return true
 }

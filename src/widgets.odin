@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:fmt"
 import "core:math"
 import "core:strconv"
@@ -50,7 +52,7 @@ UI :: struct {
 	slider:        string, // key of the slider being dragged
 	scrollbar:     string, // key of the scrollbar being dragged
 	scrollbar_off: f32,
-	icons:         map[Icon][dynamic]Path_Cmd,
+	icons:         map[Icon][dynamic]engine.Path_Cmd,
 	// application panels
 	expanded:       map[int]bool, // layer tree rows that show their children
 	theme_tab:      bool, // sidebar shows variables instead of layers
@@ -294,7 +296,7 @@ ICON_PATHS := [Icon]string {
 draw_icon :: proc(vg: ^nvg.Context, icon: Icon, cx, cy: f32, color: nvg.Color, size: f32 = 16) {
 	cmds, cached := ui.icons[icon]
 	if !cached {
-		cmds, _, _ = parse_svg_path(ICON_PATHS[icon])
+		cmds, _, _ = engine.parse_svg_path(ICON_PATHS[icon])
 		ui.icons[icon] = cmds
 	}
 	nvg.Save(vg)
@@ -517,7 +519,7 @@ field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: s
 				ui.scrub_moved = true
 				if !focused do field_focus(uid, key, value)
 				strings.builder_reset(&ui.buf)
-				strings.write_string(&ui.buf, num_text(ui.scrub_value + d))
+				strings.write_string(&ui.buf, engine.num_text(ui.scrub_value + d))
 				ui.caret, ui.sel = strings.builder_len(ui.buf), 0
 				field_apply()
 			}
@@ -715,7 +717,7 @@ field_keys :: proc(index: int, numeric: bool) {
 			step: f32 = 10 if shift else 1
 			if key_hit(glfw.KEY_DOWN) do step = -step
 			strings.builder_reset(b)
-			strings.write_string(b, num_text(f + step))
+			strings.write_string(b, engine.num_text(f + step))
 			ui.caret, ui.sel = strings.builder_len(b^), 0
 			push_undo()
 			field_apply()
@@ -923,7 +925,7 @@ draw_menu :: proc(vg: ^nvg.Context) {
 		lbl, hint := menu_split(it)
 		if m.checked == vi do draw_icon(vg, .Check, row.x + 12, row.y + h / 2, TEXT_FG, 12)
 		if m.font_preview {
-			nvg.FontFace(vg, font_face(lbl, 400, false))
+			nvg.FontFace(vg, engine.font_face(lbl, 400, false))
 			nvg.FontSize(vg, 13)
 			nvg.TextAlign(vg, .LEFT, .MIDDLE)
 			nvg.FillColor(vg, TEXT_FG)
@@ -961,7 +963,7 @@ Picker :: struct {
 	drag:        enum {None, SV, Hue, Alpha},
 	just_opened: bool,
 	changed:     bool, // a new color is waiting in `color`
-	color:       Color,
+	color:       engine.Color,
 	ref:         string, // "$name" when a document color was picked
 	result_key:  string,
 	current:     string, // variable the property uses now ("" = a literal color)
@@ -971,7 +973,7 @@ Picker :: struct {
 }
 
 // `ref` names the variable the property is bound to ("$name"), if any.
-picker_open :: proc(key: string, anchor: Rect, c: Color, ref := "") {
+picker_open :: proc(key: string, anchor: Rect, c: engine.Color, ref := "") {
 	picker_close()
 	p := &ui.picker
 	p.open = true
@@ -1003,7 +1005,7 @@ picker_is_open :: proc(key: string) -> bool {
 
 // The color chosen since the last call (continuous while dragging). `ref` is set
 // when a document color variable was picked instead of a literal.
-picker_take :: proc(key: string) -> (c: Color, ref: string, changed: bool) {
+picker_take :: proc(key: string) -> (c: engine.Color, ref: string, changed: bool) {
 	p := &ui.picker
 	if p.changed && p.result_key == key {
 		p.changed = false
@@ -1071,7 +1073,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 	hue_col := hsv_to_rgb(p.h, 1, 1, 1)
 	nvg.BeginPath(vg)
 	nvg.RoundedRect(vg, sv.x, sv.y, sv.w, sv.h, 6)
-	nvg.FillPaint(vg, nvg.LinearGradient(sv.x, sv.y, sv.x + sv.w, sv.y, {1, 1, 1, 1}, to_nvg(hue_col)))
+	nvg.FillPaint(vg, nvg.LinearGradient(sv.x, sv.y, sv.x + sv.w, sv.y, {1, 1, 1, 1}, engine.to_nvg(hue_col)))
 	nvg.Fill(vg)
 	nvg.BeginPath(vg)
 	nvg.RoundedRect(vg, sv.x, sv.y, sv.w, sv.h, 6)
@@ -1097,7 +1099,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 		c1 := hsv_to_rgb(f32(i + 1) / 6, 1, 1, 1)
 		nvg.BeginPath(vg)
 		nvg.Rect(vg, seg.x, seg.y, seg.w, seg.h)
-		nvg.FillPaint(vg, nvg.LinearGradient(seg.x, seg.y, seg.x + seg.w, seg.y, to_nvg(c0), to_nvg(c1)))
+		nvg.FillPaint(vg, nvg.LinearGradient(seg.x, seg.y, seg.x + seg.w, seg.y, engine.to_nvg(c0), engine.to_nvg(c1)))
 		nvg.Fill(vg)
 	}
 	picker_knob(vg, hue.x + p.h * hue.w, hue.y + hue.h / 2)
@@ -1113,7 +1115,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 	opaque := hsv_to_rgb(p.h, p.s, p.v, 1)
 	nvg.BeginPath(vg)
 	nvg.Rect(vg, al.x, al.y, al.w, al.h)
-	nvg.FillPaint(vg, nvg.LinearGradient(al.x, al.y, al.x + al.w, al.y, {0, 0, 0, 0}, to_nvg(opaque)))
+	nvg.FillPaint(vg, nvg.LinearGradient(al.x, al.y, al.x + al.w, al.y, {0, 0, 0, 0}, engine.to_nvg(opaque)))
 	nvg.Fill(vg)
 	picker_knob(vg, al.x + p.a * al.w, al.y + al.h / 2)
 
@@ -1142,7 +1144,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 	// hex and alpha fields
 	fy := al.y + al.h + 14
 	cur := hsv_to_rgb(p.h, p.s, p.v, p.a)
-	fill_rect(vg, {r.x + 12, fy + 3, 22, 22}, to_nvg(cur), 5)
+	fill_rect(vg, {r.x + 12, fy + 3, 22, 22}, engine.to_nvg(cur), 5)
 	stroke_rect(vg, {r.x + 12, fy + 3, 22, 22}, {1, 1, 1, 0.15}, 5)
 	field(vg, 0, "picker.hex", "", {r.x + 42, fy, 100, 28}, fmt.tprintf("%02X%02X%02X", cur[0], cur[1], cur[2]))
 	field(vg, 0, "picker.alpha", "", {r.x + 150, fy, 70, 28}, fmt.tprintf("%d%%", int(p.a * 100 + 0.5)), numeric = true)
@@ -1181,9 +1183,9 @@ draw_picker :: proc(vg: ^nvg.Context) {
 			if name == p.current do fill_rect(vg, row, ACTIVE_BG, 6)
 			else if in_rect(row, app.mouse) && in_rect(list, app.mouse) do fill_rect(vg, row, HOVER_BG, 6)
 			sw := Rect{row.x + 8, row.y + 5, 18, 18}
-			fill_rect(vg, sw, to_nvg(c), 4)
+			fill_rect(vg, sw, engine.to_nvg(c), 4)
 			stroke_rect(vg, sw, {1, 1, 1, 0.15}, 4)
-			hex := color_hex(c)[1:]
+			hex := engine.color_hex(c)[1:]
 			hw := text_width(vg, hex, 11)
 			nvg.Save(vg)
 			nvg.IntersectScissor(vg, row.x, row.y, row.w - hw - 18, row.h)
@@ -1206,8 +1208,8 @@ draw_picker :: proc(vg: ^nvg.Context) {
 		gy += 14
 		for hex, i in SWATCHES {
 			sw := Rect{r.x + 12 + f32(i % 8) * 28, gy + f32(i / 8) * 28, 22, 22}
-			c, _ := parse_color(hex)
-			fill_rect(vg, sw, to_nvg(c), 5)
+			c, _ := engine.parse_color(hex)
+			fill_rect(vg, sw, engine.to_nvg(c), 5)
 			stroke_rect(vg, sw, {1, 1, 1, 0.15}, 5)
 			if in_rect(sw, app.mouse) {
 				stroke_rect(vg, {sw.x - 2, sw.y - 2, sw.w + 4, sw.h + 4}, TEXT_FG, 7, 1.5)
@@ -1243,7 +1245,7 @@ picker_apply_text :: proc(key, text: string) {
 	t := strings.trim_space(text)
 	if key == "picker.hex" {
 		hex := t if strings.has_prefix(t, "#") else fmt.tprintf("#%s", t)
-		if c, ok := parse_color(hex); ok {
+		if c, ok := engine.parse_color(hex); ok {
 			p.h, p.s, p.v = rgb_to_hsv(c)
 			if len(hex) > 7 do p.a = f32(c[3]) / 255
 			picker_set()
@@ -1254,7 +1256,7 @@ picker_apply_text :: proc(key, text: string) {
 	}
 }
 
-rgb_to_hsv :: proc(c: Color) -> (h, s, v: f32) {
+rgb_to_hsv :: proc(c: engine.Color) -> (h, s, v: f32) {
 	r, g, b := f32(c[0]) / 255, f32(c[1]) / 255, f32(c[2]) / 255
 	mx, mn := max(r, g, b), min(r, g, b)
 	v = mx
@@ -1271,7 +1273,7 @@ rgb_to_hsv :: proc(c: Color) -> (h, s, v: f32) {
 	return
 }
 
-hsv_to_rgb :: proc(h, s, v, a: f32) -> Color {
+hsv_to_rgb :: proc(h, s, v, a: f32) -> engine.Color {
 	i := int(h * 6)
 	f := h * 6 - f32(i)
 	p, q, t := v * (1 - s), v * (1 - s * f), v * (1 - s * (1 - f))

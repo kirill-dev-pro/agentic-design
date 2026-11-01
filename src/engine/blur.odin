@@ -1,10 +1,10 @@
-package agentic_design
+package engine
 
 import "core:fmt"
 import "core:math"
 import gl "vendor:OpenGL"
-import nvg "nanovg"
-import nvgl "nanovg/gl"
+import nvg "../nanovg"
+import nvgl "../nanovg/gl"
 
 // Layer blur and background blur. NanoVG draws a frame when it ends, so a blur is made
 // before the frame that shows it: the layer (or everything painted before it) is drawn
@@ -18,6 +18,7 @@ Blur_View :: struct {
 	clip: [4]f32, // the visible part, frame coordinates
 	fb:   [2]i32, // framebuffer size
 	bg:   nvg.Color, // behind everything: the canvas or the export background
+	order: []int, // layers in paint order (a blur behind another is made first)
 }
 
 Blur_Result :: struct {
@@ -51,8 +52,8 @@ blur_prepare :: proc(view: Blur_View) {
 	clear(&blur_layer)
 	clear(&blur_backdrop)
 	count := 0
-	for uid in app.draw_order {
-		n, _ := doc_find_uid(&app.doc, uid)
+	for uid in view.order {
+		n, _ := doc_find_uid(current, uid)
 		if n == nil do continue
 		for e in n.effects[:n.neffects] {
 			if !e.enabled || e.blur <= 0 || (e.kind != .Blur && e.kind != .Background_Blur) do continue
@@ -75,8 +76,8 @@ blur_buffer :: proc(i, w, h: int) -> ^Blur_Buffer {
 			nvgl.DeleteFramebuffer(&b.a)
 			nvgl.DeleteFramebuffer(&b.b)
 		}
-		b.a = nvgl.CreateFramebuffer(app.vg, w, h, {})
-		b.b = nvgl.CreateFramebuffer(app.vg, w, h, {})
+		b.a = nvgl.CreateFramebuffer(renderer, w, h, {})
+		b.b = nvgl.CreateFramebuffer(renderer, w, h, {})
 		b.w, b.h = w, h
 	}
 	return b
@@ -110,7 +111,7 @@ blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: i
 	h := min(int(math.ceil((hi.y - lo.y) / down)), 2048)
 	buf := blur_buffer(index, w, h)
 
-	vg := app.vg
+	vg := renderer
 	nvgl.BindFramebuffer(&buf.a)
 	gl.Viewport(0, 0, i32(w), i32(h))
 	if back do gl.ClearColor(view.bg.r, view.bg.g, view.bg.b, 1)
@@ -133,9 +134,9 @@ blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: i
 	if back {
 		// everything painted before the layer
 		blur_stop, blur_stopped = n.uid, false
-		for cu in children_of(&app.doc, 0) {
-			if app.page_hidden[cu] do continue
-			if c, _ := doc_find_uid(&app.doc, cu); c != nil do draw_node_tree(vg, c, 1, 0)
+		for cu in children_of(current, 0) {
+			if is_hidden(cu) do continue
+			if c, _ := doc_find_uid(current, cu); c != nil do draw_node_tree(vg, c, 1, 0)
 		}
 		blur_stop, blur_stopped = 0, false
 	} else {
@@ -156,7 +157,7 @@ blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: i
 
 // The turns and flips of the layers around n (not its own).
 node_transform_of_parent :: proc(n: ^Node) -> (Xform, bool) {
-	p, _ := doc_find_uid(&app.doc, n.parent)
+	p, _ := doc_find_uid(current, n.parent)
 	if p == nil do return XFORM_IDENTITY, false
 	return node_transform(p)
 }

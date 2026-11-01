@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "base:runtime"
 import "core:c"
@@ -62,7 +62,7 @@ PNG_LEVEL :: 6
 // zlib's allocations (its window and hash tables) through the app's allocator.
 @(private = "file")
 z_alloc :: proc "c" (opaque: rawptr, items, size: c.uint) -> rawptr {
-	context = app_context()
+	context = callback_context()
 	n := int(items) * int(size)
 	// a header in front keeps the size for the free
 	p, err := runtime.mem_alloc_non_zeroed(n + 16, 16)
@@ -73,7 +73,7 @@ z_alloc :: proc "c" (opaque: rawptr, items, size: c.uint) -> rawptr {
 
 @(private = "file")
 z_free :: proc "c" (opaque: rawptr, address: rawptr) {
-	context = app_context()
+	context = callback_context()
 	base := rawptr(uintptr(address) - 16)
 	runtime.mem_free_with_size(base, (^int)(base)^)
 }
@@ -213,7 +213,7 @@ png_write :: proc(pixels: []u8, w, h: int, bottom_up: bool, allocator := context
 		ts := make([]^thread.Thread, n - 1)
 		defer delete(ts)
 		for i in 1 ..< n {
-			ts[i - 1] = thread.create_and_start_with_poly_data(&strips[i], png_strip_work, app_context())
+			ts[i - 1] = thread.create_and_start_with_poly_data(&strips[i], png_strip_work, callback_context())
 		}
 		png_strip_work(&strips[0])
 		for t in ts {

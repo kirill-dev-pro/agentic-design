@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:encoding/json"
 import "core:fmt"
@@ -57,7 +57,7 @@ generate_code :: proc(doc: ^Document, format: Code_Format, roots: []int = nil) -
 	switch format {
 	case .HTML:
 		fmt.sbprintf(&g.out, "<!doctype html>\n<html%s>\n<head>\n<meta charset=\"utf-8\">\n", shown_theme_attrs(doc))
-		fmt.sbprintf(&g.out, "<title>%s</title>\n<link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n", html_escape(file_title(app.file_path)))
+		fmt.sbprintf(&g.out, "<title>%s</title>\n<link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n", html_escape(file_title(current.path)))
 		for cu in export_roots(&g) {
 			n, _ := doc_find_uid(doc, cu)
 			if n == nil || !n.enabled do continue
@@ -82,39 +82,6 @@ generate_code :: proc(doc: ^Document, format: Code_Format, roots: []int = nil) -
 		append(&files, Code_File{"Page.tsx", page})
 	}
 	return files[:]
-}
-
-// Writes the files into a folder next to the document (or `dir`) and returns it.
-export_code_to_dir :: proc(format: Code_Format, dir := "", roots: []int = nil) -> (string, bool) {
-	files := generate_code(&app.doc, format, roots)
-	target := dir
-	if target == "" do target = fmt.tprintf("%s/%s-%s", downloads_dir(), file_title(app.file_path), "html" if format == .HTML else "react")
-	if err := os.make_directory_all(target); err != nil && !os.is_dir(target) do return target, false // fails on an existing folder
-	for f in files {
-		if err := os.write_entire_file(fmt.tprintf("%s/%s", target, f.name), f.content); err != nil do return target, false
-	}
-	// the fonts and images the code refers to, next to it
-	for rel, src in export_assets {
-		dst := fmt.tprintf("%s/%s", target, rel)
-		_ = os.make_directory_all(os.dir(dst))
-		if os.exists(dst) do _ = os.remove(dst)
-		if err := os.copy_file(dst, src); err != nil do return target, false
-	}
-	return target, true
-}
-
-// Where exports go: ~/Downloads, or for a quiet (test) window a folder in $TMPDIR.
-// ~/Downloads is privacy-protected: the first write from a process without access waits
-// in open() for the user to answer a system prompt, which froze a fuzzed test window (and
-// would show the user a dialog).
-downloads_dir :: proc() -> string {
-	if pf.quiet {
-		dir := fmt.tprintf("%s/agentic-design-downloads", strings.trim_suffix(os.temp_directory(context.temp_allocator) or_else "/tmp", "/"))
-		_ = os.make_directory_all(dir)
-		return dir
-	}
-	home, _ := os.user_home_dir(context.temp_allocator)
-	return fmt.tprintf("%s/Downloads", home)
 }
 
 // Files the generated code refers to: path relative to the export -> the file on disk.
@@ -170,7 +137,7 @@ gen_font_faces :: proc(g: ^Gen) {
 			strings.write_string(&g.css, "  font-display: swap;\n}\n")
 		}
 	}
-	base := filepath.dir(app.file_path)
+	base := filepath.dir(current.path)
 	for p in g.doc.header do if p.key == "fonts" {
 		if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do write_list(g, v, base)
 	}
@@ -194,7 +161,7 @@ export_roots :: proc(g: ^Gen) -> []int {
 	if len(g.roots) > 0 do return g.roots
 	out := make([dynamic]int, context.temp_allocator)
 	for cu in children_of(g.doc, 0) {
-		if app.page_hidden[cu] do continue
+		if is_hidden(cu) do continue
 		n, _ := doc_find_uid(g.doc, cu)
 		if n == nil || n.reusable do continue
 		append(&out, cu)
@@ -576,7 +543,7 @@ gen_css_vars :: proc(g: ^Gen, used_in: string) {
 	}
 	slice.sort(names[:])
 	saved_theme := make(map[string]string, context.temp_allocator)
-	for k, v in app.theme do saved_theme[k] = v
+	for k, v in theme do saved_theme[k] = v
 	axes := doc_theme_axes(doc)
 	write_block :: proc(g: ^Gen, names: []string, selector: string, axis := "") {
 		fmt.sbprintf(&g.css, "%s {{\n", selector)
@@ -673,10 +640,10 @@ export_node :: proc(g: ^Gen, n: ^Node) -> ^Node {
 			v, err := json.parse_string(o.raw, .JSON5, false, context.temp_allocator)
 			obj, ok := v.(json.Object)
 			if err != nil || !ok do continue
-			for k, val in obj {
+			for k in sorted_keys(obj) {
 				if k == "type" || k == "id" || k == "children" do continue
 				b := strings.builder_make(context.temp_allocator)
-				write_json_value(&b, val)
+				write_json_value(&b, obj[k])
 				set(&props, k, strings.to_string(b))
 			}
 		}
@@ -1126,7 +1093,7 @@ shown_theme_attrs :: proc(doc: ^Document) -> string {
 		case "viewport", "breakpoint", "screen", "device":
 			continue // responsive: media queries pick it, not the window's choice
 		}
-		cur, set := app.theme[a.name]
+		cur, set := theme[a.name]
 		if set && len(a.values) > 0 && cur != a.values[0] do fmt.sbprintf(&b, " data-theme-%s=\"%s\"", css_name(a.name), html_escape(cur))
 	}
 	return strings.to_string(b)
@@ -1306,11 +1273,11 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 
 // The selected layers as a standalone HTML snippet with their CSS (⌥⌘C, "copy as HTML").
 html_snippet :: proc(uids: []int) -> string {
-	g := Gen{doc = &app.doc, format = .HTML}
+	g := Gen{doc = current, format = .HTML}
 	g.css = strings.builder_make(context.temp_allocator)
 	g.out = strings.builder_make(context.temp_allocator)
 	for uid in uids {
-		if n, _ := doc_find_uid(&app.doc, uid); n != nil do gen_html_node(&g, n, 0, "", true)
+		if n, _ := doc_find_uid(current, uid); n != nil do gen_html_node(&g, n, 0, "", true)
 	}
 	nodes_css := strings.to_string(g.css)
 	g.css = strings.builder_make(context.temp_allocator)

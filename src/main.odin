@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:fmt"
 import "core:os"
 import "core:strconv"
@@ -37,14 +39,14 @@ font_instance_main :: proc(in_path: string, settings: []string, out_path: string
 		fmt.eprintln("cannot read", in_path)
 		os.exit(1)
 	}
-	axes := make([dynamic]Var_Axis)
+	axes := make([dynamic]engine.Var_Axis)
 	for s in settings {
 		i := strings.index_byte(s, '=')
 		if i < 0 do continue
 		v, _ := strconv.parse_f32(s[i + 1:])
-		append(&axes, Var_Axis{s[:i], v})
+		append(&axes, engine.Var_Axis{s[:i], v})
 	}
-	out, ok := varfont_instance(data, 0, axes[:])
+	out, ok := engine.varfont_instance(data, 0, axes[:])
 	if !ok {
 		fmt.eprintln("not a TrueType variable font")
 		os.exit(1)

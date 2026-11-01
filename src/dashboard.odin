@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:fmt"
 import "core:os"
 import "core:slice"
@@ -88,14 +90,14 @@ dashboard_entries :: proc() -> []Dash_Entry {
 			for info in infos {
 				if info.type == .Directory || !strings.has_suffix(info.name, ".pen") do continue
 				path := fmt.tprintf("%s/%s", app.files_dir, info.name)
-				append(&out, Dash_Entry{path, file_title(info.name), fmt.tprintf("Edited %s", ago(info.modification_time._nsec / 1_000_000_000))})
+				append(&out, Dash_Entry{path, engine.file_title(info.name), fmt.tprintf("Edited %s", ago(info.modification_time._nsec / 1_000_000_000))})
 			}
 		}
 		return out[:]
 	}
 	for r in recents {
 		if !os.exists(r.path) do continue
-		append(&out, Dash_Entry{r.path, file_title(r.path), fmt.tprintf("Opened %s", ago(r.time))})
+		append(&out, Dash_Entry{r.path, engine.file_title(r.path), fmt.tprintf("Opened %s", ago(r.time))})
 	}
 	return out[:]
 }

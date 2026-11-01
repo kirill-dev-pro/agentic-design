@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:math"
@@ -59,7 +61,7 @@ settings_save :: proc() {
 	s := settings
 	text := fmt.tprintf(
 		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v\n}}\n",
-		s.onboarded, num_text(s.nudge), num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors,
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors,
 	)
 	_ = os.write_entire_file(settings_path(), text)
 }
@@ -127,9 +129,9 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	y := sheet.y + 64
 	label(vg, x, y + 14, "Nudge", TEXT_FG, 13)
 	label(vg, x + 150, y + 14, "Arrow", TEXT_DIM, 12)
-	field(vg, 0, "settings.nudge", "", {x + 200, y, 60, 28}, num_text(settings.nudge), numeric = true)
+	field(vg, 0, "settings.nudge", "", {x + 200, y, 60, 28}, engine.num_text(settings.nudge), numeric = true)
 	label(vg, x + 280, y + 14, "⇧ Arrow", TEXT_DIM, 12)
-	field(vg, 0, "settings.nudge_big", "", {x + 340, y, 60, 28}, num_text(settings.nudge_big), numeric = true)
+	field(vg, 0, "settings.nudge_big", "", {x + 340, y, 60, 28}, engine.num_text(settings.nudge_big), numeric = true)
 	y += 48
 	Toggle :: struct {
 		name, hint: string,

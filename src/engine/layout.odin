@@ -1,9 +1,9 @@
-package agentic_design
+package engine
 
 import "core:hash"
 import "core:mem"
 import "core:strings"
-import nvg "nanovg"
+import nvg "../nanovg"
 
 // Layout pass: computes the absolute box of every node from the authored
 // positions, sizes and flex layout of the .pen tree. Two passes per subtree:
@@ -320,8 +320,8 @@ line_height_of :: proc(n: ^Node) -> f32 {
 	face := font_face(n.font_family, n.weight, n.italic)
 	if r, ok := line_ratio_cache[face]; ok do return r
 	r := f32(LINE_HEIGHT)
-	if app.vg != nil {
-		vg := app.vg
+	if renderer != nil {
+		vg := renderer
 		nvg.Save(vg)
 		nvg.ResetTransform(vg)
 		nvg.FontFace(vg, face)
@@ -400,7 +400,7 @@ text_measures: int
 
 measure_text_now :: proc(n: ^Node, wrap_w: f32) -> (m: Text_Metrics) {
 	text_measures += 1
-	vg := app.vg
+	vg := renderer
 	nvg.Save(vg)
 	defer nvg.Restore(vg)
 	nvg.ResetTransform(vg) // measure at document scale, whatever is being drawn

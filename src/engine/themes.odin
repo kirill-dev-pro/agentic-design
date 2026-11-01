@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:encoding/json"
 import "core:fmt"
@@ -8,7 +8,7 @@ import "core:strings"
 // Themes. The header declares axes and their values (`"themes": {"mode": ["light",
 // "dark"]}`); variables carry one value per theme (`value: [{value, theme: {mode:
 // "dark"}}, ...]`); a node's `theme` property switches the theme for its subtree.
-// `app.theme` is the mode shown globally; each node resolves its variables against
+// `theme` is the mode shown globally; each node resolves its variables against
 // the theme in effect at its place in the tree.
 
 Theme_Axis :: struct {
@@ -81,10 +81,10 @@ doc_theme_axes_write :: proc(doc: ^Document) {
 	doc.axes_version = doc.version
 }
 
-// Makes sure every axis has a chosen value in app.theme (the first one by default).
+// Makes sure every axis has a chosen value in theme (the first one by default).
 theme_defaults :: proc(doc: ^Document) {
 	for a in doc_theme_axes(doc) {
-		if _, has := app.theme[a.name]; !has && len(a.values) > 0 do app.theme[strings.clone(a.name)] = strings.clone(a.values[0])
+		if _, has := theme[a.name]; !has && len(a.values) > 0 do theme[strings.clone(a.name)] = strings.clone(a.values[0])
 	}
 }
 
@@ -129,7 +129,7 @@ theme_key :: proc(theme: map[string]string) -> string {
 // root down, then its own.
 theme_in_effect :: proc(doc: ^Document, n: ^Node, out: ^map[string]string) {
 	clear(out)
-	for k, v in app.theme do out[k] = v
+	for k, v in theme do out[k] = v
 	chain := make([dynamic]^Node, context.temp_allocator)
 	cur := n
 	for cur != nil {
@@ -143,11 +143,11 @@ theme_in_effect :: proc(doc: ^Document, n: ^Node, out: ^map[string]string) {
 	}
 }
 
-// Re-resolves variables and every node for the current app.theme.
+// Re-resolves variables and every node for the current theme.
 doc_retheme :: proc(doc: ^Document) {
 	doc_resolve_vars(doc)
 	for &n in doc.nodes do node_refresh(doc, &n)
-	app.needs_layout = true
+	layout_invalidate()
 }
 
 // Adds a value to an axis (creating the axis), giving every variable with themed
@@ -167,8 +167,8 @@ theme_add_value :: proc(doc: ^Document, axis, value: string) {
 	}
 	_ = axes
 	doc_theme_axes_write(doc)
-	delete(app.theme[axis])
-	app.theme[strings.clone(axis)] = strings.clone(value)
+	delete(theme[axis])
+	theme[strings.clone(axis)] = strings.clone(value)
 	doc_retheme(doc)
 }
 
@@ -210,9 +210,9 @@ theme_rename_value :: proc(doc: ^Document, axis, old, new: string) {
 			}
 		}
 	}
-	if cur, has := app.theme[axis]; has && cur == old {
-		delete(app.theme[axis])
-		app.theme[axis] = strings.clone(new)
+	if cur, has := theme[axis]; has && cur == old {
+		delete(theme[axis])
+		theme[axis] = strings.clone(new)
 	}
 	doc_retheme(doc)
 }
@@ -243,7 +243,7 @@ doc_set_variable_themed :: proc(doc: ^Document, name, kind, value: string) {
 	axes := doc_theme_axes(doc)
 	is_default := true
 	for a in axes {
-		if cur, set := app.theme[a.name]; set && len(a.values) > 0 && cur != a.values[0] do is_default = false
+		if cur, set := theme[a.name]; set && len(a.values) > 0 && cur != a.values[0] do is_default = false
 	}
 	arr, is_arr := def["value"].(json.Array)
 	if !is_arr {
@@ -276,7 +276,7 @@ doc_set_variable_themed :: proc(doc: ^Document, name, kind, value: string) {
 		if !tok do continue
 		match := true
 		for a in axes {
-			cur := app.theme[a.name]
+			cur := theme[a.name]
 			if string(th[a.name].(json.String) or_else a.values[0]) != cur do match = false
 		}
 		if match {
@@ -293,7 +293,7 @@ doc_set_variable_themed :: proc(doc: ^Document, name, kind, value: string) {
 		entry["value"] = lit
 		if !is_default {
 			th := make(json.Object, context.temp_allocator)
-			for a in axes do th[a.name] = json.String(app.theme[a.name])
+			for a in axes do th[a.name] = json.String(theme[a.name])
 			entry["theme"] = th
 		}
 		append(&arr, entry)

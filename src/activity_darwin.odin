@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "base:intrinsics"
 import NS "core:sys/darwin/Foundation"
 import "core:time"

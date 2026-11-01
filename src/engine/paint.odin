@@ -1,8 +1,8 @@
-package agentic_design
+package engine
 
 import "core:hash"
 import "core:math"
-import nvg "nanovg"
+import nvg "../nanovg"
 
 // Fills and effects of a node. NanoVG paints two-colour gradients only, so gradients are
 // drawn from small generated textures (any number of stops, linear, radial and angular)

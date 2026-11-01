@@ -1,0 +1,80 @@
+package engine
+
+import "base:intrinsics"
+import "base:runtime"
+import "core:c"
+import "core:fmt"
+import "core:os"
+import "core:strings"
+import NS "core:sys/darwin/Foundation"
+import "vendor:glfw"
+import nvg "../nanovg"
+
+// Image fills: files referenced relative to the .pen document, loaded into NanoVG on demand.
+
+images: map[string]int // absolute path -> nanovg image (0 = failed)
+
+image_resolve :: proc(url: string) -> string {
+	if os.is_absolute_path(url) do return url
+	u := url
+	if strings.has_prefix(u, "./") do u = u[2:]
+	return fmt.tprintf("%s/%s", os.dir(current.path), u)
+}
+
+image_for :: proc(url: string) -> (img: int, w, h: int) {
+	path := image_resolve(url)
+	if cached, has := images[path]; has {
+		img = cached
+	} else {
+		img = nvg.CreateImagePath(renderer, strings.clone_to_cstring(path, context.temp_allocator), {})
+		if img < 0 do img = 0
+		images[strings.clone(path)] = img
+	}
+	if img > 0 do w, h = nvg.ImageSize(renderer, img)
+	return
+}
+
+// Draws an image into the current path with cover/contain/stretch fitting.
+image_fill :: proc(vg: ^nvg.Context, n: ^Node) -> bool {
+	img, iw, ih := image_for(n.image_url)
+	if img == 0 || iw == 0 || ih == 0 do return false
+	w, h := f32(iw), f32(ih)
+	dw, dh := n.w, n.h
+	switch n.image_mode {
+	case .Cover:
+		s := max(n.w / w, n.h / h)
+		dw, dh = w * s, h * s
+	case .Contain:
+		s := min(n.w / w, n.h / h)
+		dw, dh = w * s, h * s
+	case .Stretch:
+	}
+	dx, dy := n.x + (n.w - dw) / 2, n.y + (n.h - dh) / 2
+	nvg.FillPaint(vg, nvg.ImagePattern(dx, dy, dw, dh, 0, img, 1))
+	nvg.Fill(vg)
+	return true
+}
+
+IMAGE_EXTS := [?]string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".psd", ".tga"}
+
+is_image_file :: proc(path: string) -> bool {
+	lower := strings.to_lower(path, context.temp_allocator)
+	for e in IMAGE_EXTS do if strings.has_suffix(lower, e) do return true
+	return false
+}
+
+// Puts data of one type (a UTI such as "public.png" or "public.html") on the system
+// clipboard; `text` adds a plain-text version beside it.
+clipboard_set :: proc(data: []u8, uti: string, text := "") {
+	pb := intrinsics.objc_send(^NS.Pasteboard, NS.Pasteboard, "generalPasteboard")
+	if pb == nil do return
+	_ = intrinsics.objc_send(NS.Integer, pb, "clearContents")
+	d := NS.Data.alloc()->initWithBytes(data)
+	t := NS.String.alloc()->initWithOdinString(uti)
+	_ = intrinsics.objc_send(NS.BOOL, pb, "setData:forType:", d, t)
+	if text != "" {
+		s := NS.String.alloc()->initWithOdinString(text)
+		_ = intrinsics.objc_send(NS.BOOL, pb, "setString:forType:", s, NS.AT("public.utf8-plain-text"))
+	}
+}
+

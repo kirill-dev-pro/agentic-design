@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:encoding/json"
 import "core:fmt"
@@ -125,7 +125,7 @@ prop_rank :: proc(key: string) -> int {
 }
 
 // Parses the "variables" header into doc.var_defs (every themed value of each
-// variable) and fills doc.vars with the values for the theme shown now (app.theme);
+// variable) and fills doc.vars with the values for the theme shown now (theme);
 // variables may point at other variables.
 doc_resolve_vars :: proc(doc: ^Document) {
 	vars_clear(doc)
@@ -136,7 +136,7 @@ doc_resolve_vars :: proc(doc: ^Document) {
 	var_defs_add(doc, doc.lib_vars)
 	// the values for the theme shown now, for the palette and the Theme tab
 	clear(&doc.resolve_theme)
-	for k, v in app.theme do doc.resolve_theme[k] = v
+	for k, v in theme do doc.resolve_theme[k] = v
 	for name in doc.var_defs {
 		if v, ok := var_get(doc, name); ok {
 			if v.kind == .String do v.str = strings.clone(v.str)

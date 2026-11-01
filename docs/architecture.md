@@ -22,6 +22,39 @@ Claude Code ──stdio──▶ agentic-design mcp ──TCP 127.0.0.1:4410─�
 Network threads only queue requests. The main thread runs them between frames
 (`process_requests`), so the document is never touched from two threads.
 
+## Engine and app
+
+The source is two Odin packages:
+
+- **`src/engine`** (package `engine`) works on `.pen` documents without a window. It holds
+  the document model and the file format, variables, themes, pages and libraries, layout,
+  fonts and text, drawing a node tree with NanoVG, blur, images, PNG encoding and code
+  export.
+- **`src/`** (package `agentic_design`) is the app built around it: the window and its
+  input, the interface, tabs, undo, the control socket, the MCP server and agent presence.
+  It refers to engine names with the `engine.` prefix.
+
+The engine imports nothing from the app. It can be compiled alone:
+`odin check src/engine -no-entry-point`. What it needs from its host is set in a few
+globals in `src/engine/engine.odin`:
+
+| Global | Set by the app to |
+| --- | --- |
+| `renderer` | the NanoVG context the engine draws and measures text with |
+| `current` | the document that drawing, lookups and labels work on (`&app.doc`; tabs swap into it) |
+| `hidden` | the set of top-level layers on pages that are not shown |
+| `theme` | the theme shown: axis -> value |
+| `allocator` | the allocator for code called from C (zlib), so that frees match |
+
+The engine tells the app that layout must run again by bumping `layout_epoch`
+(`layout_invalidate`). The draw order of top-level layers is built by the app and passed
+in where it is needed (`Blur_View.order`). A document carries its own `path`, so
+relative image and library paths resolve without app state. One engine serves one
+process and one thread: fonts and the glyph atlas live in the NanoVG context.
+
+The split exists for other hosts: a WebGPU renderer behind the same drawing calls, a
+viewer in the browser, and native apps on other platforms (decision #51).
+
 ## The frame
 
 `app_main` in `src/app.odin` runs one loop per frame:
@@ -41,7 +74,7 @@ Network threads only queue requests. The main thread runs them between frames
 Layout runs only when something changed (`app.needs_layout`, `mark_dirty`). The text and
 instance caches keep a layout pass cheap. On the reddit-ui sample a frame takes 2–5 ms.
 
-## Document model (`src/doc.odin`)
+## Document model (`src/engine/doc.odin`)
 
 A document is a **flat array of nodes**:
 
@@ -87,7 +120,7 @@ into a tree of *ghost* nodes:
 - Nesting is capped at `MAX_INSTANCE_DEPTH`, and an instance inside its own component is
   refused.
 
-**Themes** (`src/themes.odin`):
+**Themes** (`src/engine/themes.odin`):
 
 - **Axes.** The header declares axes and their values: `"themes": {"mode": ["light", "dark"]}`.
 - **Themed values.** A variable can carry one value per theme:
@@ -100,11 +133,11 @@ into a tree of *ghost* nodes:
 - **Instances under another theme.** When an instance sits under a different theme than its
   component, its ghosts are re-parsed under the instance's theme.
 
-**Pages** (`src/pages.odin`) live in the header as
+**Pages** (`src/engine/pages.odin`) live in the header as
 `"pages": [{"name", "nodes": [top-level ids]}]`. `pages_sync` turns the shown page into a set
 of hidden top-level uids every frame.
 
-## Layout (`src/layout.odin`)
+## Layout (`src/engine/layout.odin`)
 
 Each top-level subtree gets two passes:
 
@@ -126,18 +159,18 @@ Each top-level subtree gets two passes:
 cached value holds the size and the line breaks as byte ranges. Drawing replays those lines
 one by one, so wrapping does not change with zoom.
 
-## Rendering (`src/app.odin`)
+## Rendering (`src/engine/draw.odin`, `src/app.odin`)
 
 NanoVG draws everything on OpenGL 3.2:
 
 - the canvas under a camera transform (`app.cam`, `app.zoom`), including Lucide icons
-  from the built-in set (`src/icons.odin`, decision #22). Nodes outside the visible part
+  from the built-in set (`src/engine/icons.odin`, decision #22). Nodes outside the visible part
   of the page are skipped (`cull_rect`): leaves and clipping frames by their box,
   unclipped containers still visit their children.
 - the interface in screen space on top.
 
 `draw_node_tree` draws boxes (fill, stroke with alignment, corner radii, image fills, outer
-shadow), ellipses, SVG paths parsed by `src/svgpath.odin`, text, and placeholders for node
+shadow), ellipses, SVG paths parsed by `src/engine/svgpath.odin`, text, and placeholders for node
 types the app does not render.
 
 Offscreen renders reuse the back buffer before the frame is drawn, then read the pixels with
@@ -162,7 +195,7 @@ text and number fields, searchable menus, the HSV color picker, dialogs, tooltip
 scrollbars and sections. `src/ui.odin` builds the panels from it: tab bar, sidebar (pages,
 layers, Theme tab), tool strip and inspector. The inspector's sections live in
 `src/inspector.odin`, the Components tab in `src/components_panel.odin`, the variables
-table in `src/variables_table.odin`. `src/paint.odin` draws fills, gradients and shadows
+table in `src/variables_table.odin`. `src/engine/paint.odin` draws fills, gradients and shadows
 for the renderer.
 
 Rules the widgets follow:
@@ -217,7 +250,7 @@ align, clipboard and z-order.
 - **The clipboard** holds a JSON array of `.pen` nodes, also put on the system clipboard as
   text.
 
-## Code export (`src/codegen.odin`)
+## Code export (`src/engine/codegen.odin`)
 
 Export generates code for the current page from the parsed model:
 
@@ -234,21 +267,37 @@ Export generates code for the current page from the parsed model:
 
 ## Modules
 
+Engine (`src/engine/`):
+
+| File | Role |
+| --- | --- |
+| `engine.odin` | the globals the host sets, `sorted_keys` |
+| `doc.odin` | node model, props, parsing, indexes, instances, overrides, undo snapshots |
+| `pen.odin` | `.pen` reading and writing, variable resolution |
+| `themes.odin`, `pages.odin`, `libraries.odin` | theme axes and themed variables; pages in the header; imported libraries |
+| `layout.odin` | measure/arrange, text metrics cache |
+| `fonts.odin`, `varfont.odin`, `text_outline.odin` | fonts by family and weight; variable font instances; text drawn as outlines |
+| `draw.odin` | transforms and drawing a node tree: boxes, paths, text, placeholders, culling, level of detail |
+| `paint.odin`, `blur.odin` | fills, gradients and shadows; blur effects |
+| `images.odin`, `image_formats.odin`, `png.odin` | image fills and decoding; PNG encoding |
+| `svgpath.odin`, `icons.odin` | SVG path parser; the embedded Lucide icon set (`assets/lucide.txt`) |
+| `codegen.odin` | HTML/CSS and React export |
+| `files.odin` | absolute paths, file titles, mapped files |
+
+App (`src/`):
+
 | File | Role |
 | --- | --- |
 | `main.odin` | entry: editor or `mcp` mode |
 | `platform.odin`, `gestures_darwin.odin` | window, input state, focus modes, Cocoa gestures |
-| `doc.odin` | node model, props, parsing, indexes, instances, overrides |
-| `pen.odin` | `.pen` reading and writing, variable resolution |
-| `themes.odin`, `pages.odin` | theme axes and themed variables; pages in the header |
-| `layout.odin` | measure/arrange, text metrics cache |
-| `svgpath.odin` | SVG path parser |
-| `app.odin` | main loop, canvas rendering, undo, saving |
-| `input.odin`, `edit.odin` | canvas interaction, shortcuts, editing commands |
-| `widgets.odin`, `ui.odin` | widget library; panels built from it |
-| `tabs.odin`, `dashboard.odin` | tabs, recents, thumbnails, dashboard |
-| `fonts.odin`, `images.odin` | installed font lookup; image fills, drops, place dialog |
-| `icons.odin` | the embedded Lucide icon set (`assets/lucide.txt`) |
-| `server.odin`, `api.odin`, `mcp.odin` | control socket, its methods, stdio MCP server |
-| `codegen.odin` | HTML/CSS and React export |
+| `app.odin` | main loop, draw order, offscreen renders, undo, saving |
+| `input.odin`, `edit.odin`, `pen_tool.odin`, `gradient_edit.odin` | canvas interaction, shortcuts, editing commands |
+| `widgets.odin`, `ui.odin`, `inspector.odin` | widget library; panels built from it |
+| `components_panel.odin`, `variables_table.odin` | the Components tab; the variables table |
+| `tabs.odin`, `dashboard.odin`, `onboarding.odin` | tabs, recents, thumbnails, dashboard, onboarding |
+| `pages_ui.odin`, `libraries_ui.odin`, `fonts_ui.odin`, `files_ui.odin`, `export_ui.odin` | the app's side of pages, libraries, font import, file dialogs and drops, export to a folder |
+| `server.odin`, `api.odin`, `mcp.odin`, `agent_tools.odin` | control socket, its methods, stdio MCP server, the guide |
+| `presence.odin`, `agents.odin` | agent cursors and flashes; agent client detection and MCP registration |
+| `memory.odin` | the big allocator, memory trim and the `memory` report |
+| `activity_darwin.odin`, `applog.odin`, `settings.odin` | no App Nap while agents work; the start/exit log; app settings |
 | `nanovg/`, `fontstash/` | patched vendored renderer and font rasteriser |

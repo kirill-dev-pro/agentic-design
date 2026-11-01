@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:bytes"
 import "core:compress/zlib"
@@ -9,8 +9,8 @@ import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 import "core:time"
-import "fontstash"
-import nvg "nanovg"
+import "../fontstash"
+import nvg "../nanovg"
 
 // Fonts by family: those a document lists under "fonts" (as pen.dev does), installed
 // fonts and those in a `fonts` folder next to the open document (.ttf, .otf, every font of
@@ -329,7 +329,7 @@ font_pick :: proc(family: string, weight: int, italic: bool) -> Face_Pick {
 		if !sans_fallbacks {
 			sans_fallbacks = true
 			for name, i in ([2]string{"sans", "sans-bold"}) {
-				if id := fontstash.GetFontByName(&app.vg.fs, name); id >= 0 do add_noto_fallback(id, 700 if i == 1 else 400, false)
+				if id := fontstash.GetFontByName(&renderer.fs, name); id >= 0 do add_noto_fallback(id, 700 if i == 1 else 400, false)
 			}
 		}
 		return {name = "sans-bold" if weight >= 600 else "sans"}
@@ -348,8 +348,8 @@ font_pick :: proc(family: string, weight: int, italic: bool) -> Face_Pick {
 // The same Noto Sans 2.015 files pen.dev fetches from Google Fonts are built in (OFL,
 // assets/fonts), instanced at the weight asked for; they also supply glyphs a font lacks
 // (Cyrillic in a Latin-only font), as Noto does in pen.dev.
-NOTO_SANS :: #load("../assets/fonts/NotoSans-VF.ttf")
-NOTO_SANS_ITALIC :: #load("../assets/fonts/NotoSans-Italic-VF.ttf")
+NOTO_SANS :: #load("../../assets/fonts/NotoSans-VF.ttf")
+NOTO_SANS_ITALIC :: #load("../../assets/fonts/NotoSans-Italic-VF.ttf")
 
 noto_face :: proc(weight: int, italic: bool) -> (name: string, font: int) {
 	key := fmt.tprintf("Noto Sans%s@%d", " Italic" if italic else "", clamp(weight, 100, 900))
@@ -358,7 +358,7 @@ noto_face :: proc(weight: int, italic: bool) -> (name: string, font: int) {
 	var_instances[owned] = {owned, -2}
 	inst, ok := varfont_instance(NOTO_SANS_ITALIC if italic else NOTO_SANS, 0, {{"wght", f32(clamp(weight, 100, 900))}})
 	if !ok do return owned, -2
-	h := fontstash.AddFontMem(&app.vg.fs, owned, inst, true, 0)
+	h := fontstash.AddFontMem(&renderer.fs, owned, inst, true, 0)
 	var_instances[owned] = {owned, h}
 	add_symbol_fallbacks(h)
 	return owned, h
@@ -368,7 +368,7 @@ noto_face :: proc(weight: int, italic: bool) -> (name: string, font: int) {
 // system's symbol fonts (arrows, ✓ ✕ ★ ⌘ and other dingbats Noto Sans lacks).
 add_noto_fallback :: proc(font, weight: int, italic: bool) {
 	if font < 0 do return
-	if _, noto := noto_face(weight, italic); noto >= 0 do fontstash.AddFallbackFont(&app.vg.fs, font, noto)
+	if _, noto := noto_face(weight, italic); noto >= 0 do fontstash.AddFallbackFont(&renderer.fs, font, noto)
 	add_symbol_fallbacks(font)
 }
 
@@ -382,11 +382,11 @@ add_symbol_fallbacks :: proc(font: int) {
 			symbol_fonts[i] = -1
 			// mapped for the app's life, like document fonts
 			if data, ok := map_file(path); ok {
-				h := fontstash.AddFontMem(&app.vg.fs, fmt.aprintf("symbols#%d", i), data, false, 0)
+				h := fontstash.AddFontMem(&renderer.fs, fmt.aprintf("symbols#%d", i), data, false, 0)
 				if h >= 0 do symbol_fonts[i] = h
 			}
 		}
-		if symbol_fonts[i] > 0 && symbol_fonts[i] != font do fontstash.AddFallbackFont(&app.vg.fs, font, symbol_fonts[i])
+		if symbol_fonts[i] > 0 && symbol_fonts[i] != font do fontstash.AddFallbackFont(&renderer.fs, font, symbol_fonts[i])
 	}
 }
 
@@ -419,7 +419,7 @@ font_face_lookup :: proc(family: string, weight: int, italic: bool) -> Face_Pick
 	if face.font == -1 {
 		face.name = fmt.aprintf("%s#%d", face.path, face.index)
 		// a mapped file stays mapped as long as the font is loaded (the app's life)
-		if data, ok, mapped := font_file_bytes(face); ok do face.font = fontstash.AddFontMem(&app.vg.fs, face.name, data, !mapped, face.index if !face.woff else 0)
+		if data, ok, mapped := font_file_bytes(face); ok do face.font = fontstash.AddFontMem(&renderer.fs, face.name, data, !mapped, face.index if !face.woff else 0)
 		if face.font < 0 do face.font = -2
 		add_noto_fallback(face.font, face.weight, face.italic)
 	}
@@ -444,7 +444,7 @@ face_instance :: proc(face: ^Face, weight: int) -> (string, bool) {
 	}
 	inst, iok := varfont_instance(data, offset, {{"wght", f32(weight)}})
 	if !iok do return owned, false
-	h := fontstash.AddFontMem(&app.vg.fs, owned, inst, true, 0)
+	h := fontstash.AddFontMem(&renderer.fs, owned, inst, true, 0)
 	var_instances[owned] = {owned, h}
 	add_noto_fallback(h, weight, face.italic)
 	return owned, h >= 0
@@ -695,88 +695,6 @@ is_font_file :: proc(path: string) -> bool {
 	lower := strings.to_lower(path, context.temp_allocator)
 	for ext in ([?]string{".ttf", ".otf", ".ttc", ".woff"}) do if strings.has_suffix(lower, ext) do return true
 	return false
-}
-
-// Copies font files into the `fonts` folder next to the document and lists them in its
-// "fonts", as pen.dev's "Add custom fonts" does, so the file shows them in both apps and on
-// any machine (an undoable change to the document).
-import_font_files :: proc(paths: []string) -> (count: int) {
-	dir := fmt.tprintf("%s/fonts", os.dir(app.file_path))
-	// make_directory_all fails on a folder that exists: a second import used to stop here
-	if err := os.make_directory_all(dir); err != nil && !os.is_dir(dir) {
-		set_status("Could not create %s", dir)
-		return
-	}
-	list := make(json.Array, 0, 4, context.temp_allocator)
-	for p in app.doc.header do if p.key == "fonts" {
-		if v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator); err == nil do if a, ok := v.(json.Array); ok do append(&list, ..a[:])
-	}
-	for p in paths {
-		if !is_font_file(p) do continue
-		data, err := os.read_entire_file(p, context.temp_allocator)
-		if err != nil do continue
-		to := fmt.tprintf("%s/%s", dir, os.base(p))
-		if os.write_entire_file(to, data) != nil do continue
-		count += 1
-		if strings.has_suffix(strings.to_lower(to, context.temp_allocator), ".ttc") do continue // pen.dev reads no collections
-		url := fmt.tprintf("./fonts/%s", os.base(p))
-		infos := font_file_infos(to)
-		if len(infos) == 0 do continue
-		for i := len(list) - 1; i >= 0; i -= 1 {
-			if e, ok := list[i].(json.Object); ok && string(e["url"].(json.String) or_else "") == url do ordered_remove(&list, i)
-		}
-		append(&list, font_declaration(infos[0], url))
-	}
-	if count == 0 {
-		set_status("No .ttf, .otf, .ttc or .woff files to import (woff2 is not supported)")
-		return
-	}
-	if dir in font_dirs_seen do font_dirs_seen[dir] = -2 // read it again
-	fonts_scan_dir(dir)
-	fonts_sort_names()
-	push_undo()
-	doc_set_header(&app.doc, "fonts", list if len(list) > 0 else nil)
-	fonts_add_declared(list, os.dir(app.file_path)) // the families count as the document's now (lint, font menu)
-	mark_dirty()
-	set_status("Added %d font file%s to the document (fonts/ next to it)", count, "" if count == 1 else "s")
-	return
-}
-
-// add_fonts: font files by path, or installed families by name, copied into the
-// document's fonts/ folder and listed under "fonts" (one undo step per call).
-api_add_fonts :: proc(b: ^strings.Builder, params: json.Object) -> string {
-	if app.file_path == "" do return "no document is open"
-	paths := make([dynamic]string, context.temp_allocator)
-	if arr, ok := params["paths"].(json.Array); ok {
-		for v in arr {
-			p := absolute_path(string(v.(json.String) or_else ""))
-			if !os.exists(p) do return fmt.tprintf("no such file: %s", p)
-			if !is_font_file(p) do return fmt.tprintf("%s is not a .ttf, .otf, .ttc or .woff file (woff2 is not supported)", p)
-			append(&paths, p)
-		}
-	}
-	fonts_scan()
-	if arr, ok := params["families"].(json.Array); ok {
-		for v in arr {
-			name := string(v.(json.String) or_else "")
-			fam := family_find(name)
-			if fam == nil do return fmt.tprintf("font family \"%s\" is not installed on this Mac; pass its files in paths", name)
-			usable := 0
-			for f in fam.faces {
-				if strings.has_suffix(strings.to_lower(f.path, context.temp_allocator), ".ttc") do continue
-				usable += 1
-				if !slice.contains(paths[:], f.path) do append(&paths, f.path)
-			}
-			if usable == 0 do return fmt.tprintf("\"%s\" is installed only as a .ttc collection (%s), which pen.dev cannot read, so it cannot become part of the document; use a font with .ttf or .otf files (for code, a Google Fonts family such as JetBrains Mono or Roboto Mono)", name, fam.faces[0].path if len(fam.faces) > 0 else "")
-		}
-	}
-	if len(paths) == 0 do return "pass paths (font files) or families (installed family names)"
-	count := import_font_files(paths[:])
-	if count == 0 do return "no font file could be copied"
-	fmt.sbprintf(b, `{{"copied":%d,"fonts":`, count)
-	write_header_value(b, "fonts")
-	strings.write_byte(b, '}')
-	return ""
 }
 
 // Whether a font file says it is under a license that allows redistribution (the SIL

@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "core:encoding/json"
 import "core:fmt"
 import "core:hash"
@@ -13,7 +15,7 @@ import nvg "nanovg"
 // app.tab == -1 shows the dashboard.
 
 Tab :: struct {
-	doc:           Document,
+	doc:           engine.Document,
 	path:          string,
 	dirty:         bool,
 	last_change:   time.Time,
@@ -21,8 +23,8 @@ Tab :: struct {
 	zoom:          f32,
 	sel:           [dynamic]int,
 	editing:       int,
-	undo_stack:    [dynamic]Snapshot,
-	redo_stack:    [dynamic]Snapshot,
+	undo_stack:    [dynamic]engine.Snapshot,
+	redo_stack:    [dynamic]engine.Snapshot,
 	layers_scroll: f32,
 	insp_scroll:   f32,
 	expanded:      map[int]bool,
@@ -65,31 +67,24 @@ tab_activate :: proc(i: int) {
 	app.tool = .Select
 	app.needs_layout = true
 	if app.tab >= 0 {
-		theme_defaults(&app.doc)
-		doc_retheme(&app.doc)
+		engine.theme_defaults(&app.doc)
+		engine.doc_retheme(&app.doc)
 	}
 	update_title()
 }
 
 tab_title :: proc(i: int) -> string {
-	if i == app.tab do return file_title(app.file_path)
-	return file_title(app.tabs[i].path)
+	if i == app.tab do return engine.file_title(app.file_path)
+	return engine.file_title(app.tabs[i].path)
 }
 
 tab_dirty :: proc(i: int) -> bool {
 	return app.dirty if i == app.tab else app.tabs[i].dirty
 }
 
-absolute_path :: proc(path: string, allocator := context.temp_allocator) -> string {
-	if os.is_absolute_path(path) do return strings.clone(path, allocator)
-	wd, err := os.get_working_directory(context.temp_allocator)
-	if err != nil do return strings.clone(path, allocator)
-	return fmt.aprintf("%s/%s", wd, path, allocator = allocator)
-}
-
 // Opens a .pen file in a new tab, or switches to it when it is already open.
 open_in_tab :: proc(path: string) -> bool {
-	abs := absolute_path(path)
+	abs := engine.absolute_path(path)
 	for i in 0 ..< len(app.tabs) {
 		p := app.file_path if i == app.tab else app.tabs[i].path
 		if p == abs {
@@ -101,12 +96,13 @@ open_in_tab :: proc(path: string) -> bool {
 	if rerr != nil do return false
 	append(&app.tabs, Tab{zoom = 1, cam = {-80, -60}})
 	tab_activate(len(app.tabs) - 1)
-	fonts_add_document_dir(abs)
-	if !doc_load(&app.doc, string(data)) {
+	engine.fonts_add_document_dir(abs)
+	if !engine.doc_load(&app.doc, string(data)) {
 		close_tab(app.tab)
 		return false
 	}
-	doc_load_imports(&app.doc, abs)
+	app.doc.path = strings.clone(abs)
+	engine.doc_load_imports(&app.doc, abs)
 	app.file_path = strings.clone(abs)
 	recents_touch(abs)
 	update_title()
@@ -124,12 +120,12 @@ close_tab :: proc(i: int) {
 		app.tab = -1
 	}
 	t := &app.tabs[i]
-	doc_destroy(&t.doc)
+	engine.doc_destroy(&t.doc)
 	delete(t.path)
 	delete(t.sel)
-	for s in t.undo_stack do free_snapshot(s)
+	for s in t.undo_stack do engine.free_snapshot(s)
 	delete(t.undo_stack)
-	for s in t.redo_stack do free_snapshot(s)
+	for s in t.redo_stack do engine.free_snapshot(s)
 	delete(t.redo_stack)
 	delete(t.expanded)
 	ordered_remove(&app.tabs, i)
@@ -162,6 +158,8 @@ rename_document :: proc(new_title: string) -> bool {
 	recents_rename(app.file_path, new_path)
 	delete(app.file_path)
 	app.file_path = new_path
+	delete(app.doc.path)
+	app.doc.path = strings.clone(new_path)
 	update_title()
 	return true
 }
@@ -207,7 +205,7 @@ recents_save :: proc() {
 	for r, i in recents {
 		if i > 0 do strings.write_string(&b, ",\n")
 		strings.write_string(&b, `  {"path":`)
-		json_write_string(&b, r.path)
+		engine.json_write_string(&b, r.path)
 		fmt.sbprintf(&b, `,"time":%d}}`, r.time)
 	}
 	strings.write_string(&b, "\n]\n")
@@ -287,8 +285,8 @@ thumbs_render :: proc() {
 			// 30-100 ms on the main thread after every autosave (docs/performance.md).
 			// Drawn as a fresh copy would be: page 0, without the libraries' layers.
 			page0 := make(map[int]bool, 16, context.temp_allocator)
-			multi := len(doc_pages(&app.doc)) > 1
-			for &n in app.doc.nodes do if n.parent == 0 && (n.imported || (multi && page_of_top(&app.doc, n.id) != 0)) do page0[n.uid] = true
+			multi := len(engine.doc_pages(&app.doc)) > 1
+			for &n in app.doc.nodes do if n.parent == 0 && (n.imported || (multi && engine.page_of_top(&app.doc, n.id) != 0)) do page0[n.uid] = true
 			shown := app.page_hidden
 			app.page_hidden = page0
 			thumb_write(path)
@@ -296,14 +294,15 @@ thumbs_render :: proc() {
 		} else {
 			data, err := os.read_entire_file(path, context.temp_allocator)
 			if err != nil do continue
-			tmp: Document
-			if !doc_load(&tmp, string(data)) do continue
+			tmp: engine.Document
+			if !engine.doc_load(&tmp, string(data)) do continue
 			saved := app.doc
 			saved_page := app.page
 			app.doc = tmp
-			doc_load_imports(&app.doc, path)
+			app.doc.path = strings.clone(path) // (images and fonts next to that file, not the open one)
+			engine.doc_load_imports(&app.doc, path)
 			app.page = 0
-			layout_document(&app.doc)
+			engine.layout_document(&app.doc)
 			pages_sync()
 			thumb_write(path)
 			// the copy grew while it was shown (imports, layout, pages): free that one, not
@@ -311,7 +310,7 @@ thumbs_render :: proc() {
 			tmp = app.doc
 			app.doc = saved
 			app.page = saved_page
-			doc_destroy(&tmp)
+			engine.doc_destroy(&tmp)
 		}
 		if img, has := thumbs[path]; has {
 			if img > 0 do nvg.DeleteImage(app.vg, img)
@@ -328,7 +327,7 @@ thumb_write :: proc(path: string) {
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
 	scale := min(560 / r[2], 360 / r[3], 2)
 	if pixels, w, h, rok := render_region(r, scale, nil, {0.157, 0.157, 0.157, 1}); rok {
-		if png, pok := png_encode(pixels, w, h); pok do _ = os.write_entire_file(thumb_path(path), png)
+		if png, pok := engine.png_encode(pixels, w, h); pok do _ = os.write_entire_file(thumb_path(path), png)
 	}
 }
 

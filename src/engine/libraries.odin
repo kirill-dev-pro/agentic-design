@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:encoding/json"
 import "core:fmt"
@@ -138,29 +138,6 @@ library_alias :: proc(doc: ^Document, path: string) -> string {
 	return name
 }
 
-// Adds a library to the open document (path stored relative to it) and reads it.
-library_add :: proc(path: string) -> (string, bool) {
-	if path == app.file_path do return "", false
-	imports := doc_imports(&app.doc)
-	if imports == nil do imports = make(json.Object, 1, context.temp_allocator)
-	for _, rel in imports {
-		p := string(rel.(json.String) or_else "")
-		if !filepath.is_abs(p) do p, _ = filepath.join({filepath.dir(app.file_path), p}, context.temp_allocator)
-		if p == path do return "", false
-	}
-	alias := library_alias(&app.doc, path)
-	rel, err := filepath.rel(filepath.dir(app.file_path), path, context.temp_allocator)
-	if err != nil do rel = path
-	if !strings.has_prefix(rel, ".") && !filepath.is_abs(rel) do rel = fmt.tprintf("./%s", rel)
-	imports[alias] = json.String(rel)
-	push_undo()
-	doc_set_header(&app.doc, "imports", imports)
-	doc_load_imports(&app.doc, app.file_path)
-	library_merge_axes(&app.doc, path)
-	mark_dirty()
-	return alias, true
-}
-
 // The library's theme axes and values join the document's, in the same undo step: its
 // variables are themed on them, and a frame can only pin a value the document declares
 // (pen.dev reads the axes from the document's own header).
@@ -198,16 +175,6 @@ library_merge_axes :: proc(doc: ^Document, path: string) {
 	doc_retheme(doc)
 }
 
-library_remove :: proc(alias: string) {
-	imports := doc_imports(&app.doc)
-	if imports == nil do return
-	push_undo()
-	delete_key(&imports, alias)
-	doc_set_header(&app.doc, "imports", imports if len(imports) > 0 else nil)
-	doc_load_imports(&app.doc, app.file_path)
-	mark_dirty()
-}
-
 // Sets (or, with nil, removes) a top-level property of the document.
 doc_set_header :: proc(doc: ^Document, key: string, v: json.Value) {
 	for i := 0; i < len(doc.header); i += 1 {
@@ -236,37 +203,3 @@ library_of :: proc(n: ^Node) -> string {
 // kept, so a tab that was in the background reloads when it is shown.
 lib_stamps: map[string]string // document path -> its libraries' paths and modification times
 lib_checked: time.Tick
-
-libraries_refresh :: proc() -> bool {
-	if app.tab < 0 || app.file_path == "" do return false
-	now := time.tick_now()
-	if lib_checked != {} && time.tick_diff(lib_checked, now) < 2 * time.Second do return false
-	lib_checked = now
-	imports := doc_imports(&app.doc)
-	b := strings.builder_make(context.temp_allocator)
-	base := filepath.dir(app.file_path)
-	names := make([dynamic]string, context.temp_allocator)
-	for alias in imports do append(&names, alias)
-	slice.sort(names[:])
-	for alias in names {
-		path := string(imports[alias].(json.String) or_else "")
-		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
-		mtime: i64 = -1
-		if st, serr := os.stat(path, context.temp_allocator); serr == nil do mtime = st.modification_time._nsec
-		fmt.sbprintf(&b, "%s=%s@%d;", alias, path, mtime)
-	}
-	stamp := strings.to_string(b)
-	old, seen := lib_stamps[app.file_path]
-	if seen && old == stamp do return false
-	if seen {
-		delete(lib_stamps[app.file_path])
-		lib_stamps[app.file_path] = strings.clone(stamp)
-	} else {
-		lib_stamps[strings.clone(app.file_path)] = strings.clone(stamp)
-	}
-	// the first look only records; a changed import list is reloaded by set_libraries
-	if !seen || len(imports) == 0 do return false
-	doc_load_imports(&app.doc, app.file_path)
-	app.needs_layout = true
-	return true
-}

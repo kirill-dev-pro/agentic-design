@@ -1,4 +1,4 @@
-package agentic_design
+package engine
 
 import "core:fmt"
 import "core:strings"
@@ -9,7 +9,7 @@ import "core:strings"
 // stroked 2 units wide with round caps and joins, like lucide's own SVGs.
 // Other libraries (Material Symbols, phosphor, feather) still draw placeholders.
 
-LUCIDE_DATA :: #load("../assets/lucide.txt", string)
+LUCIDE_DATA :: #load("../../assets/lucide.txt", string)
 
 lucide_index: map[string]string // name -> path data (slices of LUCIDE_DATA)
 

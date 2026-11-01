@@ -1,5 +1,7 @@
 package agentic_design
 
+import "engine"
+
 import "base:runtime"
 import "core:c"
 import "core:encoding/base64"
@@ -71,7 +73,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		uids := uids_param(params, "ids")
 		if len(uids) == 0 do return api_error("ids is required (and must name existing nodes)"), false
 		push_undo()
-		for uid in uids do doc_delete(&app.doc, uid)
+		for uid in uids do engine.doc_delete(&app.doc, uid)
 		prune_selection()
 		strings.write_string(&b, `{"deleted":true}`)
 	case "set_variables":
@@ -90,8 +92,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if params["trim"].(json.Boolean) or_else false do memory_trim()
 		api_memory(&b)
 	case "perf":
-		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d,"frames":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), ghost_rebuilds, measure_calls, text_measures, frames_drawn)
-		ghost_rebuilds, measure_calls, text_measures, frames_drawn = 0, 0, 0, 0
+		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d,"frames":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), engine.ghost_rebuilds, engine.measure_calls, engine.text_measures, frames_drawn)
+		engine.ghost_rebuilds, engine.measure_calls, engine.text_measures, frames_drawn = 0, 0, 0, 0
 	case "input":
 		// Synthetic mouse/keyboard events for driving the interface from tests.
 		inject_input(params)
@@ -106,45 +108,45 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		}
 		fmt.sbprintf(&b, `{{"selected":%d}}`, len(app.sel))
 	case "export_code":
-		format := Code_Format.HTML
+		format := engine.Code_Format.HTML
 		if string(params["format"].(json.String) or_else "html") == "react" do format = .React
 		roots := uids_param(params, "ids")
-		export_all_fonts = params["copy_all_fonts"].(json.Boolean) or_else false
-		defer export_all_fonts = false
-		files := generate_code(&app.doc, format, roots)
+		engine.export_all_fonts = params["copy_all_fonts"].(json.Boolean) or_else false
+		defer engine.export_all_fonts = false
+		files := engine.generate_code(&app.doc, format, roots)
 		dir := ""
 		if d, has := params["dir"].(json.String); has && d != "" {
 			written, ok := export_code_to_dir(format, string(d), roots)
-			if !ok do return api_error(fmt.tprintf("could not write the files to %s (a file of that name, or no permission)", absolute_path(string(d)))), false
+			if !ok do return api_error(fmt.tprintf("could not write the files to %s (a file of that name, or no permission)", engine.absolute_path(string(d)))), false
 			dir = written
 		}
 		strings.write_string(&b, `{"dir":`)
-		json_write_string(&b, dir)
+		engine.json_write_string(&b, dir)
 		// fonts and images the code refers to (copied there with dir)
 		strings.write_string(&b, `,"assets":{`)
 		first_asset := true
-		for rel, src in export_assets {
+		for rel, src in engine.export_assets {
 			if !first_asset do strings.write_byte(&b, ',')
 			first_asset = false
-			json_write_string(&b, rel)
+			engine.json_write_string(&b, rel)
 			strings.write_byte(&b, ':')
-			json_write_string(&b, src)
+			engine.json_write_string(&b, src)
 		}
 		strings.write_string(&b, `}`)
-		if len(export_warnings) > 0 {
+		if len(engine.export_warnings) > 0 {
 			strings.write_string(&b, `,"warnings":[`)
-			for rel, i in export_warnings {
+			for rel, i in engine.export_warnings {
 				if i > 0 do strings.write_byte(&b, ',')
-				json_write_string(&b, fmt.tprintf("%s is referenced by @font-face but not copied: the font does not name an open license (OFL, Apache), so it is probably licensed per user. Put the file there yourself if the license allows web use, or pass copy_all_fonts: true.", rel))
+				engine.json_write_string(&b, fmt.tprintf("%s is referenced by @font-face but not copied: the font does not name an open license (OFL, Apache), so it is probably licensed per user. Put the file there yourself if the license allows web use, or pass copy_all_fonts: true.", rel))
 			}
 			strings.write_byte(&b, ']')
 		}
 		strings.write_string(&b, `,"files":{`)
 		for file, i in files {
 			if i > 0 do strings.write_byte(&b, ',')
-			json_write_string(&b, file.name)
+			engine.json_write_string(&b, file.name)
 			strings.write_byte(&b, ':')
-			json_write_string(&b, file.content)
+			engine.json_write_string(&b, file.content)
 		}
 		strings.write_string(&b, "}}")
 	case "zoom_to_fit":
@@ -154,13 +156,13 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if r, ok := bounds_of(uids); ok do zoom_to_rect(r)
 		strings.write_string(&b, `{"ok":true}`)
 	case "reorder":
-		n, i := doc_find(&app.doc, string(params["id"].(json.String) or_else ""))
+		n, i := engine.doc_find(&app.doc, string(params["id"].(json.String) or_else ""))
 		if n == nil do return api_error("node not found"), false
 		push_undo()
 		if (params["position"].(json.String) or_else "front") == "back" {
 			send_to_back(n.uid)
 		} else {
-			doc_bring_to_front(&app.doc, n.uid)
+			engine.doc_bring_to_front(&app.doc, n.uid)
 		}
 		strings.write_string(&b, `{"ok":true}`)
 	case "undo":
@@ -175,15 +177,17 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if path != app.file_path {
 			delete(app.file_path)
 			app.file_path = strings.clone(path, big_allocator())
+			delete(app.doc.path)
+			app.doc.path = strings.clone(path)
 			update_title()
 		}
 		strings.write_string(&b, `{"path":`)
-		json_write_string(&b, app.file_path)
+		engine.json_write_string(&b, app.file_path)
 		strings.write_string(&b, "}")
 	case "open":
 		path := string(params["path"].(json.String) or_else "")
 		if path == "" do return api_error("pass path"), false
-		abs := absolute_path(path)
+		abs := engine.absolute_path(path)
 		created := false
 		if !os.exists(abs) {
 			if !(params["create"].(json.Boolean) or_else false) {
@@ -200,7 +204,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		}
 		if !open_in_tab(abs) do return api_error(fmt.tprintf("could not open %s: not a readable .pen document", abs)), false
 		strings.write_string(&b, `{"ok":true,"path":`)
-		json_write_string(&b, app.file_path)
+		engine.json_write_string(&b, app.file_path)
 		fmt.sbprintf(&b, `,"created":%v}}`, created)
 	case "screenshot":
 		if shot.req != nil do return api_error("another screenshot is in progress"), false
@@ -219,7 +223,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		}
 		if f, has := params["format"].(json.String); has {
 			ok: bool
-			if shot.format, ok = export_format_from(string(f)); !ok {
+			if shot.format, ok = engine.export_format_from(string(f)); !ok {
 				shot = {}
 				return api_error("format must be png, jpeg, webp or pdf"), false
 			}
@@ -229,7 +233,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 			}
 		}
 		if id, has := params["id"].(json.String); has {
-			n, _ := doc_find(&app.doc, string(id))
+			n, _ := engine.doc_find(&app.doc, string(id))
 			if n == nil {
 				shot = {}
 				return api_error("node not found"), false
@@ -248,7 +252,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 api_error :: proc(msg: string) -> string {
 	b := strings.builder_make(big_allocator())
 	strings.write_string(&b, `{"ok":false,"error":`)
-	json_write_string(&b, msg)
+	engine.json_write_string(&b, msg)
 	strings.write_string(&b, "}")
 	return strings.to_string(b)
 }
@@ -259,7 +263,7 @@ uids_param :: proc(params: json.Object, key: string) -> []int {
 	arr, _ := params[key].(json.Array)
 	for v in arr {
 		if id, ok := v.(json.String); ok {
-			if n, _ := doc_find(&app.doc, string(id)); n != nil do append(&out, n.uid)
+			if n, _ := engine.doc_find(&app.doc, string(id)); n != nil do append(&out, n.uid)
 		}
 	}
 	return out[:]
@@ -270,11 +274,11 @@ uids_param :: proc(params: json.Object, key: string) -> []int {
 // whole document, off for the selection).
 api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_only: bool) {
 	strings.write_string(b, `{"file":`)
-	json_write_string(b, app.file_path)
+	engine.json_write_string(b, app.file_path)
 	strings.write_string(b, `,"selection":[`)
 	for uid, i in app.sel {
 		if i > 0 do strings.write_byte(b, ',')
-		if n, _ := doc_find_uid(&app.doc, uid); n != nil do json_write_string(b, n.id)
+		if n, _ := engine.doc_find_uid(&app.doc, uid); n != nil do engine.json_write_string(b, n.id)
 		else do strings.write_string(b, "null")
 	}
 	strings.write_byte(b, ']')
@@ -287,22 +291,22 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 	if !selection_only && (params["libraries"].(json.Boolean) or_else ("ids" not_in params)) {
 		strings.write_string(b, `,"libraries":[`)
 		first_lib := true
-		for alias, rel in doc_imports(&app.doc) {
+		for alias, rel in engine.doc_imports(&app.doc) {
 			if !first_lib do strings.write_byte(b, ',')
 			first_lib = false
 			strings.write_string(b, `{"alias":`)
-			json_write_string(b, alias)
+			engine.json_write_string(b, alias)
 			strings.write_string(b, `,"path":`)
-			json_write_string(b, string(rel.(json.String) or_else ""))
+			engine.json_write_string(b, string(rel.(json.String) or_else ""))
 			strings.write_string(b, `,"components":[`)
 			first_c := true
-			for &n in app.doc.nodes do if n.imported && n.reusable && library_of(&n) == alias {
+			for &n in app.doc.nodes do if n.imported && n.reusable && engine.library_of(&n) == alias {
 				if !first_c do strings.write_byte(b, ',')
 				first_c = false
 				strings.write_string(b, `{"id":`)
-				json_write_string(b, n.id)
+				engine.json_write_string(b, n.id)
 				strings.write_string(b, `,"name":`)
-				json_write_string(b, node_label(&n))
+				engine.json_write_string(b, engine.node_label(&n))
 				strings.write_byte(b, '}')
 			}
 			strings.write_string(b, "]}")
@@ -310,9 +314,9 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 		strings.write_byte(b, ']')
 	}
 	picked := uids_param(params, "ids")
-	api_depth_limit = int(params["depth"].(json.Float) or_else -1)
-	api_depth = 0
-	defer api_depth_limit = -1
+	engine.api_depth_limit = int(params["depth"].(json.Float) or_else -1)
+	engine.api_depth = 0
+	defer engine.api_depth_limit = -1
 	strings.write_string(b, `,"children":[`)
 	first := true
 	for &n in app.doc.nodes {
@@ -322,7 +326,7 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 		if !include do continue
 		if !first do strings.write_byte(b, ',')
 		first = false
-		write_node(b, &app.doc, &n, -1, true)
+		engine.write_node(b, &app.doc, &n, -1, true)
 	}
 	strings.write_string(b, "]}")
 }
@@ -338,7 +342,7 @@ api_set_libraries :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	added := make([dynamic]string, context.temp_allocator)
 	if arr, ok := params["add"].(json.Array); ok {
 		for v in arr {
-			p := absolute_path(string(v.(json.String) or_else ""))
+			p := engine.absolute_path(string(v.(json.String) or_else ""))
 			if !os.exists(p) do return fmt.tprintf("no such file: %s", p)
 			if alias, aok := library_add(p); aok do append(&added, alias)
 		}
@@ -347,19 +351,19 @@ api_set_libraries :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	if arr, ok := params["remove"].(json.Array); ok {
 		for v in arr {
 			alias := string(v.(json.String) or_else "")
-			if alias not_in doc_imports(&app.doc) do return fmt.tprintf("no library \"%s\" is imported", alias)
+			if alias not_in engine.doc_imports(&app.doc) do return fmt.tprintf("no library \"%s\" is imported", alias)
 			library_remove(alias)
 			append(&removed, alias)
 		}
 	}
 	// read the libraries again now (they are also re-read within seconds of a change)
 	reloaded := params["reload"].(json.Boolean) or_else false
-	if reloaded do doc_load_imports(&app.doc, app.file_path)
+	if reloaded do engine.doc_load_imports(&app.doc, app.file_path)
 	list :: proc(b: ^strings.Builder, key: string, items: []string) {
 		fmt.sbprintf(b, `"%s":[`, key)
 		for a, i in items {
 			if i > 0 do strings.write_byte(b, ',')
-			json_write_string(b, a)
+			engine.json_write_string(b, a)
 		}
 		strings.write_byte(b, ']')
 	}
@@ -377,12 +381,12 @@ api_get_variables :: proc(b: ^strings.Builder) {
 	write_header_value(b, "themes")
 	strings.write_string(b, `,"shown":{`)
 	first := true
-	for k, v in app.theme {
+	for k, v in engine.theme {
 		if !first do strings.write_byte(b, ',')
 		first = false
-		json_write_string(b, k)
+		engine.json_write_string(b, k)
 		strings.write_byte(b, ':')
-		json_write_string(b, v)
+		engine.json_write_string(b, v)
 	}
 	strings.write_string(b, `},"variables":`)
 	write_header_value(b, "variables")
@@ -395,21 +399,21 @@ api_get_styles :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	uids := uids_param(params, "ids")
 	if len(uids) == 0 do uids = app.sel[:]
 	if len(uids) == 0 do return "pass ids (or select nodes in the window)"
-	g := Gen{doc = &app.doc, format = .HTML}
+	g := engine.Gen{doc = &app.doc, format = .HTML}
 	strings.write_string(b, `{"nodes":[`)
 	for uid, i in uids {
-		n, _ := doc_find_uid(&app.doc, uid)
+		n, _ := engine.doc_find_uid(&app.doc, uid)
 		if n == nil do continue
 		if i > 0 do strings.write_byte(b, ',')
 		strings.write_string(b, `{"id":`)
-		json_write_string(b, n.id)
-		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s],"css":{{`, num_text(n.x), num_text(n.y), num_text(n.w), num_text(n.h))
-		parent, _ := doc_find_uid(&app.doc, n.parent)
-		for d, j in node_decls(&g, n, parent) {
+		engine.json_write_string(b, n.id)
+		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s],"css":{{`, engine.num_text(n.x), engine.num_text(n.y), engine.num_text(n.w), engine.num_text(n.h))
+		parent, _ := engine.doc_find_uid(&app.doc, n.parent)
+		for d, j in engine.node_decls(&g, n, parent) {
 			if j > 0 do strings.write_byte(b, ',')
-			json_write_string(b, d.prop)
+			engine.json_write_string(b, d.prop)
 			strings.write_byte(b, ':')
-			json_write_string(b, d.value)
+			engine.json_write_string(b, d.value)
 		}
 		strings.write_string(b, "}}")
 	}
@@ -423,16 +427,16 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	// component's slot frame; default: the frame marked as its slot)
 	slot := ""
 	if pid, has := params["parent_id"].(json.String); has && pid != "" {
-		p, _ := doc_find(&app.doc, string(pid))
+		p, _ := engine.doc_find(&app.doc, string(pid))
 		if p != nil && p.kind == .Ref && !p.imported {
-			ghosts_sync(&app.doc)
+			engine.ghosts_sync(&app.doc)
 			slot = string(params["slot"].(json.String) or_else "")
 			if slot == "" {
 				sg, has_slot := app.doc.ghost_slot[p.uid]
-				root := ghost_root_of(&app.doc, p.uid)
+				root := engine.ghost_root_of(&app.doc, p.uid)
 				if !has_slot || root == nil do return fmt.tprintf("instance '%s' has no component to put content in", p.id)
 				if root.uid != sg {
-					if gs, _ := doc_find_uid(&app.doc, sg); gs != nil do slot = gs.ghost_of
+					if gs, _ := engine.doc_find_uid(&app.doc, sg); gs != nil do slot = gs.ghost_of
 				}
 				// a component without a slot frame takes content in its root (2.8 style)
 			}
@@ -446,9 +450,9 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	push_undo()
 	created := make([dynamic]int, context.temp_allocator)
 	for spec in specs {
-		uid, err := node_from_json(&app.doc, spec, parent)
+		uid, err := engine.node_from_json(&app.doc, spec, parent)
 		if err != "" do return err
-		if slot != "" do if cn, _ := doc_find_uid(&app.doc, uid); cn != nil do cn.slot_of = strings.clone(slot)
+		if slot != "" do if cn, _ := engine.doc_find_uid(&app.doc, uid); cn != nil do cn.slot_of = strings.clone(slot)
 		append(&created, uid)
 	}
 	warnings := make([dynamic]string, context.temp_allocator)
@@ -456,8 +460,8 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	strings.write_string(b, `{"created":[`)
 	for uid, i in created {
 		if i > 0 do strings.write_byte(b, ',')
-		n, _ := doc_find_uid(&app.doc, uid)
-		json_write_string(b, n.id)
+		n, _ := engine.doc_find_uid(&app.doc, uid)
+		engine.json_write_string(b, n.id)
 	}
 	strings.write_byte(b, ']')
 	write_warnings(b, warnings[:])
@@ -469,31 +473,31 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 // not have, and values the app had to read leniently (3-value padding is rewritten to
 // the four values it means). `deep` checks the whole subtree.
 api_check_nodes :: proc(uid: int, deep: bool, warnings: ^[dynamic]string) {
-	n, _ := doc_find_uid(&app.doc, uid)
+	n, _ := engine.doc_find_uid(&app.doc, uid)
 	if n == nil || n.ghost do return
-	if msg := icon_problem(n); msg != "" do append(warnings, fmt.tprintf("%s: %s", n.id, msg))
-	if i := prop_index(n, "padding"); i >= 0 {
+	if msg := engine.icon_problem(n); msg != "" do append(warnings, fmt.tprintf("%s: %s", n.id, msg))
+	if i := engine.prop_index(n, "padding"); i >= 0 {
 		if v, err := json.parse_string(n.props[i].raw, .JSON5, false, context.temp_allocator); err == nil {
 			if arr, ok := v.(json.Array); ok && len(arr) == 3 {
 				b := strings.builder_make(context.temp_allocator)
 				strings.write_byte(&b, '[')
 				for k in ([4]int{0, 1, 2, 1}) {
 					if b.buf[len(b.buf) - 1] != '[' do strings.write_byte(&b, ',')
-					write_json_value(&b, arr[k])
+					engine.write_json_value(&b, arr[k])
 				}
 				strings.write_byte(&b, ']')
-				node_set_raw(n, "padding", strings.to_string(b))
+				engine.node_set_raw(n, "padding", strings.to_string(b))
 				append(warnings, fmt.tprintf("%s: padding takes 1, 2 or 4 values; [top, sides, bottom] was written as %s", n.id, strings.to_string(b)))
 			}
 		}
 	}
-	if i := prop_index(n, "fill"); i >= 0 && strings.contains(n.props[i].raw, `"image"`) {
+	if i := engine.prop_index(n, "fill"); i >= 0 && strings.contains(n.props[i].raw, `"image"`) {
 		if raw, changed := adopt_image_fills(n.props[i].raw, n.id, warnings); changed {
-			node_set_raw(n, "fill", raw)
-			node_refresh(&app.doc, n)
+			engine.node_set_raw(n, "fill", raw)
+			engine.node_refresh(&app.doc, n)
 		}
 	}
-	if deep do for cu in children_of(&app.doc, uid) do api_check_nodes(cu, true, warnings)
+	if deep do for cu in engine.children_of(&app.doc, uid) do api_check_nodes(cu, true, warnings)
 }
 
 // Image paints whose url is a file outside the document's images/ folder: the file is
@@ -519,13 +523,13 @@ adopt_image_fills :: proc(raw, id: string, warnings: ^[dynamic]string) -> (strin
 			home, _ := os.user_home_dir(context.temp_allocator)
 			src = fmt.tprintf("%s/%s", home, src[2:])
 		}
-		path := src if os.is_absolute_path(src) else image_resolve(src)
+		path := src if os.is_absolute_path(src) else engine.image_resolve(src)
 		if !os.exists(path) {
 			append(warnings, fmt.tprintf("%s: image %s not found (give an absolute path; it is copied into images/)", id, path))
 			continue
 		}
 		images := fmt.tprintf("%s/images", os.dir(app.file_path))
-		if os.dir(absolute_path(path)) == images do continue // already in place
+		if os.dir(engine.absolute_path(path)) == images do continue // already in place
 		_ = os.make_directory_all(images)
 		name := os.base(path)
 		dst := fmt.tprintf("%s/%s", images, name)
@@ -545,8 +549,8 @@ adopt_image_fills :: proc(raw, id: string, warnings: ^[dynamic]string) -> (strin
 	}
 	if !changed do return raw, false
 	b := strings.builder_make(context.temp_allocator)
-	if single do write_json_value(&b, items[0])
-	else do write_json_value(&b, json.Array(items))
+	if single do engine.write_json_value(&b, items[0])
+	else do engine.write_json_value(&b, json.Array(items))
 	return strings.to_string(b), true
 }
 
@@ -561,7 +565,7 @@ write_warnings :: proc(b: ^strings.Builder, warnings: []string) {
 	strings.write_string(b, `,"warnings":[`)
 	for w, i in warnings {
 		if i > 0 do strings.write_byte(b, ',')
-		json_write_string(b, w)
+		engine.json_write_string(b, w)
 	}
 	strings.write_byte(b, ']')
 }
@@ -575,25 +579,25 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		o, is_obj := u.(json.Object)
 		if !is_obj do return "each update must be an object"
 		id := string(o["id"].(json.String) or_else "")
-		n, _ := doc_find(&app.doc, id)
+		n, _ := engine.doc_find(&app.doc, id)
 		if n == nil do return fmt.tprintf("node '%s' not found", id)
 		if pv, has := o["parent_id"]; has {
 			np := 0
 			if pid, is_str := pv.(json.String); is_str && pid != "" {
-				p, _ := doc_find(&app.doc, string(pid))
-				if p == nil || (p.kind != .Frame && p.kind != .Group) || p.uid == n.uid || is_descendant(&app.doc, p.uid, n.uid) do return "invalid parent_id"
+				p, _ := engine.doc_find(&app.doc, string(pid))
+				if p == nil || (p.kind != .Frame && p.kind != .Group) || p.uid == n.uid || engine.is_descendant(&app.doc, p.uid, n.uid) do return "invalid parent_id"
 				np = p.uid
 			}
 			uid := n.uid
-			doc_reparent(&app.doc, uid, np)
-			n, _ = doc_find_uid(&app.doc, uid)
+			engine.doc_reparent(&app.doc, uid, np)
+			n, _ = engine.doc_find_uid(&app.doc, uid)
 		}
 		for k, v in o {
 			switch k {
 			case "id", "parent_id", "children", "type":
 			case:
-				if _, is_null := v.(json.Null); is_null do node_unset(&app.doc, n, k)
-				else do node_set(&app.doc, n, k, v)
+				if _, is_null := v.(json.Null); is_null do engine.node_unset(&app.doc, n, k)
+				else do engine.node_set(&app.doc, n, k, v)
 			}
 		}
 		if "icon" in o || "iconFontName" in o || "padding" in o || "fill" in o do api_check_nodes(n.uid, false, &warnings)
@@ -611,7 +615,7 @@ Shot :: struct {
 	uid:    int,
 	scale:  f32,
 	view:   bool, // capture the window as shown, after the regular frame
-	format: Export_Format,
+	format: engine.Export_Format,
 	path:   string, // write the image here instead of returning it
 	theme:  [8][2]string, // theme values to render with (axis, value), whatever the window shows
 	themes: int,
@@ -642,9 +646,9 @@ render_screenshot :: proc() {
 	defer shot = {}
 
 	uids: []int
-	target: ^Node
+	target: ^engine.Node
 	if shot.uid != 0 {
-		target, _ = doc_find_uid(&app.doc, shot.uid)
+		target, _ = engine.doc_find_uid(&app.doc, shot.uid)
 		if target == nil {
 			finish_request(req, api_error("node not found"))
 			return
@@ -663,16 +667,16 @@ render_screenshot :: proc() {
 	// another theme just for this image: switch, draw, switch back
 	saved_theme := make(map[string]string, 4, context.temp_allocator)
 	if shot.themes > 0 {
-		for k, v in app.theme do saved_theme[k] = v
-		for t in shot.theme[:shot.themes] do app.theme[t[0]] = t[1]
-		doc_retheme(&app.doc)
-		layout_document(&app.doc)
+		for k, v in engine.theme do saved_theme[k] = v
+		for t in shot.theme[:shot.themes] do engine.theme[t[0]] = t[1]
+		engine.doc_retheme(&app.doc)
+		engine.layout_document(&app.doc)
 	}
 	defer if shot.themes > 0 {
-		clear(&app.theme)
-		for k, v in saved_theme do app.theme[k] = v
-		doc_retheme(&app.doc)
-		layout_document(&app.doc)
+		clear(&engine.theme)
+		for k, v in saved_theme do engine.theme[k] = v
+		engine.doc_retheme(&app.doc)
+		engine.layout_document(&app.doc)
 	}
 	pixels, ow, oh, rok := render_region(r, shot.scale, target, shot_backdrop(target))
 	if !rok {
@@ -680,20 +684,20 @@ render_screenshot :: proc() {
 		return
 	}
 	if shot.path != "" {
-		data, eok := encode_image(pixels, ow, oh, shot.format, shot.scale)
+		data, eok := engine.encode_image(pixels, ow, oh, shot.format, shot.scale)
 		if !eok {
 			finish_request(req, api_error("encoding failed"))
 			return
 		}
-		path := absolute_path(shot.path)
+		path := engine.absolute_path(shot.path)
 		if err := os.write_entire_file(path, data); err != nil {
 			finish_request(req, api_error(fmt.tprintf("could not write %s", path)))
 			return
 		}
 		b := strings.builder_make(big_allocator())
 		fmt.sbprintf(&b, `{{"ok":true,"result":{{"path":`)
-		json_write_string(&b, path)
-		fmt.sbprintf(&b, `,"format":"%s","width":%d,"height":%d,"bytes":%d`, EXPORT_EXTENSIONS[shot.format], ow, oh, len(data))
+		engine.json_write_string(&b, path)
+		fmt.sbprintf(&b, `,"format":"%s","width":%d,"height":%d,"bytes":%d`, engine.EXPORT_EXTENSIONS[shot.format], ow, oh, len(data))
 		write_scale_note(&b, shot.scale)
 		strings.write_string(&b, "}}")
 		finish_request(req, strings.to_string(b))
@@ -705,14 +709,14 @@ render_screenshot :: proc() {
 // What a layer is seen on: the fill of its nearest ancestor with an opaque one (resolved
 // in the theme the screenshot uses), else white. A section without a fill of its own
 // inside a dark page came out as light text on white.
-shot_backdrop :: proc(target: ^Node) -> nvg.Color {
+shot_backdrop :: proc(target: ^engine.Node) -> nvg.Color {
 	if target == nil do return {1, 1, 1, 1}
-	p, _ := doc_find_uid(&app.doc, target.parent)
-	for depth := 0; p != nil && depth < MAX_DEPTH; depth += 1 {
+	p, _ := engine.doc_find_uid(&app.doc, target.parent)
+	for depth := 0; p != nil && depth < engine.MAX_DEPTH; depth += 1 {
 		if p.has_fill && p.enabled && p.fill[3] == 255 && (p.nfills <= 1 || p.fills[0].kind == .Color) {
 			return {f32(p.fill[0]) / 255, f32(p.fill[1]) / 255, f32(p.fill[2]) / 255, 1}
 		}
-		p, _ = doc_find_uid(&app.doc, p.parent)
+		p, _ = engine.doc_find_uid(&app.doc, p.parent)
 	}
 	return {1, 1, 1, 1}
 }
@@ -722,17 +726,17 @@ shot_backdrop :: proc(target: ^Node) -> nvg.Color {
 show_page_of :: proc(uids: []int) {
 	if len(uids) == 0 do return
 	top := top_ancestor(uids[0])
-	n, _ := doc_find_uid(&app.doc, top)
+	n, _ := engine.doc_find_uid(&app.doc, top)
 	if n == nil || n.imported || !app.page_hidden[top] do return
-	page_switch(page_of_top(&app.doc, n.id))
+	page_switch(engine.page_of_top(&app.doc, n.id))
 }
 
 // The scale used, and why when it is less than asked.
 write_scale_note :: proc(b: ^strings.Builder, asked: f32) {
-	fmt.sbprintf(b, `,"scale":%s`, num_text(render_scale))
+	fmt.sbprintf(b, `,"scale":%s`, engine.num_text(render_scale))
 	if asked > 0 && render_scale < asked - 0.001 {
 		strings.write_string(b, `,"note":`)
-		json_write_string(b, fmt.tprintf("scale %s was reduced to %s: an image is at most 16 pixels per unit, the GPU's largest texture on a side and 100 Mpx", num_text(asked), num_text(render_scale)))
+		engine.json_write_string(b, fmt.tprintf("scale %s was reduced to %s: an image is at most 16 pixels per unit, the GPU's largest texture on a side and 100 Mpx", engine.num_text(asked), engine.num_text(render_scale)))
 	}
 }
 
@@ -740,7 +744,7 @@ write_scale_note :: proc(b: ^strings.Builder, asked: f32) {
 // `scale` pixels per unit and reads the pixels back (bottom-up rows, RGBA).
 render_scale: f32 // the scale the last render_region used, after its limits
 
-render_region :: proc(r: [4]f32, scale: f32, target: ^Node, bg: nvg.Color) -> (pixels: []u8, ow, oh: i32, ok: bool) {
+render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color) -> (pixels: []u8, ow, oh: i32, ok: bool) {
 	// drawn into a buffer of its own, so it may be larger than the window (up to what the
 	// GPU allows) and leaves the window's frame alone
 	max_side: i32
@@ -766,29 +770,29 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^Node, bg: nvg.Color) -> (p
 	defer gl.Flush() // (last: the driver takes the deleted buffer back now, not at the next frame)
 	defer nvgl.DeleteFramebuffer(&tile_fb)
 	defer nvgl.BindFramebuffer(nil)
-	saved_cull := cull_rect
-	defer cull_rect = saved_cull
+	saved_cull := engine.cull_rect
+	defer engine.cull_rect = saved_cull
 	for y0 := i32(0); y0 < oh; y0 += TILE {
 		for x0 := i32(0); x0 < ow; x0 += TILE {
 			tw, th := min(TILE, ow - x0), min(TILE, oh - y0)
 			xf := nvg.Matrix{s, 0, 0, s, -r[0] * s - f32(x0), -r[1] * s - f32(y0)}
-			blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg})
+			engine.blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg, order = app.draw_order[:]})
 			nvgl.BindFramebuffer(&tile_fb)
 			gl.Viewport(0, 0, TILE, TILE)
 			gl.ClearColor(bg.r, bg.g, bg.b, 1)
 			gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
 			nvg.BeginFrame(vg, TILE, TILE, 1)
 			nvg.Transform(vg, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5])
-			cull_rect = {r[0] + f32(x0) / s, r[1] + f32(y0) / s, f32(tw) / s, f32(th) / s}
-			blur_active = true
+			engine.cull_rect = {r[0] + f32(x0) / s, r[1] + f32(y0) / s, f32(tw) / s, f32(th) / s}
+			engine.blur_active = true
 			if target != nil {
-				draw_node_tree(vg, target, 1, 0)
+				engine.draw_node_tree(vg, target, 1, 0)
 			} else {
 				for i in 0 ..< len(app.doc.nodes) {
-					if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do draw_node_tree(vg, &app.doc.nodes[i], 1, 0)
+					if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do engine.draw_node_tree(vg, &app.doc.nodes[i], 1, 0)
 				}
 			}
-			blur_active = false
+			engine.blur_active = false
 			nvg.EndFrame(vg)
 			// the tile's top rows, bottom-up, land in the image's rows (it is bottom-up too)
 			tile := read_pixels_rect(0, TILE - th, tw, th)
@@ -837,7 +841,7 @@ read_pixels_rect :: proc(x, y, w, h: i32) -> []u8 {
 
 // Flips GL rows (bottom-up) in place and encodes a PNG (temp allocator).
 encode_png_response :: proc(pixels: []u8, ow, oh: i32, asked: f32 = 0) -> string {
-	png, ok := png_encode(pixels, ow, oh)
+	png, ok := engine.png_encode(pixels, ow, oh)
 	if !ok do return api_error("PNG encoding failed")
 	encoded := base64.encode(png, allocator = context.temp_allocator)
 	b := strings.builder_make(big_allocator())
@@ -954,43 +958,43 @@ api_set_variables :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	// showing another theme does not change the document
 	if has_themes || has_vars do push_undo()
 	if has_themes {
-		_ = doc_theme_axes(doc)
-		theme_axes_free(&doc.theme_axes)
+		_ = engine.doc_theme_axes(doc)
+		engine.theme_axes_free(&doc.theme_axes)
 		names := make([dynamic]string, context.temp_allocator)
 		for k in themes do append(&names, k)
 		slice.sort(names[:])
 		for k in names {
 			arr, ok := themes[k].(json.Array)
 			if !ok do return fmt.tprintf("themes.%s must be an array of values", k)
-			axis := Theme_Axis{name = strings.clone(k)}
+			axis := engine.Theme_Axis{name = strings.clone(k)}
 			for v in arr do append(&axis.values, strings.clone(string(v.(json.String) or_else "")))
 			append(&doc.theme_axes, axis)
 		}
-		doc_theme_axes_write(doc)
-		theme_defaults(doc)
+		engine.doc_theme_axes_write(doc)
+		engine.theme_defaults(doc)
 	}
 	if has_vars {
-		cur := doc_variables(doc)
+		cur := engine.doc_variables(doc)
 		for k, v in vars {
 			if _, is_null := v.(json.Null); is_null do delete_key(&cur, k)
 			else do cur[k] = v
 		}
-		doc_write_variables(doc, cur)
+		engine.doc_write_variables(doc, cur)
 	}
 	if has_show {
 		for k, v in show {
 			val := string(v.(json.String) or_else "")
-			if old, had := app.theme[k]; had {
+			if old, had := engine.theme[k]; had {
 				delete(old)
-				app.theme[k] = strings.clone(val)
+				engine.theme[k] = strings.clone(val)
 			} else {
-				app.theme[strings.clone(k)] = strings.clone(val)
+				engine.theme[strings.clone(k)] = strings.clone(val)
 			}
 		}
 	}
-	doc_retheme(doc)
+	engine.doc_retheme(doc)
 	if has_themes || has_vars do mark_dirty()
-	fmt.sbprintf(b, `{{"variables":%d,"themes":%d}}`, len(doc_variables(doc)), len(doc_theme_axes(doc)))
+	fmt.sbprintf(b, `{{"variables":%d,"themes":%d}}`, len(engine.doc_variables(doc)), len(engine.doc_theme_axes(doc)))
 	return ""
 }
 
@@ -1004,18 +1008,18 @@ api_set_pages :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	if has_list {
 		if len(list) == 0 do return "pages must not be empty"
 		push_undo()
-		_ = doc_pages(doc)
-		pages_free(&doc.pages)
+		_ = engine.doc_pages(doc)
+		engine.pages_free(&doc.pages)
 		for item in list {
 			obj, ok := item.(json.Object)
 			if !ok do return "each page is {name, nodes}"
-			page := Page{name = strings.clone(string(obj["name"].(json.String) or_else "Page"))}
+			page := engine.Page{name = strings.clone(string(obj["name"].(json.String) or_else "Page"))}
 			if ids, has := obj["nodes"].(json.Array); has {
 				for id in ids do append(&page.ids, strings.clone(string(id.(json.String) or_else "")))
 			}
 			append(&doc.pages, page)
 		}
-		doc_pages_write(doc)
+		engine.doc_pages_write(doc)
 		for &n in doc.nodes do if n.parent == 0 do n.page_seen = true
 		mark_dirty()
 	}
