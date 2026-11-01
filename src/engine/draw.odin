@@ -3,7 +3,6 @@ package engine
 import "core:fmt"
 import "core:math"
 import "core:strings"
-import "core:time"
 import nvg "../nanovg"
 
 // Drawing a document with NanoVG: transforms, the node tree, boxes, text and paints. The

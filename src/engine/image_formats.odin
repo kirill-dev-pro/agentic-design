@@ -1,13 +1,12 @@
 package engine
 
-import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:strings"
 import stbiw "vendor:stb/image"
 
 // Image formats for export (pen.dev offers PNG, JPEG, WEBP and PDF). Pixels come from
-// render_region: RGBA rows, bottom-up as OpenGL reads them.
+// render_region: RGBA rows, top row first.
 //   PNG, JPEG  stb_image_write
 //   WEBP       lossless VP8L with fixed 8-bit codes: no compression, but exact and
 //              readable everywhere (macOS has no WebP encoder)
@@ -33,11 +32,11 @@ export_format_from :: proc(s: string) -> (Export_Format, bool) {
 	return .PNG, false
 }
 
-// Encodes GL pixels (flipped here, alpha made opaque) as `format`. `scale` is pixels per
-// design unit, for the PDF page size.
+// Encodes pixels (alpha made opaque) as `format`. `scale` is pixels per design unit, for
+// the PDF page size.
 encode_image :: proc(pixels: []u8, w, h: i32, format: Export_Format, scale: f32 = 1) -> ([]u8, bool) {
 	if format == .PNG do return png_encode(pixels, w, h)
-	flip_rows(pixels, w, h)
+	for i := 3; i < len(pixels); i += 4 do pixels[i] = 255
 	switch format {
 	case .PNG:
 	case .JPEG: return jpeg_encode(pixels, w, h, 92)
@@ -48,19 +47,6 @@ encode_image :: proc(pixels: []u8, w, h: i32, format: Export_Format, scale: f32 
 		return pdf_with_image(jpg, w, h, f32(w) / scale, f32(h) / scale), true
 	}
 	return nil, false
-}
-
-flip_rows :: proc(pixels: []u8, w, h: i32) {
-	row := int(w * 4)
-	tmp := make([]u8, row, context.temp_allocator)
-	for y in 0 ..< int(h) / 2 {
-		a := pixels[y * row:][:row]
-		b := pixels[(int(h) - 1 - y) * row:][:row]
-		copy(tmp, a)
-		copy(a, b)
-		copy(b, tmp)
-	}
-	for i := 3; i < len(pixels); i += 4 do pixels[i] = 255
 }
 
 jpeg_encode :: proc(pixels: []u8, w, h: i32, quality: int) -> ([]u8, bool) {

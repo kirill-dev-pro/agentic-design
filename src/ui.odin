@@ -4,13 +4,11 @@ import "engine"
 
 import "core:encoding/json"
 import "core:fmt"
-import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
 import "core:time"
-import "core:unicode/utf8"
 import "vendor:glfw"
 import nvg "nanovg"
 
@@ -1281,7 +1279,7 @@ copy_png_render :: proc() {
 	if !rok do return
 	png, pok := engine.png_encode(pixels, w, h)
 	if !pok do return
-	engine.clipboard_set(png, "public.png")
+	clipboard_set(png, "public.png")
 	set_status("Copied as PNG (%d × %d)", w, h)
 }
 

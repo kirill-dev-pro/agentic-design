@@ -1,7 +1,6 @@
 package engine
 
 import "core:encoding/json"
-import "core:fmt"
 import "core:strings"
 
 // Pages inside a document. The .pen format has no pages, so they are kept in the

@@ -1,19 +1,11 @@
 package agentic_design
 
 import "base:intrinsics"
-import "base:runtime"
-import "core:c"
 import "core:encoding/json"
 import "core:fmt"
-import "core:math"
 import "core:os"
-import "core:path/filepath"
 import "core:slice"
 import "core:strings"
-import "core:time"
-import NS "core:sys/darwin/Foundation"
-import "vendor:glfw"
-import nvg "nanovg"
 import "engine"
 
 // Copies font files into the `fonts` folder next to the document and lists them in its

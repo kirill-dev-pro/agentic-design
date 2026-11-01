@@ -1,13 +1,8 @@
 package engine
 
-import "base:intrinsics"
-import "base:runtime"
-import "core:c"
 import "core:fmt"
 import "core:os"
 import "core:strings"
-import NS "core:sys/darwin/Foundation"
-import "vendor:glfw"
 import nvg "../nanovg"
 
 // Image fills: files referenced relative to the .pen document, loaded into NanoVG on demand.
@@ -61,20 +56,5 @@ is_image_file :: proc(path: string) -> bool {
 	lower := strings.to_lower(path, context.temp_allocator)
 	for e in IMAGE_EXTS do if strings.has_suffix(lower, e) do return true
 	return false
-}
-
-// Puts data of one type (a UTI such as "public.png" or "public.html") on the system
-// clipboard; `text` adds a plain-text version beside it.
-clipboard_set :: proc(data: []u8, uti: string, text := "") {
-	pb := intrinsics.objc_send(^NS.Pasteboard, NS.Pasteboard, "generalPasteboard")
-	if pb == nil do return
-	_ = intrinsics.objc_send(NS.Integer, pb, "clearContents")
-	d := NS.Data.alloc()->initWithBytes(data)
-	t := NS.String.alloc()->initWithOdinString(uti)
-	_ = intrinsics.objc_send(NS.BOOL, pb, "setData:forType:", d, t)
-	if text != "" {
-		s := NS.String.alloc()->initWithOdinString(text)
-		_ = intrinsics.objc_send(NS.BOOL, pb, "setString:forType:", s, NS.AT("public.utf8-plain-text"))
-	}
 }
 

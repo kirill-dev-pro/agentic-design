@@ -1,19 +1,9 @@
 package agentic_design
 
 import "base:intrinsics"
-import "base:runtime"
-import "core:c"
-import "core:encoding/json"
 import "core:fmt"
-import "core:math"
 import "core:os"
-import "core:path/filepath"
-import "core:slice"
 import "core:strings"
-import "core:time"
-import NS "core:sys/darwin/Foundation"
-import "vendor:glfw"
-import nvg "nanovg"
 import "engine"
 
 // Writes the files into a folder next to the document (or `dir`) and returns it.

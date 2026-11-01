@@ -1,10 +1,7 @@
 package engine
 
-import "core:fmt"
 import "core:math"
-import gl "vendor:OpenGL"
 import nvg "../nanovg"
-import nvgl "../nanovg/gl"
 
 // Layer blur and background blur. NanoVG draws a frame when it ends, so a blur is made
 // before the frame that shows it: the layer (or everything painted before it) is drawn
@@ -27,7 +24,7 @@ Blur_Result :: struct {
 }
 
 Blur_Buffer :: struct {
-	a, b: nvgl.framebuffer,
+	a, b: Target,
 	w, h: int,
 }
 
@@ -38,13 +35,6 @@ blur_active: bool // draw_node_tree uses the results (canvas and screenshots onl
 blur_self: int // the layer being drawn into its own buffer
 blur_stop: int // capturing a backdrop: drawing stops at this layer
 blur_stopped: bool
-
-blur_gl: struct {
-	prog:                     u32,
-	vao, vbo:                 u32,
-	tex, dir, sigma, radius:  i32,
-	failed:                   bool,
-}
 
 // Prepares every blur visible in `view`, in paint order (a blur behind another one is
 // ready by the time the one in front captures it).
@@ -65,26 +55,23 @@ blur_prepare :: proc(view: Blur_View) {
 			}
 		}
 	}
-	if count > 0 do nvgl.BindFramebuffer(nil)
 }
 
 blur_buffer :: proc(i, w, h: int) -> ^Blur_Buffer {
 	for len(blur_buffers) <= i do append(&blur_buffers, Blur_Buffer{})
 	b := &blur_buffers[i]
 	if b.w != w || b.h != h {
-		if b.w > 0 {
-			nvgl.DeleteFramebuffer(&b.a)
-			nvgl.DeleteFramebuffer(&b.b)
-		}
-		b.a = nvgl.CreateFramebuffer(renderer, w, h, {})
-		b.b = nvgl.CreateFramebuffer(renderer, w, h, {})
+		target_free(&b.a)
+		target_free(&b.b)
+		b.a = target_make(w, h)
+		b.b = target_make(w, h)
 		b.w, b.h = w, h
 	}
 	return b
 }
 
 blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: int) -> (res: Blur_Result, ok: bool) {
-	if !blur_shader() do return
+	if !gpu_blur_ready() do return
 	xf := view.xf
 	scale := math.sqrt(abs(xf[0] * xf[3] - xf[1] * xf[2])) * view.dpr
 	sigma := radius / 2 * scale // in framebuffer pixels
@@ -112,11 +99,7 @@ blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: i
 	buf := blur_buffer(index, w, h)
 
 	vg := renderer
-	nvgl.BindFramebuffer(&buf.a)
-	gl.Viewport(0, 0, i32(w), i32(h))
-	if back do gl.ClearColor(view.bg.r, view.bg.g, view.bg.b, 1)
-	else do gl.ClearColor(0, 0, 0, 0)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
+	target_begin(&buf.a, {view.bg.r, view.bg.g, view.bg.b, 1} if back else {0, 0, 0, 0})
 	nvg.BeginFrame(vg, f32(w), f32(h), 1)
 	nvg.Scale(vg, f32(w) / (hi.x - lo.x), f32(h) / (hi.y - lo.y))
 	nvg.Translate(vg, -lo.x, -lo.y)
@@ -150,8 +133,8 @@ blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: i
 	nvg.EndFrame(vg)
 
 	s := sigma * f32(w) / (hi.x - lo.x)
-	blur_pass(buf.a.texture, buf.b.fbo, w, h, {1 / f32(w), 0}, s)
-	blur_pass(buf.b.texture, buf.a.fbo, w, h, {0, 1 / f32(h)}, s)
+	gpu_blur(&buf.a, &buf.b, {1 / f32(w), 0}, s)
+	gpu_blur(&buf.b, &buf.a, {0, 1 / f32(h)}, s)
 	return {image = buf.a.image, rect = {lo.x / view.dpr, lo.y / view.dpr, (hi.x - lo.x) / view.dpr, (hi.y - lo.y) / view.dpr}}, true
 }
 
@@ -160,88 +143,6 @@ node_transform_of_parent :: proc(n: ^Node) -> (Xform, bool) {
 	p, _ := doc_find_uid(current, n.parent)
 	if p == nil do return XFORM_IDENTITY, false
 	return node_transform(p)
-}
-
-// One direction of the Gaussian: src texture → dst framebuffer.
-blur_pass :: proc(src: u32, dst: u32, w, h: int, dir: [2]f32, sigma: f32) {
-	g := &blur_gl
-	gl.BindFramebuffer(gl.FRAMEBUFFER, dst)
-	gl.Viewport(0, 0, i32(w), i32(h))
-	gl.Disable(gl.BLEND)
-	gl.Disable(gl.STENCIL_TEST)
-	gl.Disable(gl.SCISSOR_TEST)
-	gl.Disable(gl.CULL_FACE)
-	gl.UseProgram(g.prog)
-	gl.ActiveTexture(gl.TEXTURE0)
-	gl.BindTexture(gl.TEXTURE_2D, src)
-	gl.Uniform1i(g.tex, 0)
-	gl.Uniform2f(g.dir, dir.x, dir.y)
-	gl.Uniform1f(g.sigma, sigma)
-	gl.Uniform1i(g.radius, i32(math.ceil(3 * sigma)))
-	gl.BindVertexArray(g.vao)
-	gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4)
-	gl.BindVertexArray(0)
-	gl.BindTexture(gl.TEXTURE_2D, 0)
-	gl.UseProgram(0)
-	gl.Enable(gl.BLEND)
-}
-
-BLUR_VERT :: `#version 150 core
-in vec2 pos;
-out vec2 uv;
-void main() {
-	uv = pos * 0.5 + 0.5;
-	gl_Position = vec4(pos, 0.0, 1.0);
-}
-`
-
-BLUR_FRAG :: `#version 150 core
-uniform sampler2D tex;
-uniform vec2 dir;
-uniform float sigma;
-uniform int radius;
-in vec2 uv;
-out vec4 color;
-void main() {
-	vec4 sum = vec4(0.0);
-	float total = 0.0;
-	for (int i = -radius; i <= radius; i++) {
-		float w = exp(-float(i * i) / (2.0 * sigma * sigma));
-		sum += texture(tex, uv + dir * float(i)) * w;
-		total += w;
-	}
-	color = sum / total;
-}
-`
-
-// Compiles the blur shader once; false (and blurs are skipped) if the driver refuses it.
-blur_shader :: proc() -> bool {
-	g := &blur_gl
-	if g.prog != 0 do return true
-	if g.failed do return false
-	prog, ok := gl.load_shaders_source(BLUR_VERT, BLUR_FRAG)
-	if !ok {
-		fmt.eprintln("blur shader failed to compile")
-		g.failed = true
-		return false
-	}
-	g.prog = prog
-	g.tex = gl.GetUniformLocation(prog, "tex")
-	g.dir = gl.GetUniformLocation(prog, "dir")
-	g.sigma = gl.GetUniformLocation(prog, "sigma")
-	g.radius = gl.GetUniformLocation(prog, "radius")
-	quad := [8]f32{-1, -1, 1, -1, -1, 1, 1, 1}
-	gl.GenVertexArrays(1, &g.vao)
-	gl.BindVertexArray(g.vao)
-	gl.GenBuffers(1, &g.vbo)
-	gl.BindBuffer(gl.ARRAY_BUFFER, g.vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, size_of(quad), &quad, gl.STATIC_DRAW)
-	loc := u32(gl.GetAttribLocation(prog, "pos"))
-	gl.EnableVertexAttribArray(loc)
-	gl.VertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
-	gl.BindVertexArray(0)
-	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
-	return true
 }
 
 // The blurred layer, in place of the layer (frame coordinates, so the transform is reset).

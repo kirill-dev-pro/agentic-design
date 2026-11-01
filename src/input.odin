@@ -567,7 +567,7 @@ handle_shortcuts :: proc() {
 		case key_pressed(glfw.KEY_C) && alt:
 			if len(app.sel) > 0 {
 				html := engine.html_snippet(selection_roots())
-				engine.clipboard_set(transmute([]u8)html, "public.html", html)
+				clipboard_set(transmute([]u8)html, "public.html", html)
 				set_status("Copied as HTML")
 			}
 		case key_pressed(glfw.KEY_C): copy_selection()

@@ -9,11 +9,9 @@ import "core:strconv"
 import "core:strings"
 import "core:sync"
 import "core:time"
-import gl "vendor:OpenGL"
 import "vendor:glfw"
 import "fontstash"
 import nvg "nanovg"
-import nvgl "nanovg/gl"
 
 // Window regions: tab bar on top, sidebar + tool strip on the left, inspector on the right.
 TAB_H :: f32(44)
@@ -129,9 +127,7 @@ app_main :: proc(path: string) {
 		fmt.eprintln("could not create a window")
 		return
 	}
-	gl.load_up_to(3, 2, glfw.gl_set_proc_address)
-
-	app.vg = nvgl.Create({.ANTI_ALIAS, .STENCIL_STROKES})
+	app.vg = engine.gpu_create({set_proc_address = glfw.gl_set_proc_address})
 	// the engine draws with the window's NanoVG context, on the open document (tabs are
 	// swapped into app.doc), and skips the pages the window does not show
 	engine.renderer = app.vg
@@ -265,10 +261,8 @@ frame_draw :: proc(fb: [2]i32, capture: bool) -> (t3, t4, t5, t6: time.Tick) {
 		c := app.canvas
 		engine.blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg, order = app.draw_order[:]})
 	}
-	gl.Viewport(0, 0, fb.x, fb.y)
 	bg := app.canvas_bg if app.tab >= 0 else PANEL_BG
-	gl.ClearColor(bg.r, bg.g, bg.b, 1)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	engine.gpu_window_begin(fb.x, fb.y, {bg.r, bg.g, bg.b, 1})
 	nvg.BeginFrame(app.vg, app.screen.x, app.screen.y, app.dpr)
 	if app.tab >= 0 do draw_canvas()
 	t3 = time.tick_now()

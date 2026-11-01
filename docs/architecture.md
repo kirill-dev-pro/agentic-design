@@ -159,9 +159,9 @@ Each top-level subtree gets two passes:
 cached value holds the size and the line breaks as byte ranges. Drawing replays those lines
 one by one, so wrapping does not change with zoom.
 
-## Rendering (`src/engine/draw.odin`, `src/app.odin`)
+## Rendering (`src/engine/draw.odin`, `src/engine/gpu.odin`, `src/app.odin`)
 
-NanoVG draws everything on OpenGL 3.2:
+NanoVG draws everything:
 
 - the canvas under a camera transform (`app.cam`, `app.zoom`), including Lucide icons
   from the built-in set (`src/engine/icons.odin`, decision #22). Nodes outside the visible part
@@ -173,9 +173,21 @@ NanoVG draws everything on OpenGL 3.2:
 shadow), ellipses, SVG paths parsed by `src/engine/svgpath.odin`, text, and placeholders for node
 types the app does not render.
 
-Offscreen renders reuse the back buffer before the frame is drawn, then read the pixels with
-`glReadPixels`. That covers screenshots, thumbnails and PNG export. Their size is limited to
-the framebuffer.
+NanoVG turns paths, images and text into GPU work through its backend
+(`src/nanovg/gl`, OpenGL 3.2). The rest of the GPU work goes through `src/engine/gpu.odin`
+(decision #52):
+
+- `gpu_window_begin` and `target_begin` choose where the next NanoVG frame draws (the
+  window or an offscreen `Target`) and clear it;
+- `gpu_blur` runs one direction of the Gaussian for layer and background blur
+  (`src/engine/blur.odin`);
+- `gpu_read` reads pixels back, top row first: screenshots, thumbnails, copy as PNG and
+  export render the region in tiles of 2048 px through one target (`render_region` in
+  `src/api.odin`), a view screenshot reads the window;
+- `gpu_max_side`, `gpu_trim` and `gpu_finish` give the texture limit and hand memory back.
+
+One backend is compiled in (`-define:RENDERER=...`); `src/engine/gpu_gl.odin` is the
+OpenGL one. No other file calls the GPU API.
 
 Patched copies of NanoVG and fontstash live in `src/nanovg` and `src/fontstash`. The
 patches are listed in `src/nanovg/README.md`.
@@ -272,6 +284,7 @@ Engine (`src/engine/`):
 | File | Role |
 | --- | --- |
 | `engine.odin` | the globals the host sets, `sorted_keys` |
+| `gpu.odin`, `gpu_gl.odin` | the GPU interface besides NanoVG: offscreen targets, blur pass, pixel readback; its OpenGL backend |
 | `doc.odin` | node model, props, parsing, indexes, instances, overrides, undo snapshots |
 | `pen.odin` | `.pen` reading and writing, variable resolution |
 | `themes.odin`, `pages.odin`, `libraries.odin` | theme axes and themed variables; pages in the header; imported libraries |
@@ -299,5 +312,6 @@ App (`src/`):
 | `server.odin`, `api.odin`, `mcp.odin`, `agent_tools.odin` | control socket, its methods, stdio MCP server, the guide |
 | `presence.odin`, `agents.odin` | agent cursors and flashes; agent client detection and MCP registration |
 | `memory.odin` | the big allocator, memory trim and the `memory` report |
+| `clipboard_darwin.odin` | putting data on the system clipboard |
 | `activity_darwin.odin`, `applog.odin`, `settings.odin` | no App Nap while agents work; the start/exit log; app settings |
 | `nanovg/`, `fontstash/` | patched vendored renderer and font rasteriser |

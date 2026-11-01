@@ -10,7 +10,6 @@ import "core:slice"
 import "core:strings"
 import "core:time"
 import "../fontstash"
-import nvg "../nanovg"
 
 // Fonts by family: those a document lists under "fonts" (as pen.dev does), installed
 // fonts and those in a `fonts` folder next to the open document (.ttf, .otf, every font of

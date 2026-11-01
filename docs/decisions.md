@@ -1062,11 +1062,52 @@ the same part, the later one in key order wins (before, it was whichever the map
 
 - Before the move and after it, documents, lint, HTML export and every screenshot of the
   two Sample files were compared: identical, except up to 1 in 255 on about 0.01 % of
-  text pixels after the sorting change (glyphs reach the atlas in another order). Undo,
-  the session and presence scripts, the scripted run and two fuzz passes under lldb
-  pass. Idle CPU and memory at start (273 MB) are unchanged.
+  text pixels. Those pixels change with where the binary is run from, not with the code:
+  the same binary copied to a longer path gives them too (probably the window's own
+  text, which includes the binary's path, puts glyphs into the atlas in another order).
+  Comparisons of two builds therefore run both from paths of the same length. Undo, the
+  session and presence scripts, the scripted run and two fuzz passes under lldb pass.
+  Idle CPU and memory at start (273 MB) are unchanged.
 - The engine is still single-threaded and keeps its state in globals: one engine per
   process. A C API for other languages, if phones need it, goes on top of this package.
 - The next step puts a renderer interface between `draw.odin` and NanoVG's GL backend, so
   that a WebGPU backend can replace it.
+
+## 52. The GPU work besides NanoVG goes through one interface, one backend compiled in
+
+**Problem.** Moving to WebGPU (and to the browser, where WebGPU is the only modern API)
+means replacing every OpenGL call. NanoVG already reaches the GPU only through its
+backend callbacks (`nvg.Params`), but the app and the engine also called GL directly:
+the window's clear, offscreen framebuffers for screenshot tiles and blurs, the blur
+shader, `glReadPixels` through a pixel buffer, the texture size limit and NanoVG's
+buffer recycling. GL's pixel rows run bottom-up, and the PNG, JPEG, WEBP and PDF
+encoders flipped them.
+
+**Decision.** `src/engine/gpu.odin` lists what a backend provides: `Gpu_Surface`,
+`Target` (an offscreen colour buffer with a stencil and the NanoVG image to draw it
+with), `gpu_create`, `gpu_window_begin`, `target_make`, `target_begin`, `target_free`,
+`gpu_blur`, `gpu_read`, `gpu_max_side`, `gpu_trim` and `gpu_finish`. The backend is
+chosen when building (`-define:RENDERER=gl`, the default); each backend's file wraps its
+declarations in `when RENDERER == ...`, so a call costs nothing and the compiler checks
+that every backend has every call. `src/engine/gpu_gl.odin` holds the OpenGL code that
+was in `blur.odin`, `api.odin` and `app.odin`, unchanged. `gpu_read` returns rows top
+first, as WebGPU, Metal and image files have them; the GL backend copies each strip it
+reads into its rows from the top, and the encoders no longer flip. The pasteboard code,
+the engine's last Cocoa call, moved to the app (`src/clipboard_darwin.odin`).
+
+**Consequences.**
+
+- A build of this step and one of the previous step, run from paths of the same length
+  (#51), give byte-identical results on 35 outputs: documents, lint, exports, every
+  screenshot of the Sample files, a test file with layer blur, background blur and
+  shadows at three scales, view screenshots, a canvas larger than one tile, and the
+  PNG, JPEG, WEBP and PDF files. The scripted run, a fuzz pass and the memory session
+  under lldb pass.
+- A WebGPU backend is a NanoVG backend (`src/nanovg/wgpu`) plus `gpu_wgpu.odin` with
+  the same calls. The host part that differs is the surface: GL needs a current
+  context from GLFW, WebGPU a surface made from the window (a `CAMetalLayer` on macOS,
+  a canvas in the browser).
+- A choice at build time means one binary has one backend: a machine without WebGPU
+  cannot fall back to GL at run time. If that is ever needed, the same calls can become
+  a table of procedures.
 

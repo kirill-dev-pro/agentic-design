@@ -1,10 +1,8 @@
 #+build darwin
 package agentic_design
 
-import "engine"
 
 import "base:intrinsics"
-import "base:runtime"
 import NS "core:sys/darwin/Foundation"
 import "vendor:glfw"
 

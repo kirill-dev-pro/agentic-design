@@ -2,7 +2,6 @@ package agentic_design
 
 import "engine"
 
-import "base:runtime"
 import "core:c"
 import "core:encoding/base64"
 import "core:encoding/json"
@@ -11,11 +10,8 @@ import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
-import gl "vendor:OpenGL"
 import "vendor:glfw"
 import nvg "nanovg"
-import nvgl "nanovg/gl"
-import stbiw "vendor:stb/image"
 
 // Request: {"method": "...", "params": {...}}
 // Response: {"ok": true, "result": ...} or {"ok": false, "error": "..."}
@@ -636,7 +632,7 @@ capture_view :: proc() {
 	req := shot.req
 	defer shot = {}
 	fb := platform_framebuffer_size()
-	finish_request(req, encode_png_response(read_pixels(fb.x, fb.y), fb.x, fb.y))
+	finish_request(req, encode_png_response(engine.gpu_read(nil, 0, 0, int(fb.x), int(fb.y)), fb.x, fb.y))
 }
 
 // Renders the target offscreen (render_region), reads it back and encodes a PNG.
@@ -741,15 +737,13 @@ write_scale_note :: proc(b: ^strings.Builder, asked: f32) {
 }
 
 // Draws a page rectangle (a node, or every top-level node) into the back buffer at
-// `scale` pixels per unit and reads the pixels back (bottom-up rows, RGBA).
+// `scale` pixels per unit and reads the pixels back (RGBA rows, top row first).
 render_scale: f32 // the scale the last render_region used, after its limits
 
 render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color) -> (pixels: []u8, ow, oh: i32, ok: bool) {
 	// drawn into a buffer of its own, so it may be larger than the window (up to what the
 	// GPU allows) and leaves the window's frame alone
-	max_side: i32
-	gl.GetIntegerv(gl.MAX_TEXTURE_SIZE, &max_side)
-	max_side = clamp(max_side, 1024, 16384)
+	max_side := i32(clamp(engine.gpu_max_side(), 1024, 16384))
 	// up to 16 pixels per unit, the GPU's largest texture a side and 100 Mpx in all;
 	// render_scale tells callers what was used
 	s := clamp(scale, 0.05, 16)
@@ -766,10 +760,9 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 	TILE :: 2048
 	vg := app.vg
 	pixels = make([]u8, int(ow) * int(oh) * 4, context.temp_allocator)
-	tile_fb := nvgl.CreateFramebuffer(vg, TILE, TILE, {})
-	defer gl.Flush() // (last: the driver takes the deleted buffer back now, not at the next frame)
-	defer nvgl.DeleteFramebuffer(&tile_fb)
-	defer nvgl.BindFramebuffer(nil)
+	tile := engine.target_make(TILE, TILE)
+	defer engine.gpu_finish() // (last: the driver takes the deleted buffer back now, not at the next frame)
+	defer engine.target_free(&tile)
 	saved_cull := engine.cull_rect
 	defer engine.cull_rect = saved_cull
 	for y0 := i32(0); y0 < oh; y0 += TILE {
@@ -777,10 +770,7 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 			tw, th := min(TILE, ow - x0), min(TILE, oh - y0)
 			xf := nvg.Matrix{s, 0, 0, s, -r[0] * s - f32(x0), -r[1] * s - f32(y0)}
 			engine.blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg, order = app.draw_order[:]})
-			nvgl.BindFramebuffer(&tile_fb)
-			gl.Viewport(0, 0, TILE, TILE)
-			gl.ClearColor(bg.r, bg.g, bg.b, 1)
-			gl.Clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
+			engine.target_begin(&tile, {bg.r, bg.g, bg.b, 1})
 			nvg.BeginFrame(vg, TILE, TILE, 1)
 			nvg.Transform(vg, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5])
 			engine.cull_rect = {r[0] + f32(x0) / s, r[1] + f32(y0) / s, f32(tw) / s, f32(th) / s}
@@ -794,52 +784,16 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 			}
 			engine.blur_active = false
 			nvg.EndFrame(vg)
-			// the tile's top rows, bottom-up, land in the image's rows (it is bottom-up too)
-			tile := read_pixels_rect(0, TILE - th, tw, th)
-			first := int(oh - y0 - th)
+			got := engine.gpu_read(&tile, 0, 0, int(tw), int(th))
 			for k in 0 ..< int(th) {
-				copy(pixels[((first + k) * int(ow) + int(x0)) * 4:][:int(tw) * 4], tile[k * int(tw) * 4:][:int(tw) * 4])
+				copy(pixels[((int(y0) + k) * int(ow) + int(x0)) * 4:][:int(tw) * 4], got[k * int(tw) * 4:][:int(tw) * 4])
 			}
 		}
 	}
 	return pixels, ow, oh, true
 }
 
-// The bound framebuffer's pixels (bottom-up rows, RGBA), read in strips of 128 rows
-// through one small pixel buffer. Read straight into memory, the driver kept a 32 MB
-// staging buffer after the first screenshot; through a pixel buffer as large as the
-// image, it kept that one (20 MB for a window-sized shot) in its pool after deletion.
-read_pixels :: proc(w, h: i32) -> []u8 {
-	return read_pixels_rect(0, 0, w, h)
-}
-
-read_pixels_rect :: proc(x, y, w, h: i32) -> []u8 {
-	STRIP :: 128
-	pixels := make([]u8, int(w * h * 4), context.temp_allocator)
-	row := int(w) * 4
-	pbo: u32
-	gl.GenBuffers(1, &pbo)
-	gl.BindBuffer(gl.PIXEL_PACK_BUFFER, pbo)
-	gl.PixelStorei(gl.PACK_ALIGNMENT, 1)
-	// a whole number of megabytes: the driver keeps a block per size it was asked for, and
-	// image widths vary (one block per width came to 23 MB of shared memory in a session)
-	pbo_size := (int(STRIP) * row + (1 << 20) - 1) / (1 << 20) * (1 << 20)
-	for y0 := i32(0); y0 < h; y0 += STRIP {
-		rows := min(STRIP, h - y0)
-		n := int(rows) * row
-		gl.BufferData(gl.PIXEL_PACK_BUFFER, pbo_size, nil, gl.STREAM_READ)
-		gl.ReadPixels(x, y + y0, w, rows, gl.RGBA, gl.UNSIGNED_BYTE, nil)
-		if src := gl.MapBuffer(gl.PIXEL_PACK_BUFFER, gl.READ_ONLY); src != nil {
-			copy(pixels[int(y0) * row:][:n], ([^]u8)(src)[:n])
-			gl.UnmapBuffer(gl.PIXEL_PACK_BUFFER)
-		}
-	}
-	gl.BindBuffer(gl.PIXEL_PACK_BUFFER, 0)
-	gl.DeleteBuffers(1, &pbo)
-	return pixels
-}
-
-// Flips GL rows (bottom-up) in place and encodes a PNG (temp allocator).
+// Encodes RGBA rows (top row first) as a PNG response (temp allocator).
 encode_png_response :: proc(pixels: []u8, ow, oh: i32, asked: f32 = 0) -> string {
 	png, ok := engine.png_encode(pixels, ow, oh)
 	if !ok do return api_error("PNG encoding failed")

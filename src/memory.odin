@@ -7,7 +7,6 @@ import "core:fmt"
 import "core:strings"
 import "core:sync"
 import "core:sys/posix"
-import nvgl "nanovg/gl"
 
 foreign import libc "system:System.framework"
 
@@ -119,7 +118,7 @@ use_big_allocator_for_temp :: proc() {
 // temporary arena's extra blocks) back to the system: macOS keeps freed large blocks
 // for reuse, and they count against the app until it does. Once per quiet spell.
 memory_trim :: proc() -> uint {
-	if app.vg != nil do nvgl.RecycleBuffers(app.vg)
+	engine.gpu_trim()
 	return malloc_zone_pressure_relief(nil, 0)
 }
 

@@ -1,6 +1,5 @@
 package agentic_design
 
-import "engine"
 
 import "base:intrinsics"
 import NS "core:sys/darwin/Foundation"

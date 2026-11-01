@@ -84,7 +84,6 @@ Png_Strip :: struct {
 	pixels:     []u8,
 	w, h:       int,
 	y0, y1:     int, // rows of the image (top-down) this strip covers
-	bottom_up:  bool,
 	last:       bool,
 	level:      c.int,
 	filtered:   []u8,
@@ -94,12 +93,11 @@ Png_Strip :: struct {
 	ok:         bool,
 }
 
-// Row y of the image, top-down, from GL's bottom-up pixels.
+// Row y of the image.
 @(private = "file")
 png_row :: #force_inline proc(s: ^Png_Strip, y: int) -> []u8 {
 	stride := s.w * 4
-	r := s.h - 1 - y if s.bottom_up else y
-	return s.pixels[r * stride:][:stride]
+	return s.pixels[y * stride:][:stride]
 }
 
 @(private = "file")
@@ -181,9 +179,9 @@ png_strip_work :: proc(s: ^Png_Strip) {
 	s.ok = true
 }
 
-// Encodes w × h RGBA pixels (alpha ignored) as an RGB PNG. `bottom_up`: rows in GL order.
+// Encodes w × h RGBA pixels (top row first, alpha ignored) as an RGB PNG.
 // The result is allocated with `allocator`.
-png_write :: proc(pixels: []u8, w, h: int, bottom_up: bool, allocator := context.allocator, level := PNG_LEVEL, threads := 0) -> (png: []u8, ok: bool) {
+png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level := PNG_LEVEL, threads := 0) -> (png: []u8, ok: bool) {
 	if w <= 0 || h <= 0 || len(pixels) < w * h * 4 do return
 	line := w * 3 + 1
 	// strips of at least 64 rows and 256 KB of input, one per core at most
@@ -201,7 +199,6 @@ png_write :: proc(pixels: []u8, w, h: int, bottom_up: bool, allocator := context
 			h         = h,
 			y0        = y0,
 			y1        = y1,
-			bottom_up = bottom_up,
 			last      = i == n - 1,
 			level     = c.int(level),
 			filtered  = filtered[y0 * line:y1 * line],
@@ -273,5 +270,5 @@ png_write :: proc(pixels: []u8, w, h: int, bottom_up: bool, allocator := context
 
 // Bottom-up RGBA rows (as glReadPixels gives them) to a PNG, in the temporary allocator.
 png_encode :: proc(pixels: []u8, w, h: i32) -> (png: []u8, ok: bool) {
-	return png_write(pixels, int(w), int(h), true, context.temp_allocator)
+	return png_write(pixels, int(w), int(h), context.temp_allocator)
 }
