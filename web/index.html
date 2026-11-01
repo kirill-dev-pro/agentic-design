@@ -10,6 +10,7 @@
 	#bar { position: fixed; inset: 0 0 auto 0; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #1e1e1e; border-bottom: 1px solid #2c2c2c; box-sizing: border-box; }
 	#title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	#bar .spacer { flex: 1; }
+	#themes { display: flex; gap: 6px; }
 	#bar select, #bar button, #bar label.button { background: #2a2a2a; color: inherit; border: 1px solid #3a3a3a; border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer; }
 	#bar select:hover, #bar button:hover, #bar label.button:hover { background: #333; }
 	#missing { color: #e0a85a; display: none; }
@@ -24,6 +25,7 @@
 <div id="bar">
 	<span id="title">Agentic Design viewer</span>
 	<select id="pages" hidden></select>
+	<span id="themes"></span>
 	<span class="spacer"></span>
 	<span id="missing"></span>
 	<button id="zoom" title="Zoom to fit (0)">100%</button>

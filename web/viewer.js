@@ -11,6 +11,7 @@
 	const pages = document.getElementById("pages");
 	const zoom = document.getElementById("zoom");
 	const missing = document.getElementById("missing");
+	const themes = document.getElementById("themes");
 
 	const mem = new odin.WasmMemoryInterface();
 	const encoder = new TextEncoder();
@@ -47,6 +48,12 @@
 		ex.viewer_files_done();
 	}
 
+	function setTheme(axis, value) {
+		const [a, al] = put(encoder.encode(axis));
+		const [v, vl] = put(encoder.encode(value));
+		ex.viewer_set_theme(a, al, v, vl);
+	}
+
 	function open(path) {
 		showMessage("");
 		const [p, pl] = put(encoder.encode(path));
@@ -63,6 +70,24 @@
 			pages.replaceChildren(...names.map((name, i) => new Option(name, i)));
 		}
 		pages.value = String(info.page);
+		// one picker per theme axis ("mode: light | dark"), rebuilt when the axes change
+		const axes = info.themes || [];
+		const shape = JSON.stringify(axes.map((a) => [a.name, a.values]));
+		if (themes.dataset.shape !== shape) {
+			themes.dataset.shape = shape;
+			themes.replaceChildren(...axes.map((a) => {
+				const select = document.createElement("select");
+				select.title = a.name;
+				select.dataset.axis = a.name;
+				select.append(...a.values.map((v) => new Option(a.name + ": " + v, v)));
+				select.addEventListener("change", () => setTheme(a.name, select.value));
+				return select;
+			}));
+		}
+		for (const a of axes) {
+			const select = themes.querySelector(`select[data-axis="${CSS.escape(a.name)}"]`);
+			if (select) select.value = a.value;
+		}
 		zoom.textContent = Math.round(info.zoom * 100) + "%";
 		const lost = info.missing || [];
 		missing.style.display = lost.length ? "" : "none";
@@ -98,9 +123,16 @@
 		zoom: (factor, x, y) => ex.viewer_zoom(factor, x, y),
 		memory: () => mem.memory.buffer.byteLength, // the module's heap, in bytes
 		page: (i) => ex.viewer_set_page(i),
+		theme: (axis, value) => setTheme(axis, value),
 	};
 
-	const file = new URLSearchParams(location.search).get("file");
+	const params = new URLSearchParams(location.search);
+	// ?theme=mode:dark,platform:ios picks theme values before the document shows
+	for (const pair of (params.get("theme") || "").split(",")) {
+		const i = pair.indexOf(":");
+		if (i > 0) setTheme(pair.slice(0, i), pair.slice(i + 1));
+	}
+	const file = params.get("file");
 	if (file) open(new URL(file, location.href).pathname);
 
 	// ---------------------------------------------------------------- pan and zoom

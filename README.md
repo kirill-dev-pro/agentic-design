@@ -69,7 +69,8 @@ python3 -m http.server 8000     # then open, for a document on the same server:
 ```
 
 Without `?file=`, drop a `.pen` file or its folder on the page. Drag to pan, scroll or
-pinch to zoom, 0 to fit.
+pinch to zoom, 0 to fit. The bar picks the page and the theme (`&theme=mode:dark` in the
+URL).
 
 Connect it to Claude Code for every project:
 

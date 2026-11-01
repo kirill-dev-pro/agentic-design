@@ -227,7 +227,9 @@ soon as its file is there. So the document comes first, then its libraries, then
 fonts and images they name, each round fetched in parallel (decision #55).
 
 The page owns the input and calls the module: `viewer_pan`, `viewer_zoom` (around a
-point), `viewer_view`, `viewer_fit`, `viewer_set_page`, `viewer_open`. The module draws
+point), `viewer_view`, `viewer_fit`, `viewer_set_page`, `viewer_set_theme`, `viewer_open`.
+The bar has a picker per theme axis (a document's `mode: light | dark`); an axis not
+picked shows its first value, and `?theme=mode:dark` picks one from the URL. The module draws
 only when something changed, in the browser's animation frame (`step`), and tells the
 page what its bar shows (`page_info`). Families that are neither listed in a document's
 `fonts` nor its libraries' are drawn with the built-in Noto Sans, as pen.dev does: a page

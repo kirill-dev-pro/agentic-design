@@ -25,7 +25,8 @@ foreign page {
 	// fetches the files (one path per line), hands each to viewer_file (one that is
 	// missing as empty) and then calls viewer_files_done
 	page_fetch :: proc(paths: string) ---
-	// what the page's bar shows: {"title", "pages": [names], "page", "zoom", "missing": [paths]}
+	// what the page's bar shows: {"title", "pages": [names], "page", "themes": [{"name",
+	// "values", "value"}], "zoom", "draw_ms", "missing": [paths]}
 	page_info :: proc(json: string) ---
 	page_error :: proc(message: string) ---
 }
@@ -226,7 +227,22 @@ report :: proc() {
 		if i > 0 do strings.write_byte(&b, ',')
 		engine.json_write_string(&b, p.name)
 	}
-	fmt.sbprintf(&b, `],"page":%d,"zoom":%.4f,"draw_ms":%.2f,"missing":[`, V.page, V.zoom, V.draw_ms)
+	fmt.sbprintf(&b, `],"page":%d,"themes":[`, V.page)
+	if V.loaded do for a, i in engine.doc_theme_axes(&V.doc) {
+		if i > 0 do strings.write_byte(&b, ',')
+		strings.write_string(&b, `{"name":`)
+		engine.json_write_string(&b, a.name)
+		strings.write_string(&b, `,"values":[`)
+		for v, k in a.values {
+			if k > 0 do strings.write_byte(&b, ',')
+			engine.json_write_string(&b, v)
+		}
+		strings.write_string(&b, `],"value":`)
+		// an axis the viewer has not set shows its first value
+		engine.json_write_string(&b, engine.theme[a.name] if a.name in engine.theme else (a.values[0] if len(a.values) > 0 else ""))
+		strings.write_byte(&b, '}')
+	}
+	fmt.sbprintf(&b, `],"zoom":%.4f,"draw_ms":%.2f,"missing":[`, V.zoom, V.draw_ms)
 	for p, i in V.missing {
 		if i > 0 do strings.write_byte(&b, ',')
 		engine.json_write_string(&b, p)
@@ -318,6 +334,23 @@ viewer_view :: proc "contextless" (zoom, x, y: f32) {
 viewer_fit :: proc "contextless" () {
 	V.fit_pending = true
 	V.auto_fit = true
+	V.redraw = true
+}
+
+// Shows the document with `value` on the theme axis `axis` (both are freed).
+@(export)
+viewer_set_theme :: proc "contextless" (axis: [^]u8, axis_len: int, value: [^]u8, value_len: int) {
+	context = ctx()
+	a, v := string(axis[:axis_len]), string(value[:value_len])
+	if old, ok := engine.theme[a]; ok {
+		delete(old)
+		engine.theme[a] = strings.clone(v)
+	} else {
+		engine.theme[strings.clone(a)] = strings.clone(v)
+	}
+	free(axis)
+	free(value)
+	if V.loaded do engine.doc_retheme(&V.doc)
 	V.redraw = true
 }
 
