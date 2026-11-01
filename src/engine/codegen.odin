@@ -750,6 +750,11 @@ node_decls :: proc(g: ^Gen, n_in: ^Node, parent_in: ^Node) -> []Decl {
 			joins := [Line_Join]string{.Miter = "miter", .Round = "round", .Bevel = "bevel"}
 			if n.line_cap != .Butt do add(&d, "stroke-linecap", caps[n.line_cap])
 			if n.line_join != .Miter do add(&d, "stroke-linejoin", joins[n.line_join])
+			if n.ndash > 0 {
+				parts := make([dynamic]string, context.temp_allocator)
+				for v in n.dash[:n.ndash] do append(&parts, num_text(v))
+				add(&d, "stroke-dasharray", strings.join(parts[:], " ", context.temp_allocator))
+			}
 		}
 		add(&d, "overflow", "visible")
 	}
@@ -763,12 +768,14 @@ node_decls :: proc(g: ^Gen, n_in: ^Node, parent_in: ^Node) -> []Decl {
 	if n.kind == .Path {
 	} else if n.has_stroke && n.stroke_per_side && n.stroke_width > 0 {
 		sd := n.stroke_sides
-		add(&d, "border-style", "solid")
+		add(&d, "border-style", "dashed" if n.ndash > 0 else "solid")
 		add(&d, "border-color", color_css(n, "stroke", n.stroke))
 		add(&d, "border-width", fmt.tprintf("%s %s %s %s", px(sd[0]), px(sd[1]), px(sd[2]), px(sd[3])))
 	} else if n.has_stroke && n.stroke_width > 0 {
-		if n.stroke_align == .Outer do add(&d, "outline", fmt.tprintf("%s solid %s", px(n.stroke_width), color_css(n, "stroke", n.stroke)))
-		else do add(&d, "border", fmt.tprintf("%s solid %s", px(n.stroke_width), color_css(n, "stroke", n.stroke)))
+		// CSS borders cannot take a dash length: "dashed" is the browser's own pattern
+		style := "dashed" if n.ndash > 0 else "solid"
+		if n.stroke_align == .Outer do add(&d, "outline", fmt.tprintf("%s %s %s", px(n.stroke_width), style, color_css(n, "stroke", n.stroke)))
+		else do add(&d, "border", fmt.tprintf("%s %s %s", px(n.stroke_width), style, color_css(n, "stroke", n.stroke)))
 	}
 	if n.opacity < 1 do add(&d, "opacity", num_text(n.opacity))
 	effect_decls(g, n, &d)

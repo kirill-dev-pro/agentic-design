@@ -167,6 +167,8 @@ Node :: struct {
 	stroke_sides: [4]f32, // per-side widths (top, right, bottom, left) when stroke_per_side
 	stroke_per_side: bool,
 	line_join:    Line_Join,
+	dash:         [4]f32, // strokeDashPattern (dash, gap, ...), ndash entries
+	ndash:        u8,
 	radius:       [4]f32, // top-left, top-right, bottom-right, bottom-left
 	opacity:      f32,
 	enabled:      bool,
@@ -1409,6 +1411,7 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 	n.is_slot = false
 	n.line_cap, n.line_join = .Butt, .Miter
 	n.nfills, n.neffects, n.rotation, n.flip_x, n.flip_y = 0, 0, 0, false, false
+	n.ndash = 0
 	n.stroke_sides, n.stroke_per_side = {}, false
 	n.letter_spacing, n.underline, n.strikethrough = 0, false, false
 	n.text_valign = .Start
@@ -1494,6 +1497,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 		case "strokeWidth":
 			stroke_width = parse_thickness(doc, v)
 			n.stroke_sides, n.stroke_per_side = parse_sides(doc, v)
+		case "strokeDashPattern":
+			parse_dash(doc, n, v)
 		case "strokeAlignment":
 			switch json_str(doc, v) {
 			case "inner": n.stroke_align = .Inner
@@ -1822,6 +1827,8 @@ parse_stroke :: proc(doc: ^Document, n: ^Node, v: json.Value, thickness: ^f32) {
 			n.stroke_sides, n.stroke_per_side = parse_sides(doc, t)
 		}
 		if f, has := obj["fill"]; has do n.stroke, n.has_stroke = color_of(doc, f)
+		// older files kept the dashes in the stroke object
+		if d, has := obj["dashPattern"]; has do parse_dash(doc, n, d)
 		switch string(obj["align"].(json.String) or_else "") {
 		case "inside": n.stroke_align = .Inner
 		case "center": n.stroke_align = .Center
@@ -2153,4 +2160,20 @@ doc_rename_variable :: proc(doc: ^Document, old, new: string) {
 		p.raw = r
 	}
 	doc_write_variables(doc, vars)
+}
+
+// Dashes of a stroke: [dash, gap, ...] (strokeDashPattern next to strokeWidth, the way the
+// 2.21 schema names stroke properties). The schema has no dash property: pen.dev keeps the
+// stroke and draws it solid.
+parse_dash :: proc(doc: ^Document, n: ^Node, v: json.Value) {
+	n.ndash = 0
+	arr, ok := v.(json.Array)
+	if !ok do return
+	for item in arr {
+		if int(n.ndash) == len(n.dash) do break
+		if f, fok := num(doc, item); fok && f >= 0 {
+			n.dash[n.ndash] = f
+			n.ndash += 1
+		}
+	}
 }

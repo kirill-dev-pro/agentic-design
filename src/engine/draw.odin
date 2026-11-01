@@ -192,7 +192,7 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 			nvg.Ellipse(vg, cx, cy, max(n.w / 2 - inset, 0), max(n.h / 2 - inset, 0))
 			nvg.StrokeColor(vg, to_nvg(n.stroke))
 			nvg.StrokeWidth(vg, n.stroke_width)
-			nvg.Stroke(vg)
+			stroke_node(vg, n)
 		}
 	case .Path, .Icon:
 		if n.kind == .Icon && len(n.cmds) == 0 {
@@ -364,7 +364,7 @@ draw_box :: proc(vg: ^nvg.Context, n: ^Node) {
 		rounded_rect(vg, n.x + inset, n.y + inset, n.w - inset * 2, n.h - inset * 2, r)
 		nvg.StrokeColor(vg, to_nvg(n.stroke))
 		nvg.StrokeWidth(vg, n.stroke_width)
-		nvg.Stroke(vg)
+		stroke_node(vg, n)
 	}
 }
 
@@ -385,8 +385,19 @@ fill_and_stroke :: proc(vg: ^nvg.Context, n: ^Node) {
 	if n.has_stroke && n.stroke_width > 0 {
 		nvg.StrokeColor(vg, to_nvg(n.stroke))
 		nvg.StrokeWidth(vg, n.stroke_width)
-		nvg.Stroke(vg)
+		stroke_node(vg, n)
 	}
+}
+
+// Strokes the current path with the node's dash pattern, if it has one.
+stroke_node :: proc(vg: ^nvg.Context, n: ^Node) {
+	if n.ndash == 0 {
+		nvg.Stroke(vg)
+		return
+	}
+	nvg.StrokeDash(vg, n.dash[:n.ndash])
+	nvg.Stroke(vg)
+	nvg.StrokeDash(vg, nil)
 }
 
 // Text too small to read on screen: a bar per line in its colour.

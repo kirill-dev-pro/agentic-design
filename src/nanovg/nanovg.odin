@@ -164,6 +164,8 @@ State :: struct {
 	stroke:             Paint,
 	strokeWidth:        f32,
 	miterLimit:         f32,
+	dash:               [8]f32, // Agentic Design: dash pattern (on, off, ...), user units
+	ndash:              int,
 	lineJoin:           LineCapType,
 	lineCap:            LineCapType,
 	alpha:              f32,
@@ -711,6 +713,7 @@ Reset :: proc(ctx: ^Context) {
 	state.shapeAntiAlias     = true
 	state.strokeWidth        = 1
 	state.miterLimit         = 10
+	state.ndash              = 0
 	state.lineCap            = .BUTT
 	state.lineJoin           = .MITER
 	state.alpha              = 1
@@ -2562,6 +2565,7 @@ Stroke :: proc(ctx: ^Context) {
 	stroke_paint.outerColor.a *= state.alpha
 
 	__flattenPaths(ctx)
+	if state.ndash > 0 do __dashPaths(ctx, state.dash[:state.ndash], scale)
 
 	if ctx.params.edgeAntiAlias && state.shapeAntiAlias {
 		__expandStroke(ctx, strokeWidth * 0.5, ctx.fringeWidth, state.lineCap, state.lineJoin, state.miterLimit)
@@ -2584,6 +2588,8 @@ Stroke :: proc(ctx: ^Context) {
 		ctx.strokeTriCount += len(path.stroke) - 2
 		ctx.drawCallCount += 1
 	}	
+	// the cache now holds dashes: a Fill of the same path must flatten it again
+	if state.ndash > 0 do __clearPathCache(ctx)
 }
 
 DebugDumpPathCache :: proc(ctx: ^Context) {
@@ -3511,4 +3517,89 @@ TextGlyphPositions :: proc(
 	}
 
 	return npos
+}
+// ---------------------------------------------------------------- dashes (Agentic Design)
+
+// Dashed strokes: the pattern (dash, gap, dash, gap, ... in user units; an odd list repeats
+// as CSS and SVG do) for the following Stroke calls. Empty turns dashes off. Stroke splits
+// the flattened outline into open subpaths, so caps and joins apply to every dash.
+StrokeDash :: proc(ctx: ^Context, pattern: []f32) {
+	state := __getState(ctx)
+	state.ndash = 0
+	total: f32
+	for v in pattern do total += max(v, 0)
+	if len(pattern) == 0 || total <= 0 do return
+	n := min(len(pattern), len(state.dash))
+	for i in 0 ..< n do state.dash[i] = max(pattern[i], 0)
+	state.ndash = n
+	if n % 2 == 1 && n * 2 <= len(state.dash) {
+		for i in 0 ..< n do state.dash[n + i] = state.dash[i]
+		state.ndash = n * 2
+	}
+}
+
+// Replaces the flattened paths by their dashes. Points are already in device space, so
+// the pattern is scaled by the transform.
+__dashPaths :: proc(ctx: ^Context, pattern: []f32, scale: f32) {
+	cache := &ctx.cache
+	old_points := make([]Point, len(cache.points), context.temp_allocator)
+	copy(old_points, cache.points[:])
+	old_paths := make([]Path, len(cache.paths), context.temp_allocator)
+	copy(old_paths, cache.paths[:])
+	__clearPathCache(ctx)
+
+	for op in old_paths {
+		pts := old_points[op.first:][:op.count]
+		n := len(pts)
+		if n < 2 do continue
+		segs := n if op.closed else n - 1
+		idx := 0
+		remaining := pattern[0] * scale
+		on := true
+		__addPath(ctx)
+		__addPoint(ctx, pts[0].x, pts[0].y, {.CORNER})
+		for s in 0 ..< segs {
+			a, b := pts[s], pts[(s + 1) % n]
+			dx, dy := b.x - a.x, b.y - a.y
+			seg := math.sqrt(dx * dx + dy * dy)
+			pos: f32 = 0
+			for seg - pos > remaining {
+				pos += remaining
+				t := pos / seg
+				x, y := a.x + dx * t, a.y + dy * t
+				if on {
+					__addPoint(ctx, x, y, {.CORNER})
+				} else {
+					__addPath(ctx)
+					__addPoint(ctx, x, y, {.CORNER})
+				}
+				on = !on
+				idx = (idx + 1) % len(pattern)
+				remaining = pattern[idx] * scale // (a zero-length dash or gap flips again here)
+			}
+			remaining -= seg - pos
+			if on do __addPoint(ctx, b.x, b.y, {.CORNER})
+		}
+	}
+	// drop dashes without length (a gap ending exactly at a corner)
+	for i := len(cache.paths) - 1; i >= 0; i -= 1 {
+		if cache.paths[i].count < 2 do ordered_remove(&cache.paths, i)
+	}
+	// directions, lengths and bounds, as __flattenPaths computes them; every dash is open
+	cache.bounds = {1e6, 1e6, -1e6, -1e6}
+	for &path in cache.paths {
+		path.closed = false
+		pts := cache.points[path.first:][:path.count]
+		for i in 0 ..< path.count {
+			p0 := &pts[i]
+			p1 := &pts[(i + 1) % path.count]
+			p0.dx = p1.x - p0.x
+			p0.dy = p1.y - p0.y
+			p0.len = __normalize(&p0.dx, &p0.dy)
+			cache.bounds[0] = min(cache.bounds[0], p0.x)
+			cache.bounds[1] = min(cache.bounds[1], p0.y)
+			cache.bounds[2] = max(cache.bounds[2], p0.x)
+			cache.bounds[3] = max(cache.bounds[3], p0.y)
+		}
+	}
 }
