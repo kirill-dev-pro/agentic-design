@@ -53,13 +53,10 @@ Download `Agentic-Design-<version>-arm64.dmg` from the
 and drag Agentic Design into Applications. It needs a Mac with Apple Silicon and macOS 14
 or later.
 
-Until releases are notarized, macOS blocks the first launch of a downloaded copy. Open it
-once with right-click → Open (on macOS 15 and later: try to open it, then System Settings →
-Privacy & Security → Open Anyway), or clear the quarantine flag:
-
-```sh
-xattr -dr com.apple.quarantine "/Applications/Agentic Design.app"
-```
+Releases are signed with a Developer ID and notarized by Apple, so the app opens like any
+other downloaded app. A build of your own (see Build and run) is signed ad hoc; macOS blocks
+the first launch of such a copy downloaded from elsewhere until it is opened with
+right-click → Open (macOS 15 and later: System Settings → Privacy & Security → Open Anyway).
 
 Run it from Applications: a copy started from the download folder runs from a temporary
 location, where it cannot update itself or register with agents. Connect agents from the
