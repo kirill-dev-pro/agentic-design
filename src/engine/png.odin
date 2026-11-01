@@ -17,7 +17,7 @@ import "core:thread"
 // threads at once, as pigz does: each strip is a raw deflate stream that ends on a byte
 // boundary (Z_SYNC_FLUSH), the last one finishes the stream, and the strips' Adler-32
 // checksums are combined. A 16384 × 3535 canvas takes 40 ms instead of 1.2 s on one
-// thread (2.5 s with stb); see docs/performance.md.
+// thread (2.5 s with stb).
 
 foreign import libz "system:z"
 

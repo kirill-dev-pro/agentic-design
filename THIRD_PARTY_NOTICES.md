@@ -13,6 +13,7 @@ in `Agentic Design.app/Contents/Resources/`.
 | stb_image (Sean Barrett) | linked into the app (Odin `vendor:stb`) | public domain or MIT |
 | Lucide icons | `assets/lucide.txt` | ISC, `assets/LICENSE-lucide.txt` |
 | Noto Sans (Google) | `assets/fonts/` | SIL Open Font License 1.1, `assets/fonts/OFL-NotoSans.txt` |
+| Inter (The Inter Project Authors), JetBrains Mono (JetBrains) | `designs/sample/fonts/`, fonts of the sample design | SIL Open Font License 1.1, `designs/sample/fonts/OFL-*.txt` |
 
 ## NanoVG
 

@@ -128,6 +128,7 @@ AGENTIC_QUIET=1 AGENTIC_PORT=4415 AGENTIC_UPDATE_TEST=1 \
 # "ready", then "install"; send nothing for 5 s (agents idle) and the window relaunches as 0.1.1
 ```
 
+The scripted version of this check (and of the tamper cases below) is kept with the tests.
 Checked on 2026-11-01: 0.1.0 found, downloaded, verified, installed and relaunched 0.1.1
 with its document; and refused a zip with one flipped byte (SHA-256), a manifest edited to
 match it (signature), a manifest signed with another key, and a manifest without a

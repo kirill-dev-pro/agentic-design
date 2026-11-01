@@ -671,7 +671,7 @@ ghost_clone :: proc(n: Node) -> Node {
 // The indexes are validated on use. A miss is checked against the array before they are
 // rebuilt: looking up ids that are not there (a new layer's id, a deleted layer) is common,
 // and rebuilding both maps on each such miss made a batch of 7,000 new layers quadratic
-// (22 s in a debug build; docs/performance.md, D43).
+// (22 s in a debug build; D43).
 doc_find :: proc(doc: ^Document, id: string) -> (^Node, int) {
 	if i, ok := doc.by_id[id]; ok && i < len(doc.nodes) && doc.nodes[i].id == id do return &doc.nodes[i], i
 	present := false
@@ -1053,7 +1053,7 @@ doc_move :: proc(doc: ^Document, uid: int, dx, dy: f32) {
 	// Outside a component no instance copies the position (an instance's own x and y
 	// never reach its copy: root_override_skipped), so only the boxes move: the ghosts
 	// stay and the layout runs again. A version bump here rebuilt every instance on each
-	// frame of a drag (docs/performance.md).
+	// frame of a drag.
 	set :: proc(doc: ^Document, n: ^Node, key: string, f: f32) -> f32 {
 		raw := fmt.tprintf("%v", round2(f))
 		node_set_raw(n, key, raw)

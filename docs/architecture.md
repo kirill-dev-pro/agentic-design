@@ -299,7 +299,7 @@ align, clipboard and z-order.
   steps.
 - **Recent files** are kept in `~/Library/Application Support/Agentic Design/recents.json`.
   Thumbnails are rendered into `thumbs/` next to it: the open document's from memory
-  right after it is saved, other files from the saved file (docs/performance.md).
+  right after it is saved, other files from the saved file.
 - **Images** dropped or placed on the canvas are copied into `images/` next to the document
   and referenced as `./images/<name>`.
 - **The clipboard** holds a JSON array of `.pen` nodes, also put on the system clipboard as

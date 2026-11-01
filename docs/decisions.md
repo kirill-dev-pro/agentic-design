@@ -341,11 +341,10 @@ everything already resolved: layout modes, sizes, variables, instances.
 
 - The control socket's `input` method injects pointer and key events into the same
   per-frame state real events use.
-- `tools/uidrive.py script` walks every panel. `tools/uidrive.py fuzz <seed> <n>` sends
-  random clicks, drags and keys.
+- A scripted run walks every panel; a fuzzer sends random clicks, drags and keys (both are
+  kept with the tests, in a private repository).
 - Run the window under `lldb --batch -o run -k bt` in quiet mode to get a backtrace for any
   crash.
-- See [testing.md](testing.md).
 
 **Consequences.** Fuzz runs edit and save whatever file is open, so run them on a copy or
 restore the fixtures afterwards.
@@ -466,7 +465,7 @@ small and strokes in the wrong place.
 **Decision.**
 
 - When the spec is silent, behave like pen.dev. Check by rendering the same file in both
-  and diffing bounds and pixels (`tools/dogfood/pen-compare/`).
+  and diffing bounds and pixels (a comparison harness kept with the tests).
 - Deviate only where pen.dev loses information, such as 2.8 slot content. Note each
   deviation in pen-format.md.
 
@@ -961,8 +960,7 @@ components only. Inside a component the version moves as before. This is the one
 exception to decision #37's rule that every change to a layer moves the version.
 
 **Consequences.** Drag input on that file takes 2.5 ms instead of 7.7 (no ghost rebuilds);
-the layout still runs over the whole document, which is what remains of it
-(docs/performance.md). Anything cached by the version must not depend on the positions of
+the layout still runs over the whole document, which is what remains of it. Anything cached by the version must not depend on the positions of
 layers outside components; nothing does today (pages, theme axes, child lists, ghosts).
 
 ## 47. Agent work is latency-critical: no App Nap while requests come in
@@ -1023,14 +1021,13 @@ behind other windows with the display asleep (napping, as found later for D35), 
 one had just started. The comparison mixed the two effects.
 
 **Decision.** #43 stays: setting `TCP_NODELAY` on a request/response socket costs nothing.
-The latency fix is #47. The controlled comparison is in
-[performance.md](performance.md#windows-started-by-an-agent-d35-decisions-43-and-47)
-("Windows started by an agent"): three builds of the same tree, the window started as the
+The latency fix is #47. The controlled comparison (kept with the
+performance notes in the tests repository) covers three builds of the same tree, the window started as the
 MCP proxy starts it. `TCP_NODELAY` alone changes nothing measurable; App Nap accounts for
 the whole ~170 ms, and #47 removes it.
 
 **Consequences.** Latency tests start the window as an agent does and let it idle before
-timing (`tools/perf/agentlat.py`), and compare builds on the same kind of window.
+timing, and compare builds on the same kind of window.
 
 ## 51. The engine is a package of its own, set up by its host through a few globals
 
@@ -1155,9 +1152,8 @@ which is what the shared engine needs (#51). It costs about 11 MB of binary.
   Metal (rows counted downwards) takes it in and shows the full colour. Off such exact
   ties both overdraw the same way. Fills under a device pixel should be drawn as NanoVG
   draws thin strokes (one pixel wide, alpha scaled); that would fix both.
-- Measured with `tools/perf/perfbench.py` (OpenGL → WebGPU final build, sample-screens /
-  stress10; [performance.md](performance.md#opengl-and-webgpu-1-november-2026-decision-53)
-  has both WebGPU runs): frames while panning 0.41 → 0.31 / 1.89 → 1.79 ms, zooming
+- Measured with the benchmark kept with the tests (OpenGL → WebGPU final build, a
+  component-heavy document and a stress file): frames while panning 0.41 → 0.31 / 1.89 → 1.79 ms, zooming
   0.29 → 0.17 / 0.55 → 0.43 ms, dragging the same within the noise; idle CPU 0.9 → 0.5 /
   3.0 → 2.1 %; screenshots 10–25 % slower (stress10 canvas at 2× 222 → 278 ms).
   `phys_footprint` at start 276 → 244 / 293 → 271 MB, after the screenshots 394 → 287 /
@@ -1342,3 +1338,20 @@ checksums and the notes from `docs/releases/v<version>.md`. The update signing k
 **Consequences.** Until there is a Developer ID certificate, a downloaded first install is
 blocked by Gatekeeper and must be opened by hand once; updates through the app are not
 quarantined and start normally.
+
+## 59. Open source code, private tests; the sample is our own
+
+**Problem.** The repository was about to become public. It held the test harnesses,
+benchmarks and the dogfooding log next to the code, and its sample design system was
+distilled from another company's website.
+
+**Decision.** The code is MIT. The tests (the scripted interface runs, fuzzing, benchmarks,
+pen.dev comparisons, the update end-to-end checks), their fixtures and the QA logs live in a
+private repository that works against a checkout of this one, as SQLite keeps its tests;
+issues are welcome, pull requests are not accepted. Everything a user or contributor needs
+to build and run the app stays here. The bundled sample is this app's own landing page
+(`designs/sample/`), designed through the MCP tools, with its OFL fonts. The history was
+rewritten to remove the moved files and the old sample.
+
+**Consequences.** Docs and comments that pointed at the moved files now say the material is
+kept with the tests.

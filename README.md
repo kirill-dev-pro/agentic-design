@@ -41,11 +41,10 @@ Not yet: rich text runs, blur effects, mesh and shader fills, icon libraries oth
 Lucide. [docs/pen-dev-comparison.md](docs/pen-dev-comparison.md) lists what pen.dev has and
 this app does not.
 
-Design notes, decisions and the test recipe are in [`docs/`](docs/README.md); what broke
-while using the app for real work is logged in [`docs/dogfooding.md`](docs/dogfooding.md).
-`designs/sample.lib.pen` is a full design system built that way (tokens, foundations,
-28 components), and `designs/sample-screens.pen` holds the product's screens, importing it
-as a library.
+Design notes and decisions are in [`docs/`](docs/README.md).
+`designs/sample/agentic-design.pen` is this app's own landing page, designed by an agent
+through the MCP tools (components, light and dark themes, desktop and mobile frames, its
+fonts in `designs/sample/fonts/`); the onboarding opens it as the sample.
 
 ## Install
 
@@ -102,7 +101,7 @@ browser's WebGPU: Chrome, Edge, Safari 26):
 brew install lld                # wasm-ld, to link WebAssembly
 ./tools/build_web.sh            # -> build/web/
 python3 -m http.server 8000     # then open, for a document on the same server:
-# http://localhost:8000/build/web/?file=/designs/sample-screens.pen
+# http://localhost:8000/build/web/?file=/designs/sample/agentic-design.pen
 ```
 
 Without `?file=`, drop a `.pen` file or its folder on the page. Drag to pan, scroll or
@@ -225,13 +224,14 @@ multiplayer link: `{"id", "name", "color", "x", "y", "kind": "person"}`, or `"le
 A socket request with an `"agent": {"id", "client"}` field next to `method` acts as that
 agent. Tests use it to drive the cursors.
 
-## Testing without a mouse
+## Driving the window from scripts
 
-The control socket (`127.0.0.1:4410`, newline-delimited JSON) has an `input` method that
-injects synthetic pointer and keyboard events, so the interface itself can be driven from a
-script. `tools/uidrive.py script` walks through every panel; `tools/uidrive.py fuzz <seed> <n>`
-sends random clicks, drags and keys. Run the app under `lldb --batch -o run -k bt` to get a
-backtrace if it crashes. The full recipe is in [docs/testing.md](docs/testing.md).
+The control socket (`127.0.0.1:4410`, newline-delimited JSON) takes every MCP tool as a
+method, plus `input`, which injects synthetic pointer and keyboard events, so the interface
+itself can be driven from a script. `AGENTIC_QUIET=1` opens a window behind the others that
+never takes focus, and `AGENTIC_PORT` moves the socket, for a second window next to yours.
+The scripted runs, fuzzing and benchmarks built on this live with the tests (see
+Contributing).
 
 ## Layout
 
@@ -264,6 +264,16 @@ backtrace if it crashes. The full recipe is in [docs/testing.md](docs/testing.md
 | `src/nanovg/wgpu`, `src/wgpu`, `src/metal_darwin.odin` | NanoVG on WebGPU; the wgpu-native bindings (library fetched by `tools/fetch_wgpu.sh`); the window's Metal layer |
 | `src/nanovg`, `src/fontstash` | vendored NanoVG/fontstash ports with text rendering fixes (see `src/nanovg/README.md`) |
 | `src/web/`, `web/`, `tools/build_web.sh` | the browser viewer: its host, the page, the build |
-| `tools/uidrive.py` | drives the interface through the socket for tests |
 | `tools/font_instances.py` | static instances of variable fonts for the app's font folder |
-| `tools/dogfood/` | a Chrome DevTools client for reading live pages, and the generator of the Sample Search design system |
+
+## Contributing
+
+The source is open under the MIT license. Issues are welcome: bug reports, `.pen` files that
+render differently from pen.dev, and ideas. Pull requests are not accepted; the test suites
+(the scripted interface runs, fuzzing, benchmarks and the dogfooding log) are maintained in
+a private repository, as SQLite keeps its tests.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Third-party code and fonts keep their own licenses, listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -282,7 +282,7 @@ thumbs_render :: proc() {
 		if path == app.file_path && app.tab >= 0 && !app.dirty {
 			// the open document was just saved: it is what the file holds, already parsed,
 			// with its libraries and laid out. Reading the file and its libraries back cost
-			// 30-100 ms on the main thread after every autosave (docs/performance.md).
+			// 30-100 ms on the main thread after every autosave.
 			// Drawn as a fresh copy would be: page 0, without the libraries' layers.
 			page0 := make(map[int]bool, 16, context.temp_allocator)
 			multi := len(engine.doc_pages(&app.doc)) > 1

@@ -3,7 +3,7 @@
 Compared on 2026-10-31 against pen.dev's desktop app (Pen.app) and its web editor
 (app.pen.dev), using the same files (reddit-ui, the Sample Search design system, text and
 gradient test files), its documentation (docs.pen.dev) and its MCP server. Rendering parity
-is covered in [dogfooding.md](dogfooding.md), session 2.
+was found while using the app for real work (the dogfooding log, kept with the tests).
 
 ## How to read the tables
 
