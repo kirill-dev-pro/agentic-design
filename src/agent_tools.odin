@@ -173,7 +173,9 @@ api_find_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			strings.write_string(b, `,"content":`)
 			engine.json_write_string(b, n.content if len(n.content) <= 80 else fmt.tprintf("%s…", n.content[:80]))
 		}
-		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s]}}`, engine.num_text(n.x), engine.num_text(n.y), engine.num_text(n.w), engine.num_text(n.h))
+		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s]`, engine.num_text(n.x), engine.num_text(n.y), engine.num_text(n.w), engine.num_text(n.h))
+		engine.write_visual_bounds(b, &n)
+		strings.write_byte(b, '}')
 	}
 	// Text shown inside instances (the component's text or an override of it) lives in
 	// the ghost copies. Report it as the instance plus the path to override it with
@@ -487,8 +489,11 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			}
 		}
 		// cut off by a clipping frame around it
+		// (a rotated or flipped layer by its drawn corners, in the parent's own space: the
+		// transforms above the parent move both alike)
 		if p, _ := engine.doc_find_uid(doc, n.parent); p != nil && p.clip && p.kind == .Frame {
-			if n.x < p.x - 0.5 || n.y < p.y - 0.5 || n.x + n.w > p.x + p.w + 0.5 || n.y + n.h > p.y + p.h + 0.5 {
+			box := own_drawn_box(&n)
+			if box[0] < p.x - 0.5 || box[1] < p.y - 0.5 || box[0] + box[2] > p.x + p.w + 0.5 || box[1] + box[3] > p.y + p.h + 0.5 {
 				issue(b, &count, limit, &n, "clipped", fmt.tprintf("partly outside \"%s\", which clips its content", engine.node_label(p)))
 			}
 		}
@@ -678,3 +683,22 @@ var_constant :: proc(doc: ^engine.Document, name: string, depth := 0) -> bool {
 	}
 	return true
 }
+
+// A layer's box after its own rotation and flips (around its top-left corner), not its
+// ancestors'.
+own_drawn_box :: proc(n: ^engine.Node) -> [4]f32 {
+	if n.rotation == 0 && !n.flip_x && !n.flip_y do return {n.x, n.y, n.w, n.h}
+	t := -n.rotation * math.PI / 180
+	cs, sn := math.cos(t), math.sin(t)
+	sx: f32 = -1 if n.flip_x else 1
+	sy: f32 = -1 if n.flip_y else 1
+	lo, hi := [2]f32{max(f32), max(f32)}, [2]f32{min(f32), min(f32)}
+	for c in ([4][2]f32{{0, 0}, {n.w, 0}, {n.w, n.h}, {0, n.h}}) {
+		x, y := c.x * sx, c.y * sy
+		p := [2]f32{n.x + cs * x - sn * y, n.y + sn * x + cs * y}
+		lo = {min(lo.x, p.x), min(lo.y, p.y)}
+		hi = {max(hi.x, p.x), max(hi.y, p.y)}
+	}
+	return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}
+}
+

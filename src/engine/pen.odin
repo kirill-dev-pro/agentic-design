@@ -322,6 +322,7 @@ write_node :: proc(b: ^strings.Builder, doc: ^Document, n: ^Node, indent: int, a
 		strings.write_byte(b, ',')
 		write_indent(b, inner)
 		fmt.sbprintf(b, `"bounds":[%s,%s,%s,%s]`, num_text(n.x), num_text(n.y), num_text(n.w), num_text(n.h))
+		write_visual_bounds(b, n)
 	}
 	if api && api_depth_limit >= 0 && api_depth >= api_depth_limit && plain > 0 {
 		fmt.sbprintf(b, `,"childCount":%d`, plain)
@@ -415,3 +416,11 @@ var_defs_free :: proc(doc: ^Document) {
 	clear(&doc.var_defs)
 }
 
+
+// ,"visual_bounds":[x, y, w, h]: the box around a layer as drawn, when it or an ancestor is
+// rotated or flipped ("bounds" stays the layout box its x, y and size refer to).
+write_visual_bounds :: proc(b: ^strings.Builder, n: ^Node) {
+	if _, tr := node_transform(n); !tr do return
+	v := node_page_box(n)
+	fmt.sbprintf(b, `,"visual_bounds":[%s,%s,%s,%s]`, num_text(v[0]), num_text(v[1]), num_text(v[2]), num_text(v[3]))
+}

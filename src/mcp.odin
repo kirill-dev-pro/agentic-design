@@ -26,7 +26,7 @@ Nodes are exchanged in the .pen format itself. A node has "type", "id" (a unique
 - "effect": an effect or a list: {"type": "shadow", "shadowType": "outer" | "inner", "offset": {"x", "y"}, "blur", "spread", "color"}, {"type": "blur", "radius"}, {"type": "background_blur", "radius"}.
 - "rotation" (degrees counter-clockwise) and "flipX"/"flipY" turn and mirror a node around its top-left corner.
 - text also takes "textAlign": "justify", "textAlignVertical": "top" | "middle" | "bottom" (for fixed-width-height), "strikethrough".
-Children nest in "children". get_document returns the tree plus "bounds": [x, y, width, height] in absolute page coordinates after layout.
+Children nest in "children". get_document returns the tree plus "bounds": [x, y, width, height] in absolute page coordinates after layout; a layer that is rotated or flipped (or inside one) also has "visual_bounds", the box around it as drawn.
 Typical flow: get_guide, get_document (with depth on big files), batch or create_nodes, screenshot to look, lint to review.`
 
 TOOLS_JSON :: `[
