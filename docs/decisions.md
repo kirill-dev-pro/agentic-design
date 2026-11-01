@@ -1355,3 +1355,30 @@ rewritten to remove the moved files and the old sample.
 
 **Consequences.** Docs and comments that pointed at the moved files now say the material is
 kept with the tests.
+
+## 60. Dashed strokes, scaled copies and drawn bounds
+
+**Problem.** Rebuilding a marketing site, an agent faked dashed borders with rows of small
+rectangles, rebuilt each illustration by hand at 64% for mobile, and could not tell where
+a tilted layer landed: `bounds` is the unrotated layout box.
+
+**Decision.**
+
+- Dashes are `strokeDashPattern: [dash, gap, ...]`, next to `strokeWidth`, as the 2.21
+  schema names stroke properties; older files with the dashes in the stroke object
+  (`dashPattern`) are read too. The schema has no dash property: pen.dev keeps the stroke
+  and draws it solid (checked in pen.dev 1.2.21), so dashes are this app's extension. The
+  vendored NanoVG gained `StrokeDash`: `Stroke` splits the flattened outline into open
+  dashes (scaled with the transform), so every shape and path gets them with its caps and
+  joins. Export writes `stroke-dasharray` for SVG paths and `border-style: dashed` for
+  boxes; CSS borders take no dash length.
+- Scaling is a tool, not a property: `scale_nodes` rewrites a subtree's numbers in one
+  undo step. A `scale` property would be lost on pen.dev, which has none; rewritten numbers
+  are plain `.pen` everywhere. Variables and instances' inner sizes are left alone and
+  reported.
+- `bounds` stays the layout box (what `x`, `y` and sizes mean). A rotated or flipped layer,
+  or one inside such a layer, also reports `visual_bounds`, the box as drawn; lint's
+  `clipped` rule uses the rotated corners.
+
+**Consequences.** Per-side strokes stay solid. A dashed line is a one-segment path, since a
+zero-height rectangle's outline runs out and back over itself.
