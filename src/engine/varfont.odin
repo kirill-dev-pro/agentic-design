@@ -79,6 +79,10 @@ Var_Axis :: struct {
 	value: f32,
 }
 
+// Private table of an instance: the axis count, then each axis' normalised coordinate
+// (F2Dot14), so that fontstash can apply GPOS kerning deltas (gpos.odin).
+VAR_COORDS_TAG :: "ADvc"
+
 varfont_instance :: proc(file: []u8, offset: int, settings: []Var_Axis) -> (out: []u8, ok: bool) {
 	context.allocator = context.temp_allocator
 	tables := sfnt_tables(file, offset) or_return
@@ -544,6 +548,12 @@ varfont_instance :: proc(file: []u8, offset: int, settings: []Var_Axis) -> (out:
 		case: append(&entries, Entry{tag, data})
 		}
 	}
+	// the instance's normalised axis coordinates, for the kerning deltas GPOS keeps in
+	// GDEF's variation store (fontstash gpos.odin reads them): a private table
+	coords_table := make([dynamic]u8)
+	put16(&coords_table, axis_count)
+	for c in coords do put16(&coords_table, int(math.round(c * 16384)) & 0xFFFF)
+	append(&entries, Entry{VAR_COORDS_TAG, coords_table[:]})
 	slice.sort_by(entries[:], proc(a, b: Entry) -> bool {return a.tag < b.tag})
 	font := make([dynamic]u8, 0, len(new_glyf) * 2)
 	nt := len(entries)

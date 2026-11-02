@@ -97,7 +97,7 @@ was found while using the app for real work (the dogfooding log, kept with the t
 | --- | --- | --- | --- | --- |
 | Font picker | search, previews | search, previews in their own face | same | done |
 | Font metrics | CSS-like | 17% too small, line height 1.2 | em size, font line height, half leading | done |
-| Kerning | yes | `kern` table only | **GPOS pair kerning** (Extension lookups included) | done |
+| Kerning | yes | `kern` table only | **GPOS pair kerning** (Extension lookups included; a variable font's kerning at its weight) | done |
 | Variable fonts | all weights | default instance only | any weight on demand: TrueType variable fonts are instanced in the app (matches fontTools within 1.2 units) | done (CFF2 variable fonts keep their default) |
 | Custom fonts per document | import ttf/otf/woff/woff2 | — | a `fonts` folder next to the document, filled by the import button or by dropping font files; also `.ttc` collections and `.woff` | partial (no woff2) |
 | Missing font warning | Typography reports it | "(missing)" in the menu | same | done |

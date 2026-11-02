@@ -49,3 +49,8 @@ index lists), sits next to the GL one, and so that the following fixes can be ap
   scales, the canvas at 100 % and 200 %); elsewhere glyphs keep their fractional positions.
   Before, every glyph bitmap was drawn at a fractional position and blurred by the
   texture's bilinear sampling. Advances stay unrounded, so text keeps its width.
+- fontstash: GPOS pair kerning of a variable font's instance adds the deltas its
+  `XAdvDevice` tables point to in GDEF's item variation store, at the instance's axis
+  coordinates (a private `ADvc` table that the engine's `varfont_instance` writes).
+  Without them every instance kerned as the default one: Inter at 500 and 600 came out
+  with Regular's kerning, wider or tighter than in Chrome by up to a pixel per pair.

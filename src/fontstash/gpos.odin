@@ -17,6 +17,10 @@ Gpos_Kern :: struct {
 	parsed:    bool,
 	subtables: [dynamic]Gpos_Subtable,
 	cache:     map[u32]i32,
+	// an instance of a variable font (engine varfont_instance): its normalised axis
+	// coordinates and GDEF's ItemVariationStore, for kerning that changes with the weight
+	coords:    [dynamic]f32,
+	varstore:  int, // absolute offset, 0 when none
 }
 
 @(private = "file")
@@ -41,12 +45,30 @@ popcount16 :: proc(v: int) -> int {
 	return n
 }
 
+// Absolute offset of a table in the font, or 0.
+@(private = "file")
+find_table :: proc(d: [^]byte, fontstart: int, tag: string) -> int {
+	n := be16(d, fontstart + 4)
+	for i in 0 ..< n {
+		rec := fontstart + 12 + i * 16
+		if string(d[rec:rec + 4]) == tag do return be32(d, rec + 8)
+	}
+	return 0
+}
+
 __gposParse :: proc(font: ^Font) {
 	k := &font.gpos
 	k.parsed = true
 	d := font.info.data
 	g := int(font.info.gpos)
 	if g == 0 || d == nil do return
+	// a variable font's instance: kerning deltas from GDEF's variation store
+	if vc := find_table(d, int(font.info.fontstart), "ADvc"); vc != 0 {
+		for i in 0 ..< be16(d, vc) do append(&k.coords, f32(be16s(d, vc + 2 + i * 2)) / 16384)
+		if gdef := find_table(d, int(font.info.fontstart), "GDEF"); gdef != 0 && be16(d, gdef + 2) >= 3 {
+			if off := be32(d, gdef + 14); off != 0 do k.varstore = gdef + off
+		}
+	}
 	feature_list := g + be16(d, g + 6)
 	lookup_list := g + be16(d, g + 8)
 	lookups := make([dynamic]int, context.temp_allocator)
@@ -128,15 +150,78 @@ class_of :: proc(d: [^]byte, cd: int, glyph: int) -> int {
 
 // X advance adjustment of the pair in one PairPos subtable; `hit` when the subtable
 // covers the pair (which ends the lookup, even with a zero value).
+// The delta of a VariationIndex (outer, inner) at the instance's coordinates, in font units.
 @(private = "file")
-pair_pos :: proc(d: [^]byte, st: int, g1, g2: int) -> (value: int, hit: bool) {
+variation_delta :: proc(d: [^]byte, k: ^Gpos_Kern, outer, inner: int) -> f32 {
+	vs := k.varstore
+	if vs == 0 || len(k.coords) == 0 do return 0
+	regions := vs + be32(d, vs + 2)
+	if outer >= be16(d, vs + 6) do return 0
+	ivd := vs + be32(d, vs + 8 + outer * 4)
+	items, word_count, region_count := be16(d, ivd), be16(d, ivd + 2), be16(d, ivd + 4)
+	if inner >= items do return 0
+	long_words := word_count & 0x8000 != 0
+	words := word_count & 0x7FFF
+	axis_count := be16(d, regions)
+	small := 2 if long_words else 1
+	big := 4 if long_words else 2
+	row := words * big + (region_count - words) * small
+	at := ivd + 6 + region_count * 2 + inner * row
+	total: f32
+	for r in 0 ..< region_count {
+		ri := be16(d, ivd + 6 + r * 2)
+		delta: int
+		if r < words {
+			delta = be32(d, at) if long_words else be16s(d, at)
+			if long_words do delta = int(i32(u32(delta)))
+			at += big
+		} else {
+			delta = be16s(d, at) if long_words else int(i8(d[at]))
+			at += small
+		}
+		if delta == 0 do continue
+		// the region's scalar: the product over the axes, as in the OpenType spec
+		s: f32 = 1
+		reg := regions + 4 + ri * axis_count * 6
+		for a in 0 ..< axis_count {
+			start := f32(be16s(d, reg + a * 6)) / 16384
+			peak := f32(be16s(d, reg + a * 6 + 2)) / 16384
+			end := f32(be16s(d, reg + a * 6 + 4)) / 16384
+			v: f32 = k.coords[a] if a < len(k.coords) else 0
+			if start > peak || peak > end || peak == 0 || (start < 0 && end > 0) || v == peak do continue
+			if v <= start || v >= end {
+				s = 0
+				break
+			}
+			s *= (v - start) / (peak - start) if v < peak else (end - v) / (end - peak)
+		}
+		total += s * f32(delta)
+	}
+	return total
+}
+
+// The X advance of a value record at `rec` (format `vf`), with its variation delta when
+// the record has an XAdvDevice that is a VariationIndex. Device offsets count from `base`.
+@(private = "file")
+x_advance :: proc(d: [^]byte, k: ^Gpos_Kern, rec, vf, base: int) -> f32 {
+	v: f32
+	if vf & 4 != 0 do v = f32(be16s(d, rec + 2 * popcount16(vf & 3)))
+	if vf & 0x40 != 0 && k.varstore != 0 {
+		if off := be16(d, rec + 2 * popcount16(vf & 0x3F)); off != 0 {
+			dev := base + off
+			if be16(d, dev + 4) == 0x8000 do v += variation_delta(d, k, be16(d, dev), be16(d, dev + 2))
+		}
+	}
+	return v
+}
+
+@(private = "file")
+pair_pos :: proc(d: [^]byte, k: ^Gpos_Kern, st: int, g1, g2: int) -> (value: f32, hit: bool) {
 	format := be16(d, st)
 	ci := coverage_index(d, st + be16(d, st + 2), g1)
 	if ci < 0 do return 0, false
 	vf1, vf2 := be16(d, st + 4), be16(d, st + 6)
 	size1, size2 := popcount16(vf1) * 2, popcount16(vf2) * 2
-	has_xadv := vf1 & 4 != 0
-	xadv_at := (2 if vf1 & 1 != 0 else 0) + (2 if vf1 & 2 != 0 else 0)
 	switch format {
 	case 1:
 		if ci >= be16(d, st + 8) do return 0, false
@@ -148,7 +233,7 @@ pair_pos :: proc(d: [^]byte, st: int, g1, g2: int) -> (value: int, hit: bool) {
 			r := ps + 2 + mid * rec
 			second := be16(d, r)
 			if second == g2 {
-				return (be16s(d, r + 2 + xadv_at) if has_xadv else 0), true
+				return x_advance(d, k, r + 2, vf1, ps), true
 			}
 			if second < g2 do lo = mid + 1
 			else do hi = mid - 1
@@ -160,7 +245,7 @@ pair_pos :: proc(d: [^]byte, st: int, g1, g2: int) -> (value: int, hit: bool) {
 		c1n, c2n := be16(d, st + 12), be16(d, st + 14)
 		if c1 >= c1n || c2 >= c2n do return 0, true
 		r := st + 16 + (c1 * c2n + c2) * (size1 + size2)
-		return (be16s(d, r + xadv_at) if has_xadv else 0), true
+		return x_advance(d, k, r, vf1, st), true
 	}
 	return 0, false
 }
@@ -173,16 +258,17 @@ __gposKern :: proc(font: ^Font, g1, g2: Glyph_Index) -> (adv: i32, ok: bool) {
 	if len(k.subtables) == 0 do return 0, false
 	key := u32(g1) << 16 | (u32(g2) & 0xFFFF)
 	if v, hit := k.cache[key]; hit do return v, true
-	total := 0
+	total: f32
 	done_lookup := -1
 	for s in k.subtables {
 		if s.lookup == done_lookup do continue
-		v, hit := pair_pos(font.info.data, s.offset, int(g1), int(g2))
+		v, hit := pair_pos(font.info.data, k, s.offset, int(g1), int(g2))
 		if hit {
 			total += v
 			done_lookup = s.lookup
 		}
 	}
-	k.cache[key] = i32(total)
-	return i32(total), true
+	adv = i32(total + 0.5 if total >= 0 else total - 0.5) // whole units, as an instancer rounds
+	k.cache[key] = adv
+	return adv, true
 }
