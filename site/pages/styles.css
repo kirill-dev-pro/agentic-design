@@ -319,6 +319,8 @@ h3 { font-size: var(--size-h3); font-weight: 600; line-height: 1.21; }
 	.mock-m { display: block; }
 	h1 { letter-spacing: -1px; }
 	.hero .ctas, .dl-band .ctas { flex-direction: column; align-self: stretch; }
+	/* room for the release line the page fills in (version and size), so nothing moves */
+	.hero .fine { min-height: 4.5em; }
 	.tool-list div { flex-direction: column; align-items: flex-start; gap: 4px; }
 	.tool-list dt { width: auto; }
 	.card { padding: 24px; }
