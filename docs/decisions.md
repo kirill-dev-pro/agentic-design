@@ -1579,3 +1579,31 @@ exact ascent and rounded the sum, which differs whenever a text layer sits at a 
   4.55, 2.47 and 4.46 %.
 - Text widths at weights 500 and 600 change by up to 1.5 units (kerning), so
   `get_document` bounds move with them. Saved files are byte-identical.
+
+## 66. Bring to front says when a layer cannot go further inside its parent
+
+**Problem.** A user selected the "+" of an imported page's hero, drawn partly under the
+card next to it, and Bring to front did nothing. The two are not siblings: the import
+wraps the "+" in a frame of its own (two outline paths in it), and that frame comes
+before the card in their common parent. Bring to front orders a layer among its
+siblings, as Figma and pen.dev do, and the "+" was already in front inside its wrapper,
+so nothing moved and the editor said nothing.
+
+**Decision.** The behaviour stays; the editor says why (chosen by the user among a hint,
+moving the parent instead, and fixing the import).
+
+- When none of the selected layers can go further, Bring to front, forward, backward
+  and Send to back (], ⌘], ⌘[, [ and the context menu) show a toast instead: "Already
+  in front inside '<parent>' — Shift+Enter selects it", or "Already at the back
+  inside ...". A top-level layer is "Already in front on the page". No undo step is
+  made and the document is not marked edited.
+- MCP `reorder`, and `batch` `move` with `position`, answer `moved: false` with a note
+  naming the parent and its id, and change nothing; otherwise `moved: true`.
+- `get_selection` includes the toast showing at the moment (`status`), so agents that
+  drive the interface can read such hints.
+
+**Consequences.** Shift+Enter then ] brings the wrapper, and the "+" with it, over the
+card. `tools/zorder.py` in the tests repository checks the keys, the hint texts, the
+MCP replies, undo and the pixels at the overlap on a minimal file with a turned wrapper
+and a turned, shadowed card. The import's order (the live page puts the "+" over the
+card with CSS stacking) is a separate fix in the importer.

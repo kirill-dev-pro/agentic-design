@@ -1126,13 +1126,18 @@ from_nvg :: proc(c: nvg.Color) -> engine.Color {
 
 // ---------------------------------------------------------------- status
 
+// Whether the status toast is on screen.
+status_showing :: proc() -> bool {
+	if app.status == "" do return false
+	return time.duration_seconds(time.since(app.status_time)) < (6 if app.status_reveal != "" else 3)
+}
+
 // The toast at the bottom of the canvas: 3 s, or 6 s with "Show in Finder" after an export
 // (kept while the pointer is on it). ui.status_rect tells the canvas not to take its clicks.
 draw_status :: proc(vg: ^nvg.Context) {
 	ui.status_rect = {}
-	if app.status == "" do return
+	if !status_showing() do return
 	reveal := app.status_reveal != ""
-	if time.duration_seconds(time.since(app.status_time)) >= (6 if reveal else 3) do return
 	w := text_width(vg, app.status) + 28
 	link := "Show in Finder"
 	lw := text_width(vg, link) + 20

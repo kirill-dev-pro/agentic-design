@@ -143,7 +143,7 @@ use the image tool to place them; they are copied into `images/` next to the doc
 | Cmd Option K / Cmd Option X | create component / detach instance |
 | Cmd G / Shift Cmd G / Option Cmd G / Shift A | group / ungroup / frame selection / auto layout |
 | Cmd R | rename |
-| Cmd ] / Cmd [, ] / [ | one step forward / back, to the front / back (arrows reorder inside flex) |
+| Cmd ] / Cmd [, ] / [ | one step forward / back, to the front / back among the layer's siblings; a layer already at that end says so, and Shift+Enter selects its parent (arrows reorder inside flex) |
 | Cmd Z / Shift Cmd Z | undo / redo |
 | Cmd N, Cmd W, Shift Cmd E | new file, close tab, export PNG (asks where to save it) |
 | Right click | context menu |

@@ -160,13 +160,21 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 	case "reorder":
 		n, i := engine.doc_find(&app.doc, string(params["id"].(json.String) or_else ""))
 		if n == nil do return api_error("node not found"), false
+		back := (params["position"].(json.String) or_else "front") == "back"
+		if note := arrange_hint({n.uid}, !back, true); note != "" {
+			// nothing to move inside its parent: say so, and leave the document as it is
+			strings.write_string(&b, `{"ok":true,"moved":false,"note":`)
+			engine.json_write_string(&b, note)
+			strings.write_byte(&b, '}')
+			break
+		}
 		push_undo()
-		if (params["position"].(json.String) or_else "front") == "back" {
+		if back {
 			send_to_back(n.uid)
 		} else {
 			engine.doc_bring_to_front(&app.doc, n.uid)
 		}
-		strings.write_string(&b, `{"ok":true}`)
+		strings.write_string(&b, `{"ok":true,"moved":true}`)
 	case "undo":
 		undo()
 		strings.write_string(&b, `{"ok":true}`)
@@ -284,6 +292,11 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 		else do strings.write_string(b, "null")
 	}
 	strings.write_byte(b, ']')
+	if selection_only && status_showing() {
+		// the toast the window shows now (a hint after a command), for agents driving it
+		strings.write_string(b, `,"status":`)
+		engine.json_write_string(b, app.status)
+	}
 	if params["variables"].(json.Boolean) or_else !selection_only {
 		strings.write_string(b, `,"variables":`)
 		write_header_value(b, "variables")

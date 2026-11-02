@@ -578,8 +578,7 @@ handle_shortcuts :: proc() {
 		case key_pressed(glfw.KEY_R) && len(app.sel) == 1: start_rename(app.sel[0], false)
 		case key_pressed(glfw.KEY_LEFT_BRACKET):
 			// one step back, as in pen.dev ([ alone sends to the back)
-			push_undo()
-			for uid in app.sel do move_in_siblings(uid, -1)
+			arrange_selection(.Backward)
 		case key_pressed(glfw.KEY_W): close_tab(app.tab)
 		case key_pressed(glfw.KEY_COMMA): settings_open = true
 		case key_pressed(glfw.KEY_APOSTROPHE):
@@ -601,9 +600,7 @@ handle_shortcuts :: proc() {
 			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1.25)
 		case key_hit(glfw.KEY_MINUS):
 			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 0.8)
-		case key_pressed(glfw.KEY_RIGHT_BRACKET):
-			push_undo()
-			for i := len(app.sel) - 1; i >= 0; i -= 1 do move_in_siblings(app.sel[i], 1)
+		case key_pressed(glfw.KEY_RIGHT_BRACKET): arrange_selection(.Forward)
 		}
 		return
 	}
@@ -648,13 +645,11 @@ handle_shortcuts :: proc() {
 		}
 	}
 	if key_pressed(glfw.KEY_LEFT_BRACKET) && len(app.sel) > 0 {
-		push_undo()
-		for uid in app.sel do send_to_back(uid)
+		arrange_selection(.Back)
 		return
 	}
 	if key_pressed(glfw.KEY_RIGHT_BRACKET) && len(app.sel) > 0 {
-		push_undo()
-		for uid in app.sel do engine.doc_bring_to_front(&app.doc, uid)
+		arrange_selection(.Front)
 		return
 	}
 	switch {

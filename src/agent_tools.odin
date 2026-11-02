@@ -118,6 +118,12 @@ batch_move :: proc(b: ^strings.Builder, o: json.Object) -> string {
 		layer_move(uid, s.uid, 1 if place == 0 else -1)
 	}
 	if pos, has := o["position"].(json.String); has {
+		if note := arrange_hint({uid}, pos != "back", true); note != "" {
+			strings.write_string(b, `{"moved":false,"note":`)
+			engine.json_write_string(b, note)
+			strings.write_byte(b, '}')
+			return ""
+		}
 		if pos == "back" do send_to_back(uid)
 		else do engine.doc_bring_to_front(&app.doc, uid)
 	}

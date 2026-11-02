@@ -3,6 +3,7 @@ package agentic_design
 import "engine"
 
 import "core:encoding/json"
+import "core:fmt"
 import "core:math"
 import "core:slice"
 import "core:strings"
@@ -142,6 +143,56 @@ move_subtree :: proc(uid: int, index: int) {
 	}
 	at := clamp(index, 0, len(app.doc.nodes))
 	inject_at(&app.doc.nodes, at, ..moved[:])
+}
+
+// Arrange commands. Each orders a layer among the siblings inside its parent, as in Figma and
+// pen.dev; a layer can look stuck under another one that is in a different parent (the hero
+// "+" of an imported page sits alone in a wrapper frame under its neighbouring card).
+Arrange :: enum {
+	Front,
+	Forward,
+	Backward,
+	Back,
+}
+
+// Whether the layer can still go towards the front (or back) inside its parent.
+can_arrange :: proc(uid: int, front: bool) -> bool {
+	n, _ := engine.doc_find_uid(&app.doc, uid)
+	if n == nil do return false
+	siblings := engine.children_of(&app.doc, n.parent)
+	for s, i in siblings do if s == uid do return i < len(siblings) - 1 if front else i > 0
+	return false
+}
+
+// What to tell the user when no layer of `uids` can go further towards the front (back)
+// inside its parent, "" when one can. `agent`: the wording for an MCP reply.
+arrange_hint :: proc(uids: []int, front: bool, agent := false) -> string {
+	if len(uids) == 0 do return ""
+	for uid in uids do if can_arrange(uid, front) do return ""
+	n, _ := engine.doc_find_uid(&app.doc, uids[0])
+	if n == nil do return ""
+	where_ := "in front" if front else "at the back"
+	p, _ := engine.doc_find_uid(&app.doc, n.parent)
+	if p == nil do return fmt.tprintf("Already %s on the page", where_)
+	if agent do return fmt.tprintf("Already %s inside '%s' (id %s): reorder that parent to move it further", where_, engine.node_label(p), p.id)
+	return fmt.tprintf("Already %s inside '%s' — Shift+Enter selects it", where_, engine.node_label(p))
+}
+
+// An arrange command on the selection, one undo step; when no selected layer can move
+// further inside its parent, the status line says so and nothing changes.
+arrange_selection :: proc(op: Arrange) {
+	if len(app.sel) == 0 do return
+	if hint := arrange_hint(app.sel[:], op == .Front || op == .Forward); hint != "" {
+		set_status("%s", hint)
+		return
+	}
+	push_undo()
+	switch op {
+	case .Front: for uid in app.sel do engine.doc_bring_to_front(&app.doc, uid)
+	case .Forward: for i := len(app.sel) - 1; i >= 0; i -= 1 do move_in_siblings(app.sel[i], 1)
+	case .Backward: for uid in app.sel do move_in_siblings(uid, -1)
+	case .Back: for uid in app.sel do send_to_back(uid)
+	}
 }
 
 send_to_back :: proc(uid: int) {
@@ -323,12 +374,8 @@ context_menu_apply :: proc() {
 		}
 	case "Create instance": create_instances()
 	case "Outline text": outline_selected_text()
-	case "Bring to front":
-		push_undo()
-		for uid in app.sel do engine.doc_bring_to_front(&app.doc, uid)
-	case "Send to back":
-		push_undo()
-		for uid in app.sel do send_to_back(uid)
+	case "Bring to front": arrange_selection(.Front)
+	case "Send to back": arrange_selection(.Back)
 	case "Export PNG": export_request()
 	case "Delete":
 		push_undo()
