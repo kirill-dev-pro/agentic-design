@@ -113,7 +113,7 @@ widgets_end_frame :: proc(vg: ^nvg.Context) {
 	draw_dialog(vg)
 	ui.overlay_pass = false
 	draw_tooltip(vg)
-	if !mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+	if !mouse_down(MOUSE_BUTTON_LEFT) {
 		ui.scrub = ""
 		ui.drag_select = false
 		ui.scrollbar = ""
@@ -186,7 +186,7 @@ wheel_over :: proc(r: Rect) -> f32 {
 clicked :: proc(r: Rect) -> bool {
 	if ui_modal() && !ui.overlay_pass do return false
 	if ui.clip.w > 0 && !in_rect(ui.clip, app.mouse) do return false
-	return mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && in_rect(r, app.mouse)
+	return mouse_pressed(MOUSE_BUTTON_LEFT) && in_rect(r, app.mouse)
 }
 
 // Column i of n equal columns inside r.
@@ -393,7 +393,7 @@ slider :: proc(vg: ^nvg.Context, key: string, r: Rect, value, lo, hi: f32) -> (v
 		push_undo()
 	}
 	if ui.slider == key {
-		if mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+		if mouse_down(MOUSE_BUTTON_LEFT) {
 			v = lo + clamp((app.mouse.x - track.x) / track.w, 0, 1) * (hi - lo)
 			changed = v != value
 		} else {
@@ -445,7 +445,7 @@ scrollbar :: proc(vg: ^nvg.Context, key: string, area: Rect, content_h, scroll: 
 		ui.scrollbar = key
 		ui.scrollbar_off = app.mouse.y - ty
 	}
-	if ui.scrollbar == key && mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+	if ui.scrollbar == key && mouse_down(MOUSE_BUTTON_LEFT) {
 		frac := clamp((app.mouse.y - ui.scrollbar_off - track.y) / max(track.h - th, 1), 0, 1)
 		s = frac * (content_h - area.h)
 	}
@@ -514,8 +514,8 @@ field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: s
 				ui.scrub_moved = false
 			}
 		}
-		if ui.scrub == key && ui.scrub_uid == uid && mouse_down(glfw.MOUSE_BUTTON_LEFT) {
-			step: f32 = 10 if mod_shift() else (0.1 if key_down(glfw.KEY_LEFT_ALT) else 1)
+		if ui.scrub == key && ui.scrub_uid == uid && mouse_down(MOUSE_BUTTON_LEFT) {
+			step: f32 = 10 if mod_shift() else (0.1 if key_down(KEY_LEFT_ALT) else 1)
 			d := math.round((app.mouse.x - ui.scrub_x) / 2) * step
 			if d != 0 || ui.scrub_moved {
 				if !ui.scrub_moved do push_undo()
@@ -582,7 +582,7 @@ field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: s
 			ui.drag_select = true
 		}
 	}
-	if ui.drag_select && mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+	if ui.drag_select && mouse_down(MOUSE_BUTTON_LEFT) {
 		ui.caret = caret_from_x(vg, shown, app.mouse.x - tx + offset)
 	}
 
@@ -640,22 +640,22 @@ field_keys :: proc(index: int, numeric: bool) {
 
 	if cmd {
 		switch {
-		case key_pressed(glfw.KEY_A):
+		case key_pressed(KEY_A):
 			ui.sel, ui.caret = 0, len(text)
-		case key_pressed(glfw.KEY_C), key_pressed(glfw.KEY_X):
+		case key_pressed(KEY_C), key_pressed(KEY_X):
 			if has_sel {
 				a, bb := min(ui.sel, ui.caret), max(ui.sel, ui.caret)
 				glfw.SetClipboardString(pf.window, strings.clone_to_cstring(text[a:bb], context.temp_allocator))
-				if key_pressed(glfw.KEY_X) do replace_selection("")
+				if key_pressed(KEY_X) do replace_selection("")
 			}
-		case key_pressed(glfw.KEY_V):
+		case key_pressed(KEY_V):
 			paste := string(glfw.GetClipboardString(pf.window))
 			replace_selection(strings.trim_space(paste) if numeric else paste)
-		case key_hit(glfw.KEY_LEFT):
+		case key_hit(KEY_LEFT):
 			if !shift do ui.sel = -1
 			else if ui.sel < 0 do ui.sel = ui.caret
 			ui.caret = 0
-		case key_hit(glfw.KEY_RIGHT):
+		case key_hit(KEY_RIGHT):
 			if !shift do ui.sel = -1
 			else if ui.sel < 0 do ui.sel = ui.caret
 			ui.caret = len(text)
@@ -667,21 +667,21 @@ field_keys :: proc(index: int, numeric: bool) {
 		replace_selection(string(enc[:n]))
 		text = strings.to_string(b^)
 	}
-	if key_hit(glfw.KEY_BACKSPACE) {
+	if key_hit(KEY_BACKSPACE) {
 		if has_sel do replace_selection("")
 		else if ui.caret > 0 {
 			ui.sel = prev_rune(text, ui.caret)
 			replace_selection("")
 		}
 	}
-	if key_hit(glfw.KEY_DELETE) {
+	if key_hit(KEY_DELETE) {
 		if has_sel do replace_selection("")
 		else if ui.caret < len(text) {
 			ui.sel = next_rune(text, ui.caret)
 			replace_selection("")
 		}
 	}
-	if key_hit(glfw.KEY_LEFT) {
+	if key_hit(KEY_LEFT) {
 		if shift {
 			if ui.sel < 0 do ui.sel = ui.caret
 			ui.caret = prev_rune(text, ui.caret)
@@ -693,7 +693,7 @@ field_keys :: proc(index: int, numeric: bool) {
 			ui.sel = -1
 		}
 	}
-	if key_hit(glfw.KEY_RIGHT) {
+	if key_hit(KEY_RIGHT) {
 		if shift {
 			if ui.sel < 0 do ui.sel = ui.caret
 			ui.caret = next_rune(text, ui.caret)
@@ -705,20 +705,20 @@ field_keys :: proc(index: int, numeric: bool) {
 			ui.sel = -1
 		}
 	}
-	if key_hit(glfw.KEY_HOME) {
+	if key_hit(KEY_HOME) {
 		if !shift do ui.sel = -1
 		else if ui.sel < 0 do ui.sel = ui.caret
 		ui.caret = 0
 	}
-	if key_hit(glfw.KEY_END) {
+	if key_hit(KEY_END) {
 		if !shift do ui.sel = -1
 		else if ui.sel < 0 do ui.sel = ui.caret
 		ui.caret = len(text)
 	}
-	if numeric && (key_hit(glfw.KEY_UP) || key_hit(glfw.KEY_DOWN)) {
+	if numeric && (key_hit(KEY_UP) || key_hit(KEY_DOWN)) {
 		if f, ok := strconv.parse_f32(strings.trim_space(text)); ok {
 			step: f32 = 10 if shift else 1
-			if key_hit(glfw.KEY_DOWN) do step = -step
+			if key_hit(KEY_DOWN) do step = -step
 			strings.builder_reset(b)
 			strings.write_string(b, engine.num_text(f + step))
 			ui.caret, ui.sel = strings.builder_len(b^), 0
@@ -727,12 +727,12 @@ field_keys :: proc(index: int, numeric: bool) {
 		}
 	}
 	switch {
-	case key_pressed(glfw.KEY_ENTER), key_pressed(glfw.KEY_KP_ENTER):
+	case key_pressed(KEY_ENTER), key_pressed(KEY_KP_ENTER):
 		field_commit()
-	case key_pressed(glfw.KEY_TAB):
+	case key_pressed(KEY_TAB):
 		field_commit()
 		ui.tab_target = index - 1 if shift else index + 1
-	case key_pressed(glfw.KEY_ESCAPE):
+	case key_pressed(KEY_ESCAPE):
 		ui.focus = ""
 	}
 }
@@ -871,7 +871,7 @@ draw_menu :: proc(vg: ^nvg.Context) {
 			strings.write_rune(&m.filter, ch)
 			typed = true
 		}
-		if key_hit(glfw.KEY_BACKSPACE) && strings.builder_len(m.filter) > 0 {
+		if key_hit(KEY_BACKSPACE) && strings.builder_len(m.filter) > 0 {
 			_, size := utf8.decode_last_rune_in_string(strings.to_string(m.filter))
 			for _ in 0 ..< size do strings.pop_byte(&m.filter)
 			typed = true
@@ -891,8 +891,8 @@ draw_menu :: proc(vg: ^nvg.Context) {
 
 	// keyboard
 	enabled :: proc(i: int) -> bool {return ui.menu.items[i] != "-"}
-	if (key_hit(glfw.KEY_DOWN) || key_hit(glfw.KEY_UP)) && len(m.visible) > 0 {
-		dir := 1 if key_hit(glfw.KEY_DOWN) else -1
+	if (key_hit(KEY_DOWN) || key_hit(KEY_UP)) && len(m.visible) > 0 {
+		dir := 1 if key_hit(KEY_DOWN) else -1
 		pos := -1
 		for v, k in m.visible do if v == m.hover do pos = k
 		for _ in 0 ..< len(m.visible) {
@@ -902,7 +902,7 @@ draw_menu :: proc(vg: ^nvg.Context) {
 		m.hover = m.visible[pos]
 	}
 	picked := -1
-	if key_pressed(glfw.KEY_ENTER) && m.hover >= 0 && enabled(m.hover) do picked = m.hover
+	if key_pressed(KEY_ENTER) && m.hover >= 0 && enabled(m.hover) do picked = m.hover
 
 	nvg.Save(vg)
 	nvg.IntersectScissor(vg, list.x, list.y, list.w, list.h)
@@ -923,7 +923,7 @@ draw_menu :: proc(vg: ^nvg.Context) {
 		if in_rect(row, app.mouse) && in_rect(list, app.mouse) && (pf.mouse != pf.mouse_prev || m.hover < 0) do m.hover = vi
 		if m.hover == vi {
 			fill_rect(vg, row, ACTIVE_BG, 5)
-			if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && in_rect(row, app.mouse) do picked = vi
+			if mouse_pressed(MOUSE_BUTTON_LEFT) && in_rect(row, app.mouse) do picked = vi
 		}
 		lbl, hint := menu_split(it)
 		if m.checked == vi do draw_icon(vg, .Check, row.x + 12, row.y + h / 2, TEXT_FG, 12)
@@ -950,7 +950,7 @@ draw_menu :: proc(vg: ^nvg.Context) {
 		menu_close()
 		return
 	}
-	if (mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && !m.just_opened && !in_rect(r, app.mouse)) || key_pressed(glfw.KEY_ESCAPE) {
+	if (mouse_pressed(MOUSE_BUTTON_LEFT) && !m.just_opened && !in_rect(r, app.mouse)) || key_pressed(KEY_ESCAPE) {
 		menu_close()
 	}
 	m.just_opened = false
@@ -1043,7 +1043,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 			strings.write_rune(&p.filter, ch)
 			typed = true
 		}
-		if key_hit(glfw.KEY_BACKSPACE) && strings.builder_len(p.filter) > 0 {
+		if key_hit(KEY_BACKSPACE) && strings.builder_len(p.filter) > 0 {
 			_, size := utf8.decode_last_rune_in_string(strings.to_string(p.filter))
 			for _ in 0 ..< size do strings.pop_byte(&p.filter)
 			typed = true
@@ -1123,14 +1123,14 @@ draw_picker :: proc(vg: ^nvg.Context) {
 	picker_knob(vg, al.x + p.a * al.w, al.y + al.h / 2)
 
 	// dragging the three controls
-	if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
+	if mouse_pressed(MOUSE_BUTTON_LEFT) {
 		switch {
 		case in_rect(sv, app.mouse): p.drag = .SV
 		case in_rect({hue.x, hue.y - 4, hue.w, hue.h + 8}, app.mouse): p.drag = .Hue
 		case in_rect({al.x, al.y - 4, al.w, al.h + 8}, app.mouse): p.drag = .Alpha
 		}
 	}
-	if p.drag != .None && mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+	if p.drag != .None && mouse_down(MOUSE_BUTTON_LEFT) {
 		switch p.drag {
 		case .None:
 		case .SV:
@@ -1195,7 +1195,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 			label(vg, sw.x + sw.w + 8, row.y + row.h / 2, name, TEXT_FG, 12)
 			nvg.Restore(vg)
 			label(vg, row.x + row.w - 8, row.y + row.h / 2, hex, TEXT_DIM, 11, false, .RIGHT)
-			if in_rect(row, app.mouse) && in_rect(list, app.mouse) && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
+			if in_rect(row, app.mouse) && in_rect(list, app.mouse) && mouse_pressed(MOUSE_BUTTON_LEFT) {
 				p.h, p.s, p.v = rgb_to_hsv(c)
 				p.a = f32(c[3]) / 255
 				picker_set()
@@ -1216,7 +1216,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 			stroke_rect(vg, sw, {1, 1, 1, 0.15}, 5)
 			if in_rect(sw, app.mouse) {
 				stroke_rect(vg, {sw.x - 2, sw.y - 2, sw.w + 4, sw.h + 4}, TEXT_FG, 7, 1.5)
-				if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
+				if mouse_pressed(MOUSE_BUTTON_LEFT) {
 					p.h, p.s, p.v = rgb_to_hsv(c)
 					p.a = f32(c[3]) / 255
 					picker_set()
@@ -1225,7 +1225,7 @@ draw_picker :: proc(vg: ^nvg.Context) {
 		}
 	}
 
-	if (mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && !p.just_opened && !in_rect(r, app.mouse)) || key_pressed(glfw.KEY_ESCAPE) {
+	if (mouse_pressed(MOUSE_BUTTON_LEFT) && !p.just_opened && !in_rect(r, app.mouse)) || key_pressed(KEY_ESCAPE) {
 		if ui.focus == "picker.hex" || ui.focus == "picker.alpha" do field_commit()
 		picker_close()
 	}
@@ -1395,12 +1395,12 @@ draw_dialog :: proc(vg: ^nvg.Context) {
 		hover := in_rect(br, app.mouse)
 		fill_rect(vg, br, nvg.Color{ACCENT.r, ACCENT.g, ACCENT.b, 0.85 if hover else 1} if primary else (nvg.Color{1, 1, 1, 0.1} if hover else FIELD_BG), 6)
 		label(vg, br.x + br.w / 2, br.y + 15, d.buttons[i], TEXT_FG, 12, false, .CENTER)
-		if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && hover do picked = i
+		if mouse_pressed(MOUSE_BUTTON_LEFT) && hover do picked = i
 		bx -= bw + 8
 	}
 	ui.clip = saved
-	if key_pressed(glfw.KEY_ENTER) do picked = len(d.buttons) - 1
-	if key_pressed(glfw.KEY_ESCAPE) do picked = 0
+	if key_pressed(KEY_ENTER) do picked = len(d.buttons) - 1
+	if key_pressed(KEY_ESCAPE) do picked = 0
 	if picked >= 0 {
 		delete(d.result_key)
 		d.result_key = strings.clone(d.key)

@@ -6,7 +6,6 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
 import "core:time"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // The Components tab of the sidebar, as in pen.dev's left panel: every component of the
@@ -58,7 +57,7 @@ draw_components_panel :: proc(vg: ^nvg.Context, y: ^f32) {
 		label(vg, pv.x + pv.w + 10, y^ + 19, name, TEXT_FG, 12)
 		page := fmt.tprintf("Library · %s", engine.library_of(&n)) if n.imported else engine.doc_pages(&app.doc)[page_of_component(&n)].name
 		label(vg, pv.x + pv.w + 10, y^ + 36, page, TEXT_DIM, 11)
-		if hover && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
+		if hover && mouse_pressed(MOUSE_BUTTON_LEFT) {
 			double := ui.tree_click_uid == n.uid && time.duration_seconds(time.since(ui.tree_click)) < 0.35
 			ui.tree_click, ui.tree_click_uid = time.now(), n.uid
 			if double {
@@ -134,7 +133,7 @@ components_drag_update :: proc() {
 	if comp_drag.uid == 0 do return
 	d := app.mouse - comp_drag.start
 	if d.x * d.x + d.y * d.y > 16 do comp_drag.moved = true
-	if mouse_down(glfw.MOUSE_BUTTON_LEFT) do return
+	if mouse_down(MOUSE_BUTTON_LEFT) do return
 	uid, moved := comp_drag.uid, comp_drag.moved
 	comp_drag = {}
 	comp, _ := engine.doc_find_uid(&app.doc, uid)

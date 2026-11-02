@@ -9,7 +9,6 @@ import "core:slice"
 import "core:strconv"
 import "core:strings"
 import "core:time"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // Immediate-mode interface drawn with NanoVG: tab bar, sidebar (pages + layers),
@@ -191,7 +190,7 @@ draw_pages :: proc(vg: ^nvg.Context, y: ^f32) {
 			if double do field_focus(0, key, page.name)
 			else if !current do page_switch(i)
 		}
-		if mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) && hovered(r) {
+		if mouse_pressed(MOUSE_BUTTON_RIGHT) && hovered(r) {
 			page_menu_index = i
 			menu_open("page", {app.mouse.x, app.mouse.y, 0, 0}, {"Rename", "Duplicate", "-", "Delete…"})
 		}
@@ -312,7 +311,7 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 				}
 			}
 		}
-		if mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) && in_rect(r, app.mouse) && r.y + r.h > TAB_H + 88 {
+		if mouse_pressed(MOUSE_BUTTON_RIGHT) && in_rect(r, app.mouse) && r.y + r.h > TAB_H + 88 {
 			if !sel {
 				clear(&app.sel)
 				append(&app.sel, n.uid)
@@ -505,7 +504,7 @@ draw_theme_axes :: proc(vg: ^nvg.Context, y: ^f32) {
 				engine.theme[strings.clone(a.name)] = strings.clone(a.values[pick])
 				engine.doc_retheme(&app.doc)
 			}
-			if mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) && hovered(dd) {
+			if mouse_pressed(MOUSE_BUTTON_RIGHT) && hovered(dd) {
 				page_menu_index = -1
 				theme_menu_axis = a.name
 				menu_open("theme-axis", {app.mouse.x, app.mouse.y, 0, 0}, {"Rename value"})
@@ -1435,7 +1434,7 @@ layers_drag :: proc(vg: ^nvg.Context, rows: []$T) {
 			break
 		}
 	}
-	if mouse_down(glfw.MOUSE_BUTTON_LEFT) do return
+	if mouse_down(MOUSE_BUTTON_LEFT) do return
 	uid := d.uid
 	active := d.active
 	d^ = {}

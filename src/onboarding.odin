@@ -177,7 +177,7 @@ draw_onboarding :: proc(vg: ^nvg.Context) {
 	close := Rect{sheet.x + sheet.w - 48, sheet.y + 16, 32, 32}
 	if hovered(close) do fill_rect(vg, close, HOVER_BG, 8)
 	draw_lucide(vg, "x", close.x + 16, close.y + 16, 18, TEXT_DIM)
-	if clicked(close) || key_pressed(glfw.KEY_ESCAPE) {
+	if clicked(close) || key_pressed(KEY_ESCAPE) {
 		onboarding_finish()
 		return
 	}
@@ -201,7 +201,7 @@ draw_onboarding :: proc(vg: ^nvg.Context) {
 	} else {
 		cont.x = sheet.x + (sheet.w - cont.w) / 2
 	}
-	if ob_button(vg, cont, "Start designing" if last else "Continue", .Primary, "" if last else "arrow-right") || key_pressed(glfw.KEY_ENTER) {
+	if ob_button(vg, cont, "Start designing" if last else "Continue", .Primary, "" if last else "arrow-right") || key_pressed(KEY_ENTER) {
 		if last do onboarding_finish()
 		else do onboarding.step += 1
 	}

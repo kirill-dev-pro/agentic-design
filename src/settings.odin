@@ -8,7 +8,6 @@ import "core:math"
 import "core:os"
 import "core:strconv"
 import "core:strings"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // App preferences, kept in settings.json next to the recent files, and the two sheets
@@ -116,8 +115,8 @@ sheet_begin :: proc(vg: ^nvg.Context, title: string, w, h: f32) -> (sheet: Rect,
 	stroke_rect(vg, sheet, {1, 1, 1, 0.08}, 14)
 	ob_text(vg, sheet.x + 24, sheet.y + 30, title, 18, TEXT_FG, 600)
 	close := Rect{sheet.x + sheet.w - 44, sheet.y + 14, 30, 30}
-	if lucide_button(vg, close, "x") || (key_pressed(glfw.KEY_ESCAPE) && ui.focus == "") do return sheet, false
-	if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) do return sheet, false
+	if lucide_button(vg, close, "x") || (key_pressed(KEY_ESCAPE) && ui.focus == "") do return sheet, false
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) do return sheet, false
 	return sheet, true
 }
 

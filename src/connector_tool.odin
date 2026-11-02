@@ -5,7 +5,6 @@ import "core:math"
 import "core:strings"
 import "engine"
 import nvg "nanovg"
-import "vendor:glfw"
 
 // The canvas side of connectors (D54): the connector tool (C) draws one from a shape to
 // another (from a side dot for a fixed side, from anywhere on the shape for the side facing
@@ -116,11 +115,11 @@ connector_input :: proc(page: [2]f32, over_canvas: bool) -> bool {
 		exclude := ctool.from if ctool.moving_end == 0 else 0
 		ctool.over = connect_target(page, exclude)
 		ctool.over_side = side_under_mouse(ctool.over) if ctool.over != 0 else .Center
-		if mouse_down(glfw.MOUSE_BUTTON_LEFT) do return true
+		if mouse_down(MOUSE_BUTTON_LEFT) do return true
 		connector_drop()
 		return true
 	}
-	if !over_canvas || !mouse_pressed(glfw.MOUSE_BUTTON_LEFT) || key_down(glfw.KEY_SPACE) do return false
+	if !over_canvas || !mouse_pressed(MOUSE_BUTTON_LEFT) || key_down(KEY_SPACE) do return false
 	if app.tool == .Select {
 		if e := connector_end_under_mouse(); e != 0 {
 			ctool = {active = true, moving_end = e}

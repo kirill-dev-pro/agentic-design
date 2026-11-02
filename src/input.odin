@@ -7,7 +7,6 @@ import "core:math"
 import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
-import "vendor:glfw"
 
 in_rect :: proc(r: Rect, p: [2]f32) -> bool {
 	return p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h
@@ -19,10 +18,10 @@ handle_input :: proc() {
 	page := to_page(m)
 
 	// A click anywhere outside a focused field commits it first.
-	if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && ui.focus != "" && !in_rect(ui.focus_rect, m) do field_commit()
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && ui.focus != "" && !in_rect(ui.focus_rect, m) do field_commit()
 	if ui_modal() do return // an open menu, picker or dialog owns the pointer and keys
 	if app.tab < 0 {
-		if mod_cmd() && key_pressed(glfw.KEY_N) do new_document()
+		if mod_cmd() && key_pressed(KEY_N) do new_document()
 		update_cursor(false)
 		return
 	}
@@ -51,7 +50,7 @@ handle_input :: proc() {
 	}
 
 	context_menu_apply()
-	if over_canvas && mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) && app.drag.kind == .None {
+	if over_canvas && mouse_pressed(MOUSE_BUTTON_RIGHT) && app.drag.kind == .None {
 		if hit := click_target(hit_test(page), mod_cmd()); hit != 0 && !is_selected(hit) && !frame_body(hit, page) {
 			clear(&app.sel)
 			append(&app.sel, hit)
@@ -66,8 +65,8 @@ handle_input :: proc() {
 		return
 	}
 	// the pen tool and path editing take the pointer first
-	if app.tool == .Pen && !pen.drawing && over_canvas && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && !key_down(glfw.KEY_SPACE) do pen_start_drawing()
-	if pen_active() && (over_canvas || pen.drag != .None) && !key_down(glfw.KEY_SPACE) && !mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE) {
+	if app.tool == .Pen && !pen.drawing && over_canvas && mouse_pressed(MOUSE_BUTTON_LEFT) && !key_down(KEY_SPACE) do pen_start_drawing()
+	if pen_active() && (over_canvas || pen.drag != .None) && !key_down(KEY_SPACE) && !mouse_pressed(MOUSE_BUTTON_MIDDLE) {
 		if pen_input(page) {
 			update_cursor(over_canvas)
 			return
@@ -75,7 +74,7 @@ handle_input :: proc() {
 	}
 
 	// mouse down
-	if over_canvas && (mouse_pressed(glfw.MOUSE_BUTTON_LEFT) || mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE)) {
+	if over_canvas && (mouse_pressed(MOUSE_BUTTON_LEFT) || mouse_pressed(MOUSE_BUTTON_MIDDLE)) {
 		if app.editing != 0 {
 			n, _ := engine.doc_find_uid(&app.doc, app.editing)
 			if n == nil || !point_in_node(n, page) do finish_text_editing()
@@ -85,7 +84,7 @@ handle_input :: proc() {
 			start_mouse = m,
 			last_page   = page,
 		}
-		if mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE) || key_down(glfw.KEY_SPACE) || app.tool == .Hand {
+		if mouse_pressed(MOUSE_BUTTON_MIDDLE) || key_down(KEY_SPACE) || app.tool == .Hand {
 			app.drag.kind = .Pan
 		} else if zoom_tool_held() {
 			app.drag.kind = .Zoom
@@ -96,7 +95,7 @@ handle_input :: proc() {
 
 	// dragging
 	if app.drag.kind != .None {
-		if mouse_down(glfw.MOUSE_BUTTON_LEFT) || mouse_down(glfw.MOUSE_BUTTON_MIDDLE) {
+		if mouse_down(MOUSE_BUTTON_LEFT) || mouse_down(MOUSE_BUTTON_MIDDLE) {
 			drag_update(page)
 		} else {
 			drag_end(page)
@@ -132,7 +131,7 @@ update_cursor :: proc(over_canvas: bool) {
 	cursor := Cursor.Default
 	if over_canvas {
 		switch {
-		case app.drag.kind == .Pan || key_down(glfw.KEY_SPACE) || app.tool == .Hand: cursor = .Hand
+		case app.drag.kind == .Pan || key_down(KEY_SPACE) || app.tool == .Hand: cursor = .Hand
 		case app.drag.kind == .Zoom || zoom_tool_held(): cursor = .Crosshair
 		case app.tool == .Text || app.editing != 0: cursor = .IBeam
 		case app.tool != .Select: cursor = .Crosshair
@@ -147,13 +146,13 @@ update_cursor :: proc(over_canvas: bool) {
 }
 
 alt_down :: proc() -> bool {
-	return key_down(glfw.KEY_LEFT_ALT) || key_down(glfw.KEY_RIGHT_ALT)
+	return key_down(KEY_LEFT_ALT) || key_down(KEY_RIGHT_ALT)
 }
 
 // Holding Z turns the pointer into a zoom tool (pen.dev): click zooms in, ⌥-click out,
 // dragging zooms to the region.
 zoom_tool_held :: proc() -> bool {
-	return key_down(glfw.KEY_Z) && !mod_cmd() && app.editing == 0 && ui.focus == ""
+	return key_down(KEY_Z) && !mod_cmd() && app.editing == 0 && ui.focus == ""
 }
 
 handle_under_mouse :: proc() -> int {
@@ -554,96 +553,96 @@ marquee_select :: proc(r: [4]f32, scope: int, deep: bool) {
 handle_shortcuts :: proc() {
 	if pen_keys() do return
 	cmd, shift := mod_cmd(), mod_shift()
-	alt := key_down(glfw.KEY_LEFT_ALT) || key_down(glfw.KEY_RIGHT_ALT)
+	alt := key_down(KEY_LEFT_ALT) || key_down(KEY_RIGHT_ALT)
 	if cmd {
 		switch {
-		case key_pressed(glfw.KEY_K) && alt: toggle_component_selection()
-		case key_pressed(glfw.KEY_X) && alt:
+		case key_pressed(KEY_K) && alt: toggle_component_selection()
+		case key_pressed(KEY_X) && alt:
 			if len(app.sel) == 1 do detach_instance(app.sel[0])
-		case key_pressed(glfw.KEY_X):
+		case key_pressed(KEY_X):
 			if len(app.sel) > 0 {
 				copy_selection()
 				push_undo()
 				engine.doc_delete_layers(&app.doc, app.sel[:])
 				clear(&app.sel)
 			}
-		case key_pressed(glfw.KEY_Z) && shift: redo()
-		case key_pressed(glfw.KEY_Z): undo()
-		case key_pressed(glfw.KEY_S):
+		case key_pressed(KEY_Z) && shift: redo()
+		case key_pressed(KEY_Z): undo()
+		case key_pressed(KEY_S):
 			if save_document(app.file_path) do set_status("Saved")
-		case key_pressed(glfw.KEY_D): duplicate_selection()
-		case key_pressed(glfw.KEY_C) && shift:
+		case key_pressed(KEY_D): duplicate_selection()
+		case key_pressed(KEY_C) && shift:
 			if len(app.sel) > 0 do copy_png_pending = true
-		case key_pressed(glfw.KEY_C) && alt:
+		case key_pressed(KEY_C) && alt:
 			if len(app.sel) > 0 {
 				html := engine.html_snippet(selection_roots())
 				clipboard_set(transmute([]u8)html, "public.html", html)
 				set_status("Copied as HTML")
 			}
-		case key_pressed(glfw.KEY_C): copy_selection()
-		case key_pressed(glfw.KEY_V): paste_clipboard()
-		case key_pressed(glfw.KEY_G) && shift: ungroup_selection()
-		case key_pressed(glfw.KEY_G) && key_down(glfw.KEY_LEFT_ALT): wrap_selection(.Frame)
-		case key_pressed(glfw.KEY_G): wrap_selection(.Group)
-		case key_pressed(glfw.KEY_R) && len(app.sel) == 1: start_rename(app.sel[0], false)
-		case key_pressed(glfw.KEY_LEFT_BRACKET):
+		case key_pressed(KEY_C): copy_selection()
+		case key_pressed(KEY_V): paste_clipboard()
+		case key_pressed(KEY_G) && shift: ungroup_selection()
+		case key_pressed(KEY_G) && key_down(KEY_LEFT_ALT): wrap_selection(.Frame)
+		case key_pressed(KEY_G): wrap_selection(.Group)
+		case key_pressed(KEY_R) && len(app.sel) == 1: start_rename(app.sel[0], false)
+		case key_pressed(KEY_LEFT_BRACKET):
 			// one step back, as in pen.dev ([ alone sends to the back)
 			arrange_selection(.Backward)
-		case key_pressed(glfw.KEY_W): close_tab(app.tab)
-		case key_pressed(glfw.KEY_COMMA): settings_open = true
-		case key_pressed(glfw.KEY_APOSTROPHE):
+		case key_pressed(KEY_W): close_tab(app.tab)
+		case key_pressed(KEY_COMMA): settings_open = true
+		case key_pressed(KEY_APOSTROPHE):
 			settings.pixel_grid = !settings.pixel_grid
 			settings_save()
 			set_status("Pixel grid %s", "on" if settings.pixel_grid else "off")
-		case key_pressed(glfw.KEY_F):
+		case key_pressed(KEY_F):
 			ui.side_tab = 0
 			field_focus(0, "layers.search", ui.layer_search)
-		case key_pressed(glfw.KEY_N): new_document()
-		case key_pressed(glfw.KEY_E) && shift: export_request()
-		case key_pressed(glfw.KEY_A):
+		case key_pressed(KEY_N): new_document()
+		case key_pressed(KEY_E) && shift: export_request()
+		case key_pressed(KEY_A):
 			clear(&app.sel)
 			append(&app.sel, ..all_uids(true))
-		case key_pressed(glfw.KEY_0), key_pressed(glfw.KEY_1):
+		case key_pressed(KEY_0), key_pressed(KEY_1):
 			// 100% around the middle of the view (⌘0 as in pen.dev)
 			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1 / app.zoom)
-		case key_hit(glfw.KEY_EQUAL):
+		case key_hit(KEY_EQUAL):
 			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1.25)
-		case key_hit(glfw.KEY_MINUS):
+		case key_hit(KEY_MINUS):
 			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 0.8)
-		case key_pressed(glfw.KEY_RIGHT_BRACKET): arrange_selection(.Forward)
+		case key_pressed(KEY_RIGHT_BRACKET): arrange_selection(.Forward)
 		}
 		return
 	}
 	// pen.dev's arrange and view shortcuts
 	if alt && !shift && len(app.sel) > 0 {
 		switch {
-		case key_pressed(glfw.KEY_A): align_selection(.Left); return
-		case key_pressed(glfw.KEY_D): align_selection(.Right); return
-		case key_pressed(glfw.KEY_W): align_selection(.Top); return
-		case key_pressed(glfw.KEY_S): align_selection(.Bottom); return
-		case key_pressed(glfw.KEY_H): align_selection(.Center_H); return
-		case key_pressed(glfw.KEY_V): align_selection(.Center_V); return
+		case key_pressed(KEY_A): align_selection(.Left); return
+		case key_pressed(KEY_D): align_selection(.Right); return
+		case key_pressed(KEY_W): align_selection(.Top); return
+		case key_pressed(KEY_S): align_selection(.Bottom); return
+		case key_pressed(KEY_H): align_selection(.Center_H); return
+		case key_pressed(KEY_V): align_selection(.Center_V); return
 		}
 	}
-	if alt && shift && key_pressed(glfw.KEY_A) {
+	if alt && shift && key_pressed(KEY_A) {
 		remove_flex_selection()
 		return
 	}
-	if shift && key_pressed(glfw.KEY_SLASH) {
+	if shift && key_pressed(KEY_SLASH) {
 		shortcuts_open = true
 		return
 	}
 	if shift {
 		switch {
-		case key_pressed(glfw.KEY_1):
+		case key_pressed(KEY_1):
 			if r, ok := bounds_of(all_uids(true)); ok do zoom_to_rect(r)
 			return
-		case key_pressed(glfw.KEY_2):
+		case key_pressed(KEY_2):
 			if r, ok := bounds_of(app.sel[:]); ok do zoom_to_rect(r)
 			return
-		case key_pressed(glfw.KEY_H): flip_selection(true); return
-		case key_pressed(glfw.KEY_V): flip_selection(false); return
-		case key_pressed(glfw.KEY_ENTER):
+		case key_pressed(KEY_H): flip_selection(true); return
+		case key_pressed(KEY_V): flip_selection(false); return
+		case key_pressed(KEY_ENTER):
 			// select the parent
 			if len(app.sel) == 1 {
 				if n, _ := engine.doc_find_uid(&app.doc, app.sel[0]); n != nil && n.parent != 0 {
@@ -654,28 +653,28 @@ handle_shortcuts :: proc() {
 			return
 		}
 	}
-	if key_pressed(glfw.KEY_LEFT_BRACKET) && len(app.sel) > 0 {
+	if key_pressed(KEY_LEFT_BRACKET) && len(app.sel) > 0 {
 		arrange_selection(.Back)
 		return
 	}
-	if key_pressed(glfw.KEY_RIGHT_BRACKET) && len(app.sel) > 0 {
+	if key_pressed(KEY_RIGHT_BRACKET) && len(app.sel) > 0 {
 		arrange_selection(.Front)
 		return
 	}
 	switch {
-	case key_pressed(glfw.KEY_V): app.tool = .Select
-	case key_pressed(glfw.KEY_H): app.tool = .Hand
-	case key_pressed(glfw.KEY_B), key_pressed(glfw.KEY_F): app.tool = .Frame
-	case key_pressed(glfw.KEY_R): app.tool = .Rect
-	case key_pressed(glfw.KEY_E), key_pressed(glfw.KEY_O): app.tool = .Ellipse
-	case key_pressed(glfw.KEY_T): app.tool = .Text
-	case key_pressed(glfw.KEY_P): app.tool = .Pen
-	case key_pressed(glfw.KEY_C): app.tool = .Connector
-	case key_pressed(glfw.KEY_A) && shift: wrap_selection(.Auto_Layout)
-	case key_pressed(glfw.KEY_ESCAPE):
+	case key_pressed(KEY_V): app.tool = .Select
+	case key_pressed(KEY_H): app.tool = .Hand
+	case key_pressed(KEY_B), key_pressed(KEY_F): app.tool = .Frame
+	case key_pressed(KEY_R): app.tool = .Rect
+	case key_pressed(KEY_E), key_pressed(KEY_O): app.tool = .Ellipse
+	case key_pressed(KEY_T): app.tool = .Text
+	case key_pressed(KEY_P): app.tool = .Pen
+	case key_pressed(KEY_C): app.tool = .Connector
+	case key_pressed(KEY_A) && shift: wrap_selection(.Auto_Layout)
+	case key_pressed(KEY_ESCAPE):
 		app.tool = .Select
 		clear(&app.sel)
-	case key_pressed(glfw.KEY_ENTER):
+	case key_pressed(KEY_ENTER):
 		if len(app.sel) == 1 {
 			n, _ := engine.doc_find_uid(&app.doc, app.sel[0])
 			if n != nil && n.kind == .Text do start_text_editing(n.uid)
@@ -689,7 +688,7 @@ handle_shortcuts :: proc() {
 				}
 			}
 		}
-	case key_pressed(glfw.KEY_BACKSPACE), key_pressed(glfw.KEY_DELETE):
+	case key_pressed(KEY_BACKSPACE), key_pressed(KEY_DELETE):
 		if len(app.sel) > 0 {
 			push_undo()
 			engine.doc_delete_layers(&app.doc, app.sel[:])
@@ -698,10 +697,10 @@ handle_shortcuts :: proc() {
 	}
 	nudge := [2]f32{}
 	step := settings.nudge_big if shift else settings.nudge
-	if key_hit(glfw.KEY_LEFT) do nudge.x -= step
-	if key_hit(glfw.KEY_RIGHT) do nudge.x += step
-	if key_hit(glfw.KEY_UP) do nudge.y -= step
-	if key_hit(glfw.KEY_DOWN) do nudge.y += step
+	if key_hit(KEY_LEFT) do nudge.x -= step
+	if key_hit(KEY_RIGHT) do nudge.x += step
+	if key_hit(KEY_UP) do nudge.y -= step
+	if key_hit(KEY_DOWN) do nudge.y += step
 	if nudge != {0, 0} && len(app.sel) > 0 {
 		push_undo()
 		// inside a flex layout the arrows reorder (as in pen.dev) instead of nudging
@@ -769,7 +768,7 @@ handle_text_editing :: proc() {
 		app.editing = 0
 		return
 	}
-	if key_pressed(glfw.KEY_ESCAPE) || (mod_cmd() && key_pressed(glfw.KEY_ENTER)) {
+	if key_pressed(KEY_ESCAPE) || (mod_cmd() && key_pressed(KEY_ENTER)) {
 		finish_text_editing()
 		return
 	}
@@ -780,11 +779,11 @@ handle_text_editing :: proc() {
 		strings.write_rune(&b, r)
 		changed = true
 	}
-	if key_hit(glfw.KEY_ENTER) || key_hit(glfw.KEY_KP_ENTER) {
+	if key_hit(KEY_ENTER) || key_hit(KEY_KP_ENTER) {
 		strings.write_byte(&b, '\n')
 		changed = true
 	}
-	if key_hit(glfw.KEY_BACKSPACE) && strings.builder_len(b) > 0 {
+	if key_hit(KEY_BACKSPACE) && strings.builder_len(b) > 0 {
 		str := strings.to_string(b)
 		_, size := utf8.decode_last_rune_in_string(str)
 		strings.builder_init(&b, context.temp_allocator)
@@ -811,7 +810,7 @@ Guide :: struct {
 // `xs`/`ys` say which of the box's left/centre/right (top/centre/bottom) may snap.
 snap_box :: proc(box: Rect, moving: []int, xs, ys: [3]bool) -> (delta: [2]f32) {
 	clear(&app.guides)
-	if !settings.smart_guides || key_down(glfw.KEY_LEFT_CONTROL) || key_down(glfw.KEY_RIGHT_CONTROL) do return
+	if !settings.smart_guides || key_down(KEY_LEFT_CONTROL) || key_down(KEY_RIGHT_CONTROL) do return
 	parent := 0
 	if len(moving) > 0 {
 		if n, _ := engine.doc_find_uid(&app.doc, moving[0]); n != nil do parent = n.parent

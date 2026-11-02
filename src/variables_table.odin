@@ -6,7 +6,6 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:slice"
 import "core:strings"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // The variables table, like pen.dev's variables panel: one row per variable, one column
@@ -133,7 +132,7 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 
 	ob_text(vg, sheet.x + 24, sheet.y + 30, "Variables", 18, TEXT_FG, 600)
 	close := Rect{sheet.x + sheet.w - 44, sheet.y + 14, 30, 30}
-	if lucide_button(vg, close, "x") || (key_pressed(glfw.KEY_ESCAPE) && ui.focus == "") {
+	if lucide_button(vg, close, "x") || (key_pressed(KEY_ESCAPE) && ui.focus == "") {
 		vtable.open = false
 		return
 	}
@@ -194,7 +193,7 @@ draw_variables_table :: proc(vg: ^nvg.Context) {
 		label(vg, cx + 8, table.y + 12, v if v != "" else "Value", TEXT_DIM, 11)
 		if axis_name != "" && i > 0 {
 			hr := Rect{cx, table.y, col_w, 24}
-			if hovered(hr) && mouse_pressed(glfw.MOUSE_BUTTON_RIGHT) do field_focus(0, fmt.tprintf("theme.value:%s", axis_name), v)
+			if hovered(hr) && mouse_pressed(MOUSE_BUTTON_RIGHT) do field_focus(0, fmt.tprintf("theme.value:%s", axis_name), v)
 		}
 	}
 	if axis_name != "" {

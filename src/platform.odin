@@ -272,11 +272,11 @@ mouse_delta :: proc() -> [2]f32 {
 }
 
 mod_cmd :: proc() -> bool {
-	return key_down(glfw.KEY_LEFT_SUPER) || key_down(glfw.KEY_RIGHT_SUPER) || key_down(glfw.KEY_LEFT_CONTROL) || key_down(glfw.KEY_RIGHT_CONTROL)
+	return key_down(KEY_LEFT_SUPER) || key_down(KEY_RIGHT_SUPER) || key_down(KEY_LEFT_CONTROL) || key_down(KEY_RIGHT_CONTROL)
 }
 
 mod_shift :: proc() -> bool {
-	return key_down(glfw.KEY_LEFT_SHIFT) || key_down(glfw.KEY_RIGHT_SHIFT)
+	return key_down(KEY_LEFT_SHIFT) || key_down(KEY_RIGHT_SHIFT)
 }
 
 // What the renderer needs from the window: the GL context is current (GL), or the

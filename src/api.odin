@@ -11,7 +11,6 @@ import "core:os"
 import "core:slice"
 import "core:strings"
 import "core:sys/posix"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // Request: {"method": "...", "params": {...}}
@@ -940,9 +939,9 @@ inject_input :: proc(params: json.Object) {
 	if params["end"].(json.Boolean) or_else false do pf.synthetic = false
 	button :: proc(name: string) -> int {
 		switch name {
-		case "left": return int(glfw.MOUSE_BUTTON_LEFT)
-		case "middle": return int(glfw.MOUSE_BUTTON_MIDDLE)
-		case "right": return int(glfw.MOUSE_BUTTON_RIGHT)
+		case "left": return int(MOUSE_BUTTON_LEFT)
+		case "middle": return int(MOUSE_BUTTON_MIDDLE)
+		case "right": return int(MOUSE_BUTTON_RIGHT)
 		}
 		return -1
 	}
@@ -968,31 +967,31 @@ inject_input :: proc(params: json.Object) {
 	}
 	key_code :: proc(name: string) -> c.int {
 		switch name {
-		case "enter": return glfw.KEY_ENTER
-		case "backspace": return glfw.KEY_BACKSPACE
-		case "delete": return glfw.KEY_DELETE
-		case "escape": return glfw.KEY_ESCAPE
-		case "tab": return glfw.KEY_TAB
-		case "space": return glfw.KEY_SPACE
-		case "left": return glfw.KEY_LEFT
-		case "right": return glfw.KEY_RIGHT
-		case "up": return glfw.KEY_UP
-		case "down": return glfw.KEY_DOWN
-		case "cmd": return glfw.KEY_LEFT_SUPER
-		case "shift": return glfw.KEY_LEFT_SHIFT
-		case "alt": return glfw.KEY_LEFT_ALT
-		case "/": return glfw.KEY_SLASH
-		case "'": return glfw.KEY_APOSTROPHE
-		case ",": return glfw.KEY_COMMA
-		case "=": return glfw.KEY_EQUAL
-		case "-": return glfw.KEY_MINUS
-		case "]": return glfw.KEY_RIGHT_BRACKET
-		case "[": return glfw.KEY_LEFT_BRACKET
+		case "enter": return KEY_ENTER
+		case "backspace": return KEY_BACKSPACE
+		case "delete": return KEY_DELETE
+		case "escape": return KEY_ESCAPE
+		case "tab": return KEY_TAB
+		case "space": return KEY_SPACE
+		case "left": return KEY_LEFT
+		case "right": return KEY_RIGHT
+		case "up": return KEY_UP
+		case "down": return KEY_DOWN
+		case "cmd": return KEY_LEFT_SUPER
+		case "shift": return KEY_LEFT_SHIFT
+		case "alt": return KEY_LEFT_ALT
+		case "/": return KEY_SLASH
+		case "'": return KEY_APOSTROPHE
+		case ",": return KEY_COMMA
+		case "=": return KEY_EQUAL
+		case "-": return KEY_MINUS
+		case "]": return KEY_RIGHT_BRACKET
+		case "[": return KEY_LEFT_BRACKET
 		}
 		if len(name) == 1 {
 			ch := name[0]
-			if ch >= 'a' && ch <= 'z' do return glfw.KEY_A + c.int(ch - 'a')
-			if ch >= '0' && ch <= '9' do return glfw.KEY_0 + c.int(ch - '0')
+			if ch >= 'a' && ch <= 'z' do return KEY_A + c.int(ch - 'a')
+			if ch >= '0' && ch <= '9' do return KEY_0 + c.int(ch - '0')
 		}
 		return -1
 	}

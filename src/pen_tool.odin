@@ -5,7 +5,6 @@ import "engine"
 import "core:fmt"
 import "core:math"
 import "core:strings"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // The pen tool (P) and path editing, as in pen.dev and Figma.
@@ -218,7 +217,7 @@ pen_input :: proc(page: [2]f32) -> bool {
 		return d.x * d.x + d.y * d.y <= 49
 	}
 	local := pen_to_local(page)
-	if mouse_pressed(glfw.MOUSE_BUTTON_LEFT) {
+	if mouse_pressed(MOUSE_BUTTON_LEFT) {
 		// the selected point's handles first, then any point
 		if pen.anchor >= 0 && pen.sub < len(pen.subs) && pen.anchor < len(pen.subs[pen.sub].anchors) {
 			a := pen.subs[pen.sub].anchors[pen.anchor]
@@ -286,7 +285,7 @@ pen_input :: proc(page: [2]f32) -> bool {
 		return false
 	}
 	if pen.drag != .None {
-		if !mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+		if !mouse_down(MOUSE_BUTTON_LEFT) {
 			pen.drag = .None
 			return true
 		}
@@ -334,11 +333,11 @@ pen_keys :: proc() -> bool {
 		pen_finish()
 		return false
 	}
-	if key_pressed(glfw.KEY_ENTER) || key_pressed(glfw.KEY_ESCAPE) {
+	if key_pressed(KEY_ENTER) || key_pressed(KEY_ESCAPE) {
 		pen_finish()
 		return true
 	}
-	if (key_pressed(glfw.KEY_BACKSPACE) || key_pressed(glfw.KEY_DELETE)) && pen.anchor >= 0 && pen.sub < len(pen.subs) {
+	if (key_pressed(KEY_BACKSPACE) || key_pressed(KEY_DELETE)) && pen.anchor >= 0 && pen.sub < len(pen.subs) {
 		s := &pen.subs[pen.sub]
 		if pen.anchor < len(s.anchors) {
 			push_undo()

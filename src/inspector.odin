@@ -8,7 +8,6 @@ import "core:math"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // Inspector sections modelled on pen.dev's properties panel: alignment, position with
@@ -407,7 +406,7 @@ draw_gradient_stops :: proc(vg: ^nvg.Context, n: ^engine.Node, i: int, p: ^engin
 	}
 	// a dragged marker stays between its neighbours, so the stops keep their order
 	if editing && ui.grad.dragging {
-		if !mouse_down(glfw.MOUSE_BUTTON_LEFT) {
+		if !mouse_down(MOUSE_BUTTON_LEFT) {
 			ui.grad.dragging = false
 		} else if out, o, colors, ok := grad_colors(n, i); ok && ui.grad.stop < len(colors) {
 			k := ui.grad.stop
