@@ -131,8 +131,12 @@ body.with-side #stage { left: var(--side); }
 	:root { --side: 220px; }
 	body.with-side #stage { left: 0; }
 	#side { box-shadow: 8px 0 24px rgba(0, 0, 0, .4); }
-	#themes select { max-width: 120px; }
-	#info { right: 12px; width: auto; bottom: 60px; }
+	#themes-side #themes { flex-direction: column; padding: 0 8px; }
+	#themes-side select { width: 100%; }
+	#info { right: 12px; width: auto; bottom: 60px; padding: 10px; }
+	.info-head { flex-direction: row; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+	#info dl { grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+	#info dl div { padding: 3px 6px; gap: 4px; font-size: 12px; }
 	.popover { right: 8px; left: 8px; width: auto; }
 	#export { display: none; }
 }

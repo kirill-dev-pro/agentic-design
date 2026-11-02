@@ -242,6 +242,7 @@
 			const select = themes.querySelector(`select[data-axis="${CSS.escape(a.name)}"]`);
 			if (select) select.value = a.value;
 		}
+		placeThemes();
 
 		$("zoom").textContent = Math.round(info.zoom * 100) + "%";
 
@@ -303,6 +304,17 @@
 			return div;
 		}));
 	}
+
+	// The theme pickers sit in the bar, or in the side panel where the bar is too narrow.
+	const narrow = matchMedia("(max-width: 720px)");
+	function placeThemes() {
+		const themes = $("themes");
+		const home = narrow.matches ? $("themes-side") : $("export");
+		if (narrow.matches) home.append(themes);
+		else home.before(themes);
+		$("themes-section").hidden = !narrow.matches || !themes.children.length;
+	}
+	narrow.addEventListener("change", placeThemes);
 
 	function setSide(on) {
 		$("side").hidden = !on;
