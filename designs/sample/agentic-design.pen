@@ -1,514 +1,9 @@
 {
   "version": "2.21",
-  "themes": {
-    "mode": [
-      "light",
-      "dark"
-    ],
-    "viewport": [
-      "desktop",
-      "mobile"
-    ]
-  },
-  "variables": {
-    "accent": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#C8643F"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#E8876A"
-        }
-      ]
-    },
-    "accent-soft": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#F6E3DA"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#3A241C"
-        }
-      ]
-    },
-    "agent-claude": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#D97757"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#E8876A"
-        }
-      ]
-    },
-    "agent-codex": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#10A37F"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#2BC79B"
-        }
-      ]
-    },
-    "agent-person": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#5B6CF0"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#8592FF"
-        }
-      ]
-    },
-    "bg": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#FAFAF7"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#0E0F12"
-        }
-      ]
-    },
-    "border": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#E4E2DA"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#2A2E37"
-        }
-      ]
-    },
-    "canvas": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#EDECE7"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#121318"
-        }
-      ]
-    },
-    "code-bg": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#15161A"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#08090B"
-        }
-      ]
-    },
-    "code-muted": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#8C8F98"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#7A7E88"
-        }
-      ]
-    },
-    "code-text": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#E9E7E1"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#E9E7E1"
-        }
-      ]
-    },
-    "dot-green": {
-      "type": "color",
-      "value": "#28C840"
-    },
-    "dot-red": {
-      "type": "color",
-      "value": "#FF5F57"
-    },
-    "dot-yellow": {
-      "type": "color",
-      "value": "#FEBC2E"
-    },
-    "font-mono": {
-      "type": "string",
-      "value": "JetBrains Mono"
-    },
-    "font-sans": {
-      "type": "string",
-      "value": "Inter"
-    },
-    "glow-claude": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#D977574D"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#E8876A59"
-        }
-      ]
-    },
-    "on-accent": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#FFFFFF"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#120C09"
-        }
-      ]
-    },
-    "on-cursor": {
-      "type": "color",
-      "value": "#FFFFFF"
-    },
-    "page-width": {
-      "type": "number",
-      "value": [
-        {
-          "value": 1440
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 390
-        }
-      ]
-    },
-    "radius-lg": {
-      "type": "number",
-      "value": 20
-    },
-    "radius-md": {
-      "type": "number",
-      "value": 12
-    },
-    "radius-sm": {
-      "type": "number",
-      "value": 8
-    },
-    "section-gap": {
-      "type": "number",
-      "value": [
-        {
-          "value": 56
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 32
-        }
-      ]
-    },
-    "section-pad-x": {
-      "type": "number",
-      "value": [
-        {
-          "value": 120
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 20
-        }
-      ]
-    },
-    "section-pad-y": {
-      "type": "number",
-      "value": [
-        {
-          "value": 112
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 64
-        }
-      ]
-    },
-    "shadow-soft": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#0000001A"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#00000066"
-        }
-      ]
-    },
-    "shadow-window": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#1A120E26"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#00000099"
-        }
-      ]
-    },
-    "size-body": {
-      "type": "number",
-      "value": [
-        {
-          "value": 18
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 16
-        }
-      ]
-    },
-    "size-h1": {
-      "type": "number",
-      "value": [
-        {
-          "value": 72
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 40
-        }
-      ]
-    },
-    "size-h2": {
-      "type": "number",
-      "value": [
-        {
-          "value": 44
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 30
-        }
-      ]
-    },
-    "size-h3": {
-      "type": "number",
-      "value": [
-        {
-          "value": 20
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 18
-        }
-      ]
-    },
-    "size-small": {
-      "type": "number",
-      "value": [
-        {
-          "value": 14
-        },
-        {
-          "theme": {
-            "viewport": "mobile"
-          },
-          "value": 13
-        }
-      ]
-    },
-    "surface": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#FFFFFF"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#16181D"
-        }
-      ]
-    },
-    "surface-2": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#F2F1EC"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#1D2027"
-        }
-      ]
-    },
-    "text": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#15161A"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#F2F2F0"
-        }
-      ]
-    },
-    "text-muted": {
-      "type": "color",
-      "value": [
-        {
-          "value": "#5B5E66"
-        },
-        {
-          "theme": {
-            "mode": "dark"
-          },
-          "value": "#9EA2AC"
-        }
-      ]
-    }
-  },
-  "pages": [
-    {
-      "name": "Landing",
-      "nodes": [
-        "d-root",
-        "m-root"
-      ]
-    },
-    {
-      "name": "Components",
-      "nodes": [
-        "btn-primary",
-        "btn-secondary",
-        "logo",
-        "nav",
-        "sec-head",
-        "feature",
-        "tool",
-        "check",
-        "code",
-        "cursor",
-        "footer"
-      ]
-    }
-  ],
-  "fonts": [
-    {
-      "name": "Inter",
-      "style": "normal",
-      "url": "./fonts/Inter-Medium.ttf",
-      "weight": 500
-    },
-    {
-      "name": "Inter",
-      "style": "normal",
-      "url": "./fonts/Inter-Bold.ttf",
-      "weight": 700
-    },
-    {
-      "name": "Inter",
-      "style": "normal",
-      "url": "./fonts/Inter-Regular.ttf",
-      "weight": 400
-    },
-    {
-      "name": "Inter",
-      "style": "normal",
-      "url": "./fonts/Inter-SemiBold.ttf",
-      "weight": 600
-    },
-    {
-      "name": "JetBrains Mono",
-      "style": "normal",
-      "url": "./fonts/jetbrains-mono-latin-400-normal.woff",
-      "weight": 400
-    },
-    {
-      "name": "JetBrains Mono",
-      "style": "normal",
-      "url": "./fonts/jetbrains-mono-latin-500-normal.woff",
-      "weight": 500
-    },
-    {
-      "name": "JetBrains Mono",
-      "style": "normal",
-      "url": "./fonts/jetbrains-mono-latin-600-normal.woff",
-      "weight": 600
-    }
-  ],
+  "themes": {"mode":["light","dark"],"viewport":["desktop","mobile"]},
+  "variables": {"accent":{"type":"color","value":[{"value":"#C8643F"},{"theme":{"mode":"dark"},"value":"#E8876A"}]},"accent-soft":{"type":"color","value":[{"value":"#F6E3DA"},{"theme":{"mode":"dark"},"value":"#3A241C"}]},"agent-claude":{"type":"color","value":[{"value":"#D97757"},{"theme":{"mode":"dark"},"value":"#E8876A"}]},"agent-codex":{"type":"color","value":[{"value":"#10A37F"},{"theme":{"mode":"dark"},"value":"#2BC79B"}]},"agent-person":{"type":"color","value":[{"value":"#5B6CF0"},{"theme":{"mode":"dark"},"value":"#8592FF"}]},"bg":{"type":"color","value":[{"value":"#FAFAF7"},{"theme":{"mode":"dark"},"value":"#0E0F12"}]},"border":{"type":"color","value":[{"value":"#E4E2DA"},{"theme":{"mode":"dark"},"value":"#2A2E37"}]},"canvas":{"type":"color","value":[{"value":"#EDECE7"},{"theme":{"mode":"dark"},"value":"#121318"}]},"code-bg":{"type":"color","value":[{"value":"#15161A"},{"theme":{"mode":"dark"},"value":"#08090B"}]},"code-muted":{"type":"color","value":[{"value":"#8C8F98"},{"theme":{"mode":"dark"},"value":"#7A7E88"}]},"code-text":{"type":"color","value":[{"value":"#E9E7E1"},{"theme":{"mode":"dark"},"value":"#E9E7E1"}]},"dot-green":{"type":"color","value":"#28C840"},"dot-red":{"type":"color","value":"#FF5F57"},"dot-yellow":{"type":"color","value":"#FEBC2E"},"font-mono":{"type":"string","value":"JetBrains Mono"},"font-sans":{"type":"string","value":"Inter"},"glow-claude":{"type":"color","value":[{"value":"#D977574D"},{"theme":{"mode":"dark"},"value":"#E8876A59"}]},"on-accent":{"type":"color","value":[{"value":"#FFFFFF"},{"theme":{"mode":"dark"},"value":"#120C09"}]},"on-cursor":{"type":"color","value":"#FFFFFF"},"page-width":{"type":"number","value":[{"value":1440},{"theme":{"viewport":"mobile"},"value":390}]},"radius-lg":{"type":"number","value":20},"radius-md":{"type":"number","value":12},"radius-sm":{"type":"number","value":8},"section-gap":{"type":"number","value":[{"value":56},{"theme":{"viewport":"mobile"},"value":32}]},"section-pad-x":{"type":"number","value":[{"value":120},{"theme":{"viewport":"mobile"},"value":20}]},"section-pad-y":{"type":"number","value":[{"value":112},{"theme":{"viewport":"mobile"},"value":64}]},"shadow-soft":{"type":"color","value":[{"value":"#0000001A"},{"theme":{"mode":"dark"},"value":"#00000066"}]},"shadow-window":{"type":"color","value":[{"value":"#1A120E26"},{"theme":{"mode":"dark"},"value":"#00000099"}]},"size-body":{"type":"number","value":[{"value":18},{"theme":{"viewport":"mobile"},"value":16}]},"size-h1":{"type":"number","value":[{"value":72},{"theme":{"viewport":"mobile"},"value":40}]},"size-h2":{"type":"number","value":[{"value":44},{"theme":{"viewport":"mobile"},"value":30}]},"size-h3":{"type":"number","value":[{"value":20},{"theme":{"viewport":"mobile"},"value":18}]},"size-small":{"type":"number","value":[{"value":14},{"theme":{"viewport":"mobile"},"value":13}]},"surface":{"type":"color","value":[{"value":"#FFFFFF"},{"theme":{"mode":"dark"},"value":"#16181D"}]},"surface-2":{"type":"color","value":[{"value":"#F2F1EC"},{"theme":{"mode":"dark"},"value":"#1D2027"}]},"text":{"type":"color","value":[{"value":"#15161A"},{"theme":{"mode":"dark"},"value":"#F2F2F0"}]},"text-muted":{"type":"color","value":[{"value":"#5B5E66"},{"theme":{"mode":"dark"},"value":"#9EA2AC"}]}},
+  "fonts": [{"name":"Inter","style":"normal","url":"./fonts/Inter-Medium.ttf","weight":500},{"name":"Inter","style":"normal","url":"./fonts/Inter-Bold.ttf","weight":700},{"name":"Inter","style":"normal","url":"./fonts/Inter-Regular.ttf","weight":400},{"name":"Inter","style":"normal","url":"./fonts/Inter-SemiBold.ttf","weight":600},{"name":"JetBrains Mono","style":"normal","url":"./fonts/jetbrains-mono-latin-400-normal.woff","weight":400},{"name":"JetBrains Mono","style":"normal","url":"./fonts/jetbrains-mono-latin-500-normal.woff","weight":500},{"name":"JetBrains Mono","style":"normal","url":"./fonts/jetbrains-mono-latin-600-normal.woff","weight":600}],
+  "pages": [{"name":"Landing","nodes":["d-root","m-root"]},{"name":"Components","nodes":["btn-primary","btn-secondary","logo","nav","sec-head","feature","tool","check","code","cursor","footer"]}],
   "children": [
     {
       "type": "frame",
@@ -516,9 +11,7 @@
       "name": "Landing / Desktop",
       "fill": "$bg",
       "layout": "vertical",
-      "theme": {
-        "viewport": "desktop"
-      },
+      "theme": {"viewport":"desktop"},
       "width": "$page-width",
       "x": 0,
       "y": 0,
@@ -536,30 +29,22 @@
           "alignItems": "center",
           "gap": 28,
           "layout": "vertical",
-          "padding": [
-            96,
-            "$section-pad-x",
-            0,
-            "$section-pad-x"
-          ],
+          "padding": [96,"$section-pad-x",0,"$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
               "type": "frame",
+              "id": "d-badge",
+              "name": "Badge",
               "alignItems": "center",
               "cornerRadius": 16,
               "fill": "$accent-soft",
               "justifyContent": "center",
               "layout": "horizontal",
-              "padding": [
-                6,
-                12
-              ],
+              "padding": [6,12],
               "stroke": "$accent-soft",
               "strokeAlignment": "inner",
               "strokeWidth": 1,
-              "id": "d-badge",
-              "name": "Badge",
               "children": [
                 {
                   "type": "text",
@@ -613,24 +98,13 @@
                 {
                   "type": "ref",
                   "id": "d-cta1",
-                  "descendants": {
-                    "btn-primary-label": {
-                      "content": "Get it for macOS"
-                    }
-                  },
+                  "descendants": {"btn-primary-label":{"content":"Get it for macOS"}},
                   "ref": "btn-primary"
                 },
                 {
                   "type": "ref",
                   "id": "d-cta2",
-                  "descendants": {
-                    "btn-secondary-icon": {
-                      "icon": "plug"
-                    },
-                    "btn-secondary-label": {
-                      "content": "Connect an agent"
-                    }
-                  },
+                  "descendants": {"btn-secondary-icon":{"icon":"plug"},"btn-secondary-label":{"content":"Connect an agent"}},
                   "ref": "btn-secondary"
                 }
               ]
@@ -640,12 +114,7 @@
               "id": "d-hero-art",
               "name": "Art",
               "layout": "vertical",
-              "padding": [
-                32,
-                0,
-                0,
-                0
-              ],
+              "padding": [32,0,0,0],
               "width": "fill_container",
               "children": [
                 {
@@ -654,16 +123,7 @@
                   "name": "App window",
                   "clip": true,
                   "cornerRadius": 14,
-                  "effect": {
-                    "blur": 64,
-                    "color": "$shadow-window",
-                    "offset": {
-                      "x": 0,
-                      "y": 24
-                    },
-                    "shadowType": "outer",
-                    "type": "shadow"
-                  },
+                  "effect": {"blur":64,"color":"$shadow-window","offset":{"x":0,"y":24},"shadowType":"outer","type":"shadow"},
                   "fill": "$surface",
                   "height": 620,
                   "layout": "none",
@@ -726,9 +186,7 @@
                       "height": 580,
                       "stroke": "$border",
                       "strokeAlignment": "inner",
-                      "strokeWidth": {
-                        "right": 1
-                      },
+                      "strokeWidth": {"right":1},
                       "width": 200,
                       "x": 0,
                       "y": 40
@@ -894,9 +352,7 @@
                       "height": 580,
                       "stroke": "$border",
                       "strokeAlignment": "inner",
-                      "strokeWidth": {
-                        "left": 1
-                      },
+                      "strokeWidth": {"left":1},
                       "width": 240,
                       "x": 960,
                       "y": 40
@@ -1147,16 +603,7 @@
                           "id": "d-m-ab",
                           "name": "Artboard",
                           "cornerRadius": 4,
-                          "effect": {
-                            "blur": 24,
-                            "color": "$shadow-soft",
-                            "offset": {
-                              "x": 0,
-                              "y": 8
-                            },
-                            "shadowType": "outer",
-                            "type": "shadow"
-                          },
+                          "effect": {"blur":24,"color":"$shadow-soft","offset":{"x":0,"y":8},"shadowType":"outer","type":"shadow"},
                           "fill": "$bg",
                           "height": 380,
                           "layout": "none",
@@ -1271,11 +718,7 @@
                         {
                           "type": "ref",
                           "id": "d-m-cur1",
-                          "descendants": {
-                            "cursor-name": {
-                              "content": "Claude"
-                            }
-                          },
+                          "descendants": {"cursor-name":{"content":"Claude"}},
                           "ref": "cursor",
                           "x": 510,
                           "y": 200
@@ -1283,17 +726,7 @@
                         {
                           "type": "ref",
                           "id": "d-m-cur2",
-                          "descendants": {
-                            "cursor-arrow": {
-                              "fill": "$agent-codex"
-                            },
-                            "cursor-name": {
-                              "content": "Codex"
-                            },
-                            "cursor-pill": {
-                              "fill": "$agent-codex"
-                            }
-                          },
+                          "descendants": {"cursor-arrow":{"fill":"$agent-codex"},"cursor-name":{"content":"Codex"},"cursor-pill":{"fill":"$agent-codex"}},
                           "ref": "cursor",
                           "x": 540,
                           "y": 430
@@ -1301,17 +734,7 @@
                         {
                           "type": "ref",
                           "id": "d-m-cur3",
-                          "descendants": {
-                            "cursor-arrow": {
-                              "fill": "$agent-person"
-                            },
-                            "cursor-name": {
-                              "content": "You"
-                            },
-                            "cursor-pill": {
-                              "fill": "$agent-person"
-                            }
-                          },
+                          "descendants": {"cursor-arrow":{"fill":"$agent-person"},"cursor-name":{"content":"You"},"cursor-pill":{"fill":"$agent-person"}},
                           "ref": "cursor",
                           "x": 100,
                           "y": 300
@@ -1330,26 +753,13 @@
           "name": "What it is",
           "gap": "$section-gap",
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
               "type": "ref",
               "id": "d-what-h",
-              "descendants": {
-                "sec-eyebrow": {
-                  "content": "WHAT IT IS"
-                },
-                "sec-lede": {
-                  "content": "Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work."
-                },
-                "sec-title": {
-                  "content": "A canvas built for agents, and for you"
-                }
-              },
+              "descendants": {"sec-eyebrow":{"content":"WHAT IT IS"},"sec-lede":{"content":"Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work."},"sec-title":{"content":"A canvas built for agents, and for you"}},
               "ref": "sec-head",
               "width": 720
             },
@@ -1364,51 +774,21 @@
                 {
                   "type": "ref",
                   "id": "d-card1",
-                  "descendants": {
-                    "feature-body": {
-                      "content": "Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive."
-                    },
-                    "feature-icon": {
-                      "icon": "app-window"
-                    },
-                    "feature-title": {
-                      "content": "Native on macOS"
-                    }
-                  },
+                  "descendants": {"feature-body":{"content":"Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive."},"feature-icon":{"icon":"app-window"},"feature-title":{"content":"Native on macOS"}},
                   "ref": "feature",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-card2",
-                  "descendants": {
-                    "feature-body": {
-                      "content": "They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint."
-                    },
-                    "feature-icon": {
-                      "icon": "bot"
-                    },
-                    "feature-title": {
-                      "content": "Agents are first-class users"
-                    }
-                  },
+                  "descendants": {"feature-body":{"content":"They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint."},"feature-icon":{"icon":"bot"},"feature-title":{"content":"Agents are first-class users"}},
                   "ref": "feature",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-card3",
-                  "descendants": {
-                    "feature-body": {
-                      "content": "Your designs are plain .pen files on your disk, readable by people, agents and pencil.design."
-                    },
-                    "feature-icon": {
-                      "icon": "heart"
-                    },
-                    "feature-title": {
-                      "content": "Free and open"
-                    }
-                  },
+                  "descendants": {"feature-body":{"content":"Your designs are plain .pen files on your disk, readable by people, agents and pencil.design."},"feature-icon":{"icon":"heart"},"feature-title":{"content":"Free and open"}},
                   "ref": "feature",
                   "width": "fill_container"
                 }
@@ -1424,10 +804,7 @@
           "fill": "$surface-2",
           "gap": 64,
           "layout": "horizontal",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -1441,17 +818,7 @@
                 {
                   "type": "ref",
                   "id": "d-ag-h",
-                  "descendants": {
-                    "sec-eyebrow": {
-                      "content": "AGENTS ON THE CANVAS"
-                    },
-                    "sec-lede": {
-                      "content": "Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour."
-                    },
-                    "sec-title": {
-                      "content": "Watch them work"
-                    }
-                  },
+                  "descendants": {"sec-eyebrow":{"content":"AGENTS ON THE CANVAS"},"sec-lede":{"content":"Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour."},"sec-title":{"content":"Watch them work"}},
                   "ref": "sec-head",
                   "width": "fill_container"
                 },
@@ -1466,33 +833,21 @@
                     {
                       "type": "ref",
                       "id": "d-ag-k1",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Claude in clay, Codex in green, named from the MCP client"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Claude in clay, Codex in green, named from the MCP client"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-ag-k2",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Frames marked placeholder glow while an agent works on them"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Frames marked placeholder glow while an agent works on them"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-ag-k3",
-                      "descendants": {
-                        "check-text": {
-                          "content": "A cursor outside the view waits at the edge, pointing the way"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"A cursor outside the view waits at the edge, pointing the way"}},
                       "ref": "check",
                       "width": "fill_container"
                     }
@@ -1516,17 +871,7 @@
                   "id": "d-ag-board",
                   "name": "Board",
                   "cornerRadius": 6,
-                  "effect": {
-                    "blur": 24,
-                    "color": "$glow-claude",
-                    "offset": {
-                      "x": 0,
-                      "y": 0
-                    },
-                    "shadowType": "outer",
-                    "spread": 2,
-                    "type": "shadow"
-                  },
+                  "effect": {"blur":24,"color":"$glow-claude","offset":{"x":0,"y":0},"shadowType":"outer","spread":2,"type":"shadow"},
                   "fill": "$bg",
                   "height": 280,
                   "layout": "none",
@@ -1592,11 +937,7 @@
                 {
                   "type": "ref",
                   "id": "d-ag-c1",
-                  "descendants": {
-                    "cursor-name": {
-                      "content": "Claude"
-                    }
-                  },
+                  "descendants": {"cursor-name":{"content":"Claude"}},
                   "ref": "cursor",
                   "x": 300,
                   "y": 120
@@ -1604,17 +945,7 @@
                 {
                   "type": "ref",
                   "id": "d-ag-c2",
-                  "descendants": {
-                    "cursor-arrow": {
-                      "fill": "$agent-codex"
-                    },
-                    "cursor-name": {
-                      "content": "Codex"
-                    },
-                    "cursor-pill": {
-                      "fill": "$agent-codex"
-                    }
-                  },
+                  "descendants": {"cursor-arrow":{"fill":"$agent-codex"},"cursor-name":{"content":"Codex"},"cursor-pill":{"fill":"$agent-codex"}},
                   "ref": "cursor",
                   "x": 400,
                   "y": 320
@@ -1629,10 +960,7 @@
           "name": "MCP tools",
           "gap": 64,
           "layout": "horizontal",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -1646,31 +974,14 @@
                 {
                   "type": "ref",
                   "id": "d-tl-h",
-                  "descendants": {
-                    "sec-eyebrow": {
-                      "content": "MCP TOOLS"
-                    },
-                    "sec-lede": {
-                      "content": "agentic-design mcp is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click."
-                    },
-                    "sec-title": {
-                      "content": "One command to connect"
-                    }
-                  },
+                  "descendants": {"sec-eyebrow":{"content":"MCP TOOLS"},"sec-lede":{"content":"agentic-design mcp is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click."},"sec-title":{"content":"One command to connect"}},
                   "ref": "sec-head",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl-code",
-                  "descendants": {
-                    "code-text": {
-                      "content": "$ claude mcp add --scope user agentic-design \\\n    -- /path/to/build/agentic-design mcp"
-                    },
-                    "code-title": {
-                      "content": "Terminal"
-                    }
-                  },
+                  "descendants": {"code-text":{"content":"$ claude mcp add --scope user agentic-design \\\n    -- /path/to/build/agentic-design mcp"},"code-title":{"content":"Terminal"}},
                   "ref": "code",
                   "width": "fill_container"
                 }
@@ -1687,126 +998,63 @@
                 {
                   "type": "ref",
                   "id": "d-tl0",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "What the document holds and how its parts are named"
-                    },
-                    "tool-name": {
-                      "content": "get_guide"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"What the document holds and how its parts are named"},"tool-name":{"content":"get_guide"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl1",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Several edits as one undo step, all or nothing"
-                    },
-                    "tool-name": {
-                      "content": "batch"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Several edits as one undo step, all or nothing"},"tool-name":{"content":"batch"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl2",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": ".pen nodes in, ids out, with nested children"
-                    },
-                    "tool-name": {
-                      "content": "create_nodes"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":".pen nodes in, ids out, with nested children"},"tool-name":{"content":"create_nodes"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl3",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Layers by name, type, text, ref or variable"
-                    },
-                    "tool-name": {
-                      "content": "find_nodes"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Layers by name, type, text, ref or variable"},"tool-name":{"content":"find_nodes"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl4",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "A node, the canvas or the whole window, in any theme"
-                    },
-                    "tool-name": {
-                      "content": "screenshot"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"A node, the canvas or the whole window, in any theme"},"tool-name":{"content":"screenshot"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl5",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Hard-coded colours, missing fonts, text that does not fit"
-                    },
-                    "tool-name": {
-                      "content": "lint"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Hard-coded colours, missing fonts, text that does not fit"},"tool-name":{"content":"lint"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl6",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Tokens, theme axes and the theme shown"
-                    },
-                    "tool-name": {
-                      "content": "set_variables"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Tokens, theme axes and the theme shown"},"tool-name":{"content":"set_variables"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl7",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Import other .pen files as libraries"
-                    },
-                    "tool-name": {
-                      "content": "set_libraries"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Import other .pen files as libraries"},"tool-name":{"content":"set_libraries"}},
                   "ref": "tool",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "d-tl8",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "HTML + CSS or React + Tailwind for the page"
-                    },
-                    "tool-name": {
-                      "content": "export_code"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"HTML + CSS or React + Tailwind for the page"},"tool-name":{"content":"export_code"}},
                   "ref": "tool",
                   "width": "fill_container"
                 }
@@ -1821,10 +1069,7 @@
           "fill": "$surface-2",
           "gap": 64,
           "layout": "horizontal",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -1838,17 +1083,7 @@
                 {
                   "type": "ref",
                   "id": "d-pen-h",
-                  "descendants": {
-                    "sec-eyebrow": {
-                      "content": ".PEN FILES"
-                    },
-                    "sec-lede": {
-                      "content": "Documents are pencil.design .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev."
-                    },
-                    "sec-title": {
-                      "content": "Speaks .pen, keeps the rest"
-                    }
-                  },
+                  "descendants": {"sec-eyebrow":{"content":".PEN FILES"},"sec-lede":{"content":"Documents are pencil.design .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev."},"sec-title":{"content":"Speaks .pen, keeps the rest"}},
                   "ref": "sec-head",
                   "width": "fill_container"
                 },
@@ -1863,66 +1098,42 @@
                     {
                       "type": "ref",
                       "id": "d-pen-k0",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Frames, groups, shapes, paths, text and Lucide icons"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Frames, groups, shapes, paths, text and Lucide icons"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-pen-k1",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Flex layout: gap, padding, fit and fill"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Flex layout: gap, padding, fit and fill"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-pen-k2",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Variables, theme axes and per-frame themes"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Variables, theme axes and per-frame themes"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-pen-k3",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Components, instances, overrides and slots"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Components, instances, overrides and slots"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-pen-k4",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Gradients, several fills and shadows, blurs"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Gradients, several fills and shadows, blurs"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "d-pen-k5",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Unknown properties kept as they are"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Unknown properties kept as they are"}},
                       "ref": "check",
                       "width": "fill_container"
                     }
@@ -1933,14 +1144,7 @@
             {
               "type": "ref",
               "id": "d-pen-code",
-              "descendants": {
-                "code-text": {
-                  "content": "{\n  \"type\": \"ref\",\n  \"ref\": \"btn-primary\",\n  \"descendants\": {\n    \"btn-primary-label\": {\n      \"content\": \"Get it for macOS\"\n    }\n  }\n}"
-                },
-                "code-title": {
-                  "content": "hero.pen"
-                }
-              },
+              "descendants": {"code-text":{"content":"{\n  \"type\": \"ref\",\n  \"ref\": \"btn-primary\",\n  \"descendants\": {\n    \"btn-primary-label\": {\n      \"content\": \"Get it for macOS\"\n    }\n  }\n}"},"code-title":{"content":"hero.pen"}},
               "ref": "code",
               "width": "fill_container"
             }
@@ -1951,10 +1155,7 @@
           "id": "d-dl",
           "name": "Download",
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -1980,17 +1181,7 @@
                     {
                       "type": "ref",
                       "id": "d-dl-h",
-                      "descendants": {
-                        "sec-eyebrow": {
-                          "content": "DOWNLOAD"
-                        },
-                        "sec-lede": {
-                          "content": "Agentic Design is a prototype. Build it with one script, open it, and the onboarding connects your agents."
-                        },
-                        "sec-title": {
-                          "content": "Run it on your Mac"
-                        }
-                      },
+                      "descendants": {"sec-eyebrow":{"content":"DOWNLOAD"},"sec-lede":{"content":"Agentic Design is a prototype. Build it with one script, open it, and the onboarding connects your agents."},"sec-title":{"content":"Run it on your Mac"}},
                       "ref": "sec-head",
                       "width": "fill_container"
                     },
@@ -2005,27 +1196,13 @@
                         {
                           "type": "ref",
                           "id": "d-dl-b1",
-                          "descendants": {
-                            "btn-primary-icon": {
-                              "icon": "terminal"
-                            },
-                            "btn-primary-label": {
-                              "content": "Build from source"
-                            }
-                          },
+                          "descendants": {"btn-primary-icon":{"icon":"terminal"},"btn-primary-label":{"content":"Build from source"}},
                           "ref": "btn-primary"
                         },
                         {
                           "type": "ref",
                           "id": "d-dl-b2",
-                          "descendants": {
-                            "btn-secondary-icon": {
-                              "icon": "book-open"
-                            },
-                            "btn-secondary-label": {
-                              "content": "Read the docs"
-                            }
-                          },
+                          "descendants": {"btn-secondary-icon":{"icon":"book-open"},"btn-secondary-label":{"content":"Read the docs"}},
                           "ref": "btn-secondary"
                         }
                       ]
@@ -2035,14 +1212,7 @@
                 {
                   "type": "ref",
                   "id": "d-dl-code",
-                  "descendants": {
-                    "code-text": {
-                      "content": "$ brew install odin\n$ ./build.sh\n$ ./build/agentic-design"
-                    },
-                    "code-title": {
-                      "content": "Terminal"
-                    }
-                  },
+                  "descendants": {"code-text":{"content":"$ brew install odin\n$ ./build.sh\n$ ./build/agentic-design"},"code-title":{"content":"Terminal"}},
                   "ref": "code",
                   "width": "fill_container"
                 }
@@ -2064,9 +1234,7 @@
       "name": "Landing / Mobile",
       "fill": "$bg",
       "layout": "vertical",
-      "theme": {
-        "viewport": "mobile"
-      },
+      "theme": {"viewport":"mobile"},
       "width": "$page-width",
       "x": 1540,
       "y": 0,
@@ -2074,11 +1242,7 @@
         {
           "type": "ref",
           "id": "m-nav",
-          "descendants": {
-            "nav-links": {
-              "enabled": false
-            }
-          },
+          "descendants": {"nav-links":{"enabled":false}},
           "ref": "nav",
           "width": "fill_container"
         },
@@ -2089,30 +1253,22 @@
           "alignItems": "center",
           "gap": 28,
           "layout": "vertical",
-          "padding": [
-            48,
-            "$section-pad-x",
-            0,
-            "$section-pad-x"
-          ],
+          "padding": [48,"$section-pad-x",0,"$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
               "type": "frame",
+              "id": "m-badge",
+              "name": "Badge",
               "alignItems": "center",
               "cornerRadius": 16,
               "fill": "$accent-soft",
               "justifyContent": "center",
               "layout": "horizontal",
-              "padding": [
-                6,
-                12
-              ],
+              "padding": [6,12],
               "stroke": "$accent-soft",
               "strokeAlignment": "inner",
               "strokeWidth": 1,
-              "id": "m-badge",
-              "name": "Badge",
               "children": [
                 {
                   "type": "text",
@@ -2166,11 +1322,7 @@
                 {
                   "type": "ref",
                   "id": "m-cta1",
-                  "descendants": {
-                    "btn-primary-label": {
-                      "content": "Get it for macOS"
-                    }
-                  },
+                  "descendants": {"btn-primary-label":{"content":"Get it for macOS"}},
                   "justifyContent": "center",
                   "ref": "btn-primary",
                   "width": "fill_container"
@@ -2178,14 +1330,7 @@
                 {
                   "type": "ref",
                   "id": "m-cta2",
-                  "descendants": {
-                    "btn-secondary-icon": {
-                      "icon": "plug"
-                    },
-                    "btn-secondary-label": {
-                      "content": "Connect an agent"
-                    }
-                  },
+                  "descendants": {"btn-secondary-icon":{"icon":"plug"},"btn-secondary-label":{"content":"Connect an agent"}},
                   "justifyContent": "center",
                   "ref": "btn-secondary",
                   "width": "fill_container"
@@ -2197,12 +1342,7 @@
               "id": "m-hero-art",
               "name": "Art",
               "layout": "vertical",
-              "padding": [
-                32,
-                0,
-                0,
-                0
-              ],
+              "padding": [32,0,0,0],
               "width": "fill_container",
               "children": [
                 {
@@ -2211,16 +1351,7 @@
                   "name": "App window",
                   "clip": true,
                   "cornerRadius": 14,
-                  "effect": {
-                    "blur": 64,
-                    "color": "$shadow-window",
-                    "offset": {
-                      "x": 0,
-                      "y": 24
-                    },
-                    "shadowType": "outer",
-                    "type": "shadow"
-                  },
+                  "effect": {"blur":64,"color":"$shadow-window","offset":{"x":0,"y":24},"shadowType":"outer","type":"shadow"},
                   "fill": "$surface",
                   "height": 420,
                   "layout": "none",
@@ -2304,16 +1435,7 @@
                           "id": "m-m-ab",
                           "name": "Artboard",
                           "cornerRadius": 4,
-                          "effect": {
-                            "blur": 24,
-                            "color": "$shadow-soft",
-                            "offset": {
-                              "x": 0,
-                              "y": 8
-                            },
-                            "shadowType": "outer",
-                            "type": "shadow"
-                          },
+                          "effect": {"blur":24,"color":"$shadow-soft","offset":{"x":0,"y":8},"shadowType":"outer","type":"shadow"},
                           "fill": "$bg",
                           "height": 300,
                           "layout": "none",
@@ -2428,11 +1550,7 @@
                         {
                           "type": "ref",
                           "id": "m-m-cur1",
-                          "descendants": {
-                            "cursor-name": {
-                              "content": "Claude"
-                            }
-                          },
+                          "descendants": {"cursor-name":{"content":"Claude"}},
                           "ref": "cursor",
                           "x": 235,
                           "y": 140
@@ -2440,17 +1558,7 @@
                         {
                           "type": "ref",
                           "id": "m-m-cur2",
-                          "descendants": {
-                            "cursor-arrow": {
-                              "fill": "$agent-codex"
-                            },
-                            "cursor-name": {
-                              "content": "Codex"
-                            },
-                            "cursor-pill": {
-                              "fill": "$agent-codex"
-                            }
-                          },
+                          "descendants": {"cursor-arrow":{"fill":"$agent-codex"},"cursor-name":{"content":"Codex"},"cursor-pill":{"fill":"$agent-codex"}},
                           "ref": "cursor",
                           "x": 250,
                           "y": 290
@@ -2458,17 +1566,7 @@
                         {
                           "type": "ref",
                           "id": "m-m-cur3",
-                          "descendants": {
-                            "cursor-arrow": {
-                              "fill": "$agent-person"
-                            },
-                            "cursor-name": {
-                              "content": "You"
-                            },
-                            "cursor-pill": {
-                              "fill": "$agent-person"
-                            }
-                          },
+                          "descendants": {"cursor-arrow":{"fill":"$agent-person"},"cursor-name":{"content":"You"},"cursor-pill":{"fill":"$agent-person"}},
                           "ref": "cursor",
                           "x": 8,
                           "y": 240
@@ -2487,26 +1585,13 @@
           "name": "What it is",
           "gap": "$section-gap",
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
               "type": "ref",
               "id": "m-what-h",
-              "descendants": {
-                "sec-eyebrow": {
-                  "content": "WHAT IT IS"
-                },
-                "sec-lede": {
-                  "content": "Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work."
-                },
-                "sec-title": {
-                  "content": "A canvas built for agents, and for you"
-                }
-              },
+              "descendants": {"sec-eyebrow":{"content":"WHAT IT IS"},"sec-lede":{"content":"Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work."},"sec-title":{"content":"A canvas built for agents, and for you"}},
               "ref": "sec-head",
               "width": "fill_container"
             },
@@ -2521,51 +1606,21 @@
                 {
                   "type": "ref",
                   "id": "m-card1",
-                  "descendants": {
-                    "feature-body": {
-                      "content": "Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive."
-                    },
-                    "feature-icon": {
-                      "icon": "app-window"
-                    },
-                    "feature-title": {
-                      "content": "Native on macOS"
-                    }
-                  },
+                  "descendants": {"feature-body":{"content":"Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive."},"feature-icon":{"icon":"app-window"},"feature-title":{"content":"Native on macOS"}},
                   "ref": "feature",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "m-card2",
-                  "descendants": {
-                    "feature-body": {
-                      "content": "They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint."
-                    },
-                    "feature-icon": {
-                      "icon": "bot"
-                    },
-                    "feature-title": {
-                      "content": "Agents are first-class users"
-                    }
-                  },
+                  "descendants": {"feature-body":{"content":"They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint."},"feature-icon":{"icon":"bot"},"feature-title":{"content":"Agents are first-class users"}},
                   "ref": "feature",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "m-card3",
-                  "descendants": {
-                    "feature-body": {
-                      "content": "Your designs are plain .pen files on your disk, readable by people, agents and pencil.design."
-                    },
-                    "feature-icon": {
-                      "icon": "heart"
-                    },
-                    "feature-title": {
-                      "content": "Free and open"
-                    }
-                  },
+                  "descendants": {"feature-body":{"content":"Your designs are plain .pen files on your disk, readable by people, agents and pencil.design."},"feature-icon":{"icon":"heart"},"feature-title":{"content":"Free and open"}},
                   "ref": "feature",
                   "width": "fill_container"
                 }
@@ -2581,10 +1636,7 @@
           "fill": "$surface-2",
           "gap": 32,
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -2598,17 +1650,7 @@
                 {
                   "type": "ref",
                   "id": "m-ag-h",
-                  "descendants": {
-                    "sec-eyebrow": {
-                      "content": "AGENTS ON THE CANVAS"
-                    },
-                    "sec-lede": {
-                      "content": "Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour."
-                    },
-                    "sec-title": {
-                      "content": "Watch them work"
-                    }
-                  },
+                  "descendants": {"sec-eyebrow":{"content":"AGENTS ON THE CANVAS"},"sec-lede":{"content":"Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour."},"sec-title":{"content":"Watch them work"}},
                   "ref": "sec-head",
                   "width": "fill_container"
                 },
@@ -2623,33 +1665,21 @@
                     {
                       "type": "ref",
                       "id": "m-ag-k1",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Claude in clay, Codex in green, named from the MCP client"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Claude in clay, Codex in green, named from the MCP client"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-ag-k2",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Frames marked placeholder glow while an agent works on them"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Frames marked placeholder glow while an agent works on them"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-ag-k3",
-                      "descendants": {
-                        "check-text": {
-                          "content": "A cursor outside the view waits at the edge, pointing the way"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"A cursor outside the view waits at the edge, pointing the way"}},
                       "ref": "check",
                       "width": "fill_container"
                     }
@@ -2673,17 +1703,7 @@
                   "id": "m-ag-board",
                   "name": "Board",
                   "cornerRadius": 6,
-                  "effect": {
-                    "blur": 24,
-                    "color": "$glow-claude",
-                    "offset": {
-                      "x": 0,
-                      "y": 0
-                    },
-                    "shadowType": "outer",
-                    "spread": 2,
-                    "type": "shadow"
-                  },
+                  "effect": {"blur":24,"color":"$glow-claude","offset":{"x":0,"y":0},"shadowType":"outer","spread":2,"type":"shadow"},
                   "fill": "$bg",
                   "height": 200,
                   "layout": "none",
@@ -2749,11 +1769,7 @@
                 {
                   "type": "ref",
                   "id": "m-ag-c1",
-                  "descendants": {
-                    "cursor-name": {
-                      "content": "Claude"
-                    }
-                  },
+                  "descendants": {"cursor-name":{"content":"Claude"}},
                   "ref": "cursor",
                   "x": 200,
                   "y": 90
@@ -2761,17 +1777,7 @@
                 {
                   "type": "ref",
                   "id": "m-ag-c2",
-                  "descendants": {
-                    "cursor-arrow": {
-                      "fill": "$agent-codex"
-                    },
-                    "cursor-name": {
-                      "content": "Codex"
-                    },
-                    "cursor-pill": {
-                      "fill": "$agent-codex"
-                    }
-                  },
+                  "descendants": {"cursor-arrow":{"fill":"$agent-codex"},"cursor-name":{"content":"Codex"},"cursor-pill":{"fill":"$agent-codex"}},
                   "ref": "cursor",
                   "x": 240,
                   "y": 230
@@ -2786,10 +1792,7 @@
           "name": "MCP tools",
           "gap": 32,
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -2803,31 +1806,14 @@
                 {
                   "type": "ref",
                   "id": "m-tl-h",
-                  "descendants": {
-                    "sec-eyebrow": {
-                      "content": "MCP TOOLS"
-                    },
-                    "sec-lede": {
-                      "content": "agentic-design mcp is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click."
-                    },
-                    "sec-title": {
-                      "content": "One command to connect"
-                    }
-                  },
+                  "descendants": {"sec-eyebrow":{"content":"MCP TOOLS"},"sec-lede":{"content":"agentic-design mcp is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click."},"sec-title":{"content":"One command to connect"}},
                   "ref": "sec-head",
                   "width": "fill_container"
                 },
                 {
                   "type": "ref",
                   "id": "m-tl-code",
-                  "descendants": {
-                    "code-text": {
-                      "content": "$ claude mcp add --scope user \\\n  agentic-design -- \\\n  /path/to/agentic-design mcp"
-                    },
-                    "code-title": {
-                      "content": "Terminal"
-                    }
-                  },
+                  "descendants": {"code-text":{"content":"$ claude mcp add --scope user \\\n  agentic-design -- \\\n  /path/to/agentic-design mcp"},"code-title":{"content":"Terminal"}},
                   "ref": "code",
                   "width": "fill_container"
                 }
@@ -2845,20 +1831,10 @@
                   "type": "ref",
                   "id": "m-tl0",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "What the document holds and how its parts are named"
-                    },
-                    "tool-name": {
-                      "content": "get_guide"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"What the document holds and how its parts are named"},"tool-name":{"content":"get_guide"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2866,20 +1842,10 @@
                   "type": "ref",
                   "id": "m-tl1",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Several edits as one undo step, all or nothing"
-                    },
-                    "tool-name": {
-                      "content": "batch"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Several edits as one undo step, all or nothing"},"tool-name":{"content":"batch"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2887,20 +1853,10 @@
                   "type": "ref",
                   "id": "m-tl2",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": ".pen nodes in, ids out, with nested children"
-                    },
-                    "tool-name": {
-                      "content": "create_nodes"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":".pen nodes in, ids out, with nested children"},"tool-name":{"content":"create_nodes"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2908,20 +1864,10 @@
                   "type": "ref",
                   "id": "m-tl3",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Layers by name, type, text, ref or variable"
-                    },
-                    "tool-name": {
-                      "content": "find_nodes"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Layers by name, type, text, ref or variable"},"tool-name":{"content":"find_nodes"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2929,20 +1875,10 @@
                   "type": "ref",
                   "id": "m-tl4",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "A node, the canvas or the whole window, in any theme"
-                    },
-                    "tool-name": {
-                      "content": "screenshot"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"A node, the canvas or the whole window, in any theme"},"tool-name":{"content":"screenshot"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2950,20 +1886,10 @@
                   "type": "ref",
                   "id": "m-tl5",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Hard-coded colours, missing fonts, text that does not fit"
-                    },
-                    "tool-name": {
-                      "content": "lint"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Hard-coded colours, missing fonts, text that does not fit"},"tool-name":{"content":"lint"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2971,20 +1897,10 @@
                   "type": "ref",
                   "id": "m-tl6",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Tokens, theme axes and the theme shown"
-                    },
-                    "tool-name": {
-                      "content": "set_variables"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Tokens, theme axes and the theme shown"},"tool-name":{"content":"set_variables"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -2992,20 +1908,10 @@
                   "type": "ref",
                   "id": "m-tl7",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "Import other .pen files as libraries"
-                    },
-                    "tool-name": {
-                      "content": "set_libraries"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"Import other .pen files as libraries"},"tool-name":{"content":"set_libraries"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 },
@@ -3013,20 +1919,10 @@
                   "type": "ref",
                   "id": "m-tl8",
                   "alignItems": "start",
-                  "descendants": {
-                    "tool-desc": {
-                      "content": "HTML + CSS or React + Tailwind for the page"
-                    },
-                    "tool-name": {
-                      "content": "export_code"
-                    }
-                  },
+                  "descendants": {"tool-desc":{"content":"HTML + CSS or React + Tailwind for the page"},"tool-name":{"content":"export_code"}},
                   "gap": 4,
                   "layout": "vertical",
-                  "padding": [
-                    12,
-                    16
-                  ],
+                  "padding": [12,16],
                   "ref": "tool",
                   "width": "fill_container"
                 }
@@ -3041,10 +1937,7 @@
           "fill": "$surface-2",
           "gap": 32,
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -3058,17 +1951,7 @@
                 {
                   "type": "ref",
                   "id": "m-pen-h",
-                  "descendants": {
-                    "sec-eyebrow": {
-                      "content": ".PEN FILES"
-                    },
-                    "sec-lede": {
-                      "content": "Documents are pencil.design .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev."
-                    },
-                    "sec-title": {
-                      "content": "Speaks .pen, keeps the rest"
-                    }
-                  },
+                  "descendants": {"sec-eyebrow":{"content":".PEN FILES"},"sec-lede":{"content":"Documents are pencil.design .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev."},"sec-title":{"content":"Speaks .pen, keeps the rest"}},
                   "ref": "sec-head",
                   "width": "fill_container"
                 },
@@ -3083,66 +1966,42 @@
                     {
                       "type": "ref",
                       "id": "m-pen-k0",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Frames, groups, shapes, paths, text and Lucide icons"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Frames, groups, shapes, paths, text and Lucide icons"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-pen-k1",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Flex layout: gap, padding, fit and fill"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Flex layout: gap, padding, fit and fill"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-pen-k2",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Variables, theme axes and per-frame themes"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Variables, theme axes and per-frame themes"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-pen-k3",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Components, instances, overrides and slots"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Components, instances, overrides and slots"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-pen-k4",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Gradients, several fills and shadows, blurs"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Gradients, several fills and shadows, blurs"}},
                       "ref": "check",
                       "width": "fill_container"
                     },
                     {
                       "type": "ref",
                       "id": "m-pen-k5",
-                      "descendants": {
-                        "check-text": {
-                          "content": "Unknown properties kept as they are"
-                        }
-                      },
+                      "descendants": {"check-text":{"content":"Unknown properties kept as they are"}},
                       "ref": "check",
                       "width": "fill_container"
                     }
@@ -3153,14 +2012,7 @@
             {
               "type": "ref",
               "id": "m-pen-code",
-              "descendants": {
-                "code-text": {
-                  "content": "{\n  \"type\": \"ref\",\n  \"ref\": \"btn-primary\",\n  \"descendants\": {\n    \"btn-primary-label\": {\n      \"content\": \"Get it for macOS\"\n    }\n  }\n}"
-                },
-                "code-title": {
-                  "content": "hero.pen"
-                }
-              },
+              "descendants": {"code-text":{"content":"{\n  \"type\": \"ref\",\n  \"ref\": \"btn-primary\",\n  \"descendants\": {\n    \"btn-primary-label\": {\n      \"content\": \"Get it for macOS\"\n    }\n  }\n}"},"code-title":{"content":"hero.pen"}},
               "ref": "code",
               "width": "fill_container"
             }
@@ -3171,10 +2023,7 @@
           "id": "m-dl",
           "name": "Download",
           "layout": "vertical",
-          "padding": [
-            "$section-pad-y",
-            "$section-pad-x"
-          ],
+          "padding": ["$section-pad-y","$section-pad-x"],
           "width": "fill_container",
           "children": [
             {
@@ -3200,17 +2049,7 @@
                     {
                       "type": "ref",
                       "id": "m-dl-h",
-                      "descendants": {
-                        "sec-eyebrow": {
-                          "content": "DOWNLOAD"
-                        },
-                        "sec-lede": {
-                          "content": "Agentic Design is a prototype. Build it with one script, open it, and the onboarding connects your agents."
-                        },
-                        "sec-title": {
-                          "content": "Run it on your Mac"
-                        }
-                      },
+                      "descendants": {"sec-eyebrow":{"content":"DOWNLOAD"},"sec-lede":{"content":"Agentic Design is a prototype. Build it with one script, open it, and the onboarding connects your agents."},"sec-title":{"content":"Run it on your Mac"}},
                       "ref": "sec-head",
                       "width": "fill_container"
                     },
@@ -3225,14 +2064,7 @@
                         {
                           "type": "ref",
                           "id": "m-dl-b1",
-                          "descendants": {
-                            "btn-primary-icon": {
-                              "icon": "terminal"
-                            },
-                            "btn-primary-label": {
-                              "content": "Build from source"
-                            }
-                          },
+                          "descendants": {"btn-primary-icon":{"icon":"terminal"},"btn-primary-label":{"content":"Build from source"}},
                           "justifyContent": "center",
                           "ref": "btn-primary",
                           "width": "fill_container"
@@ -3240,14 +2072,7 @@
                         {
                           "type": "ref",
                           "id": "m-dl-b2",
-                          "descendants": {
-                            "btn-secondary-icon": {
-                              "icon": "book-open"
-                            },
-                            "btn-secondary-label": {
-                              "content": "Read the docs"
-                            }
-                          },
+                          "descendants": {"btn-secondary-icon":{"icon":"book-open"},"btn-secondary-label":{"content":"Read the docs"}},
                           "justifyContent": "center",
                           "ref": "btn-secondary",
                           "width": "fill_container"
@@ -3259,14 +2084,7 @@
                 {
                   "type": "ref",
                   "id": "m-dl-code",
-                  "descendants": {
-                    "code-text": {
-                      "content": "$ brew install odin\n$ ./build.sh\n$ ./build/agentic-design"
-                    },
-                    "code-title": {
-                      "content": "Terminal"
-                    }
-                  },
+                  "descendants": {"code-text":{"content":"$ brew install odin\n$ ./build.sh\n$ ./build/agentic-design"},"code-title":{"content":"Terminal"}},
                   "ref": "code",
                   "width": "fill_container"
                 }
@@ -3277,11 +2095,7 @@
         {
           "type": "ref",
           "id": "m-footer",
-          "descendants": {
-            "footer-links": {
-              "enabled": false
-            }
-          },
+          "descendants": {"footer-links":{"enabled":false}},
           "ref": "footer",
           "width": "fill_container"
         }
@@ -3296,10 +2110,7 @@
       "fill": "$accent",
       "gap": 8,
       "layout": "horizontal",
-      "padding": [
-        12,
-        20
-      ],
+      "padding": [12,20],
       "reusable": true,
       "x": 0,
       "y": 0,
@@ -3333,10 +2144,7 @@
       "fill": "$surface",
       "gap": 8,
       "layout": "horizontal",
-      "padding": [
-        12,
-        20
-      ],
+      "padding": [12,20],
       "reusable": true,
       "stroke": "$border",
       "strokeAlignment": "inner",
@@ -3419,16 +2227,11 @@
       "height": 72,
       "justifyContent": "space_between",
       "layout": "horizontal",
-      "padding": [
-        0,
-        "$section-pad-x"
-      ],
+      "padding": [0,"$section-pad-x"],
       "reusable": true,
       "stroke": "$border",
       "strokeAlignment": "inner",
-      "strokeWidth": {
-        "bottom": 1
-      },
+      "strokeWidth": {"bottom":1},
       "width": 1440,
       "x": 0,
       "y": 120,
@@ -3501,10 +2304,7 @@
           "cornerRadius": "$radius-sm",
           "gap": 8,
           "layout": "horizontal",
-          "padding": [
-            8,
-            14
-          ],
+          "padding": [8,14],
           "stroke": "$border",
           "strokeAlignment": "inner",
           "strokeWidth": 1,
@@ -3653,10 +2453,7 @@
       "fill": "$surface",
       "gap": 16,
       "layout": "horizontal",
-      "padding": [
-        14,
-        18
-      ],
+      "padding": [14,18],
       "reusable": true,
       "stroke": "$border",
       "strokeAlignment": "inner",
@@ -3759,10 +2556,7 @@
           "alignItems": "center",
           "gap": 8,
           "layout": "horizontal",
-          "padding": [
-            12,
-            16
-          ],
+          "padding": [12,16],
           "width": "fill_container",
           "children": [
             {
@@ -3802,12 +2596,7 @@
           "id": "code-body",
           "name": "Body",
           "layout": "vertical",
-          "padding": [
-            4,
-            20,
-            20,
-            20
-          ],
+          "padding": [4,20,20,20],
           "width": "fill_container",
           "children": [
             {
@@ -3857,10 +2646,7 @@
           "cornerRadius": 10,
           "fill": "$agent-claude",
           "layout": "horizontal",
-          "padding": [
-            3,
-            8
-          ],
+          "padding": [3,8],
           "x": 14,
           "y": 18,
           "children": [
@@ -3885,16 +2671,11 @@
       "fill": "$surface-2",
       "justifyContent": "space_between",
       "layout": "horizontal",
-      "padding": [
-        48,
-        "$section-pad-x"
-      ],
+      "padding": [48,"$section-pad-x"],
       "reusable": true,
       "stroke": "$border",
       "strokeAlignment": "inner",
-      "strokeWidth": {
-        "top": 1
-      },
+      "strokeWidth": {"top":1},
       "width": 1440,
       "x": 0,
       "y": 760,
