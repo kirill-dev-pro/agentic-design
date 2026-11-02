@@ -504,6 +504,18 @@ draw_text_bars :: proc(vg: ^nvg.Context, n: ^Node) {
 	nvg.Fill(vg)
 }
 
+// Where the glyph box of text with "normal" line height starts below the top of its line
+// box when glyphs go on whole device pixels (`k` per unit), as Blink places it: the line box
+// is the ascent and descent each rounded to device pixels, the baseline the rounded ascent
+// below its top. With the exact ascent the baseline rounded to the other pixel whenever the
+// layer sat at a fractional position (flex layouts put text at y = 10.6 and so on), a
+// device pixel off Chrome (D44). Text with an explicit line height keeps the exact half
+// leading: imported pages and pen.dev place it by that.
+blink_baseline_top :: proc(vg: ^nvg.Context, k: f32) -> f32 {
+	asc, _, _ := nvg.TextMetrics(vg)
+	return math.round(asc * k) / k - asc
+}
+
 draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
 	set_font(vg, n)
 	nvg.FillColor(vg, to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255}))
@@ -523,6 +535,7 @@ draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
 	// wrapping and widths do not drift with the zoom level
 	rows := text_lines(n, n.w if n.growth != .Auto else -1)
 	y := n.y + half_leading(vg, n)
+	if k := nvg.TextSnapScale(vg); k > 0 && n.line_height <= 0 && outline_sink == nil do y = n.y + blink_baseline_top(vg, k)
 	if n.growth == .Fixed_Width_Height && n.text_valign != .Start {
 		free := n.h - f32(len(rows)) * n.font_size * line_height_of(n)
 		y += free / 2 if n.text_valign == .Center else free

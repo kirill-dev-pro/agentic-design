@@ -1536,3 +1536,46 @@ Copy as PNG and as HTML (Shift Cmd C, Option Cmd C) stay on the clipboard.
   window the panel opens and the window waits for it, like the open panels before.
 - While the panel is open the main loop is inside `runModal`: agent requests wait until
   the user answers it, as with the other system panels, and a quit signal is handled after.
+
+## 65. Small text kerns at its variable weight and keeps Chrome's baseline at fractional positions
+
+**Problem.** Two differences from Chrome remained after #63 (D44). Text at weights 500
+and 600 of a variable font (Inter) looked thinner and spaced differently from Chrome's.
+The instance itself was right: its outlines and advances equal fontTools' instancer's. But
+GPOS kerning came from the default instance, because the deltas that `XAdvDevice` tables
+point to in GDEF's item variation store were never read. Then some lines sat a device pixel
+row off Chrome's. Blink rounds a font's ascent and descent to whole pixels and puts the
+baseline the rounded ascent below the line box's pixel-snapped top. The app put it at the
+exact ascent and rounded the sum, which differs whenever a text layer sits at a fractional
+`y`, as flex layouts often place it.
+
+**Decision.**
+
+- fontstash adds the variation deltas to GPOS pair kerning at the instance's axis
+  coordinates: the normalised coordinates after `avar`, which `varfont_instance` writes
+  into a private `ADvc` table of the instance.
+- When glyphs go on whole device pixels (#63), text with "normal" line height (no
+  `lineHeight`) starts its first line at the ascent rounded to device pixels
+  (`blink_baseline_top` in `draw.odin`).
+- Text with an explicit `lineHeight` keeps the exact half leading. Blink would floor the
+  half leading too, but pen.dev, the reference (#25), places such text by the exact
+  value, and so does the dogfooder's importer when it reads positions from the live
+  page. On the landing, the Blink rule for those layers moved mobile text a row low
+  (more than 16 off: 3.21 → 3.63 % on mobile light); with only "normal" text it gains
+  everywhere.
+
+**Consequences.**
+
+- Inter at 600 draws pixel for pixel as the static Inter SemiBold does. A 14 px 600 line
+  against Chrome: mean 9.2 → 4.1.
+- The baseline rule matches headless Chrome on a harness with fractional positions to a
+  mean of 0.15 px at 1× (0.49 before) and 0.09 at 2× (0.16). pen.dev places such text
+  unsnapped, a fraction of a pixel from either rule.
+- Landing sections against the dogfooder's live captures (`secdiff`, 12 sections), from
+  #63 to now, share of pixels more than 16 off: desktop light 1.83 → 1.51 %, mobile light
+  3.32 → 2.82 %, desktop dark 1.88 → 1.56 %, mobile dark 3.31 → 2.82 %. More than 48 off:
+  0.82 → 0.57, 1.43 → 1.03, 0.83 → 0.57, 1.39 → 1.01 %. Mean: 1.47 → 1.16, 2.57 → 2.08,
+  1.35 → 1.07, 2.29 → 1.85. Before #63 the share of pixels more than 16 off was 2.46,
+  4.55, 2.47 and 4.46 %.
+- Text widths at weights 500 and 600 change by up to 1.5 units (kerning), so
+  `get_document` bounds move with them. Saved files are byte-identical.

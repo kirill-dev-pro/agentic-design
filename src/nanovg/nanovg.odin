@@ -2932,6 +2932,17 @@ TextIcon :: proc(ctx: ^Context, xpos, ypos: f32, codepoint: rune) -> f32 {
 	return nextx / scale
 }
 
+// Agentic Design patch: the device pixels per unit at which Text draws glyphs on whole
+// pixels with the current font and transform (see Text), or 0 when it draws them at
+// fractional positions.
+TextSnapScale :: proc(ctx: ^Context) -> f32 {
+	state := __getState(ctx)
+	scale := __textScale(ctx, state)
+	xf := state.xform
+	if xf[1] == 0 && xf[2] == 0 && xf[0] > 0 && abs(xf[0] - xf[3]) < 1e-5 && abs(scale - xf[0] * ctx.devicePxRatio) < 1e-4 do return scale
+	return 0
+}
+
 // Draws text string at specified location. If end is specified only the sub-string up to the end is drawn.
 Text :: proc(ctx: ^Context, x, y: f32, text: string) -> f32 {
 	state := __getState(ctx)
@@ -2960,7 +2971,7 @@ Text :: proc(ctx: ^Context, x, y: f32, text: string) -> f32 {
 	// transform with the same scale both ways that __textScale did not cap or round.
 	// A device pixel is then position + xform translation * pixel ratio.
 	xf := state.xform
-	fs.snap = xf[1] == 0 && xf[2] == 0 && xf[0] > 0 && abs(xf[0] - xf[3]) < 1e-5 && abs(scale - xf[0] * ctx.devicePxRatio) < 1e-4
+	fs.snap = TextSnapScale(ctx) > 0
 	fs.snap_off = {xf[4] * ctx.devicePxRatio, xf[5] * ctx.devicePxRatio}
 	defer fs.snap = false
 

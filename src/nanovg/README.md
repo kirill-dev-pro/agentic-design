@@ -54,3 +54,5 @@ index lists), sits next to the GL one, and so that the following fixes can be ap
   coordinates (a private `ADvc` table that the engine's `varfont_instance` writes).
   Without them every instance kerned as the default one: Inter at 500 and 600 came out
   with Regular's kerning, wider or tighter than in Chrome by up to a pixel per pair.
+- nanovg: `TextSnapScale` tells the caller whether `Text` will put glyphs on whole device
+  pixels, and at how many per unit (the engine then places the baseline as Blink does).
