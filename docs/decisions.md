@@ -1645,3 +1645,48 @@ becomes `{"metadata": {...}}`; strokes from metadata draw dashed (22 dash edges 
 200-unit side), and a stroke without a pattern stays solid. The sample saves to the same
 JSON.
 
+## 68. The website and the viewer at /view: static files on Bunderhost, the viewer exports through the canvas
+
+**Problem.** The app needs a website, and the browser viewer (#55) needs to be a product:
+opening files without a server of one's own, layer info, PNG export, notices for what is
+missing. Bunderhost, where the site is hosted, deploys Bunderstack and Workerstack apps and
+has no static mode. In the browser `gpu_read` gives blank pixels (no synchronous readback),
+so the engine's PNG path cannot export.
+
+**Decision.**
+
+- `site/` holds a hand-written static page after the landing design in
+  `designs/sample/agentic-design.pen` (its HTML export was the starting point): its tokens,
+  light and dark, desktop and phone layouts, self-hosted woff2 subsets, an Open Graph image
+  rendered by the app. `site/build.mjs` adds the viewer under `/view` with the sample, hashes
+  asset names, inlines the stylesheet and writes `.br` and `.gz` copies; Caddy serves them
+  with immutable caching. Lighthouse: 100 in all four categories, mobile and desktop.
+- Bunderhost builds `Dockerfile.bunderhost` (repository root; the project's root directory
+  is `site/`): the viewer on the pinned Odin release with `lld`, the pages, Caddy on :3000.
+  Its contract asks for a blueprint, a `bunderstack` dependency, build and start scripts and
+  a migration journal; the site carries minimal ones and leaves the database and bucket
+  Bunderhost provisions unused. A push to `main` deploys.
+- The viewer's export draws the layer or page into the page's canvas at the picture's size
+  (`viewer_export`) and the page copies the canvas in the same task, before the browser
+  presents it; the next frame draws the view again. It draws twice: Safari drew the first
+  pass at a new size without its glyphs. The size is capped at the GPU's texture side
+  (8192), so tall frames export at a lower scale.
+- Selection follows the app's click rules (`viewer_pick`). Files the user gives stay in the
+  page under `/local/<n>/`; each drop starts a new `<n>`, because the engine keeps the first
+  copy of a path it was handed (a file handed over empty when missing cannot be filled in
+  later). A file not found where the document says is matched by name among the dropped
+  ones. A URL is read as `/~url/<scheme>/<host>/<path>`, so relative paths resolve as on its
+  server.
+
+**Consequences.**
+
+- Every frame of the sample (light and dark), of a product design with a library, images and
+  fonts, and of a five-screen design at 1× and 2× exports from Chrome 156 and Safari 27 within
+  1/255 of the app's `screenshot`, except one glyph: "✓", which no font of that document
+  has. The app finds it in the system's symbol fonts; a page has no system fonts and draws
+  a missing glyph.
+- The wasm is 5.4 MB (2.1 MB with brotli), 4.3 MB of it the built-in Noto Sans; loading those
+  fonts as files of their own would let them stay cached across engine releases.
+- No WebGL fallback: the GL backend is desktop OpenGL. Without WebGPU the page says which
+  browsers work and links the app.
+

@@ -92,7 +92,9 @@ brew install odin
 ```
 
 The same engine also runs in a browser as a read-only viewer (WebAssembly and the
-browser's WebGPU: Chrome, Edge, Safari 26):
+browser's WebGPU: Chrome, Edge, Safari 26), at
+[agentic-design.kcrz.dev/view](https://agentic-design.kcrz.dev/view/). Files opened there
+stay in the browser. To build and serve it yourself:
 
 ```sh
 brew install lld                # wasm-ld, to link WebAssembly
@@ -101,9 +103,16 @@ python3 -m http.server 8000     # then open, for a document on the same server:
 # http://localhost:8000/build/web/?file=/designs/sample/agentic-design.pen
 ```
 
-Without `?file=`, drop a `.pen` file or its folder on the page. Drag to pan, scroll or
-pinch to zoom, 0 to fit. The bar picks the page and the theme (`&theme=mode:dark` in the
-URL).
+Open a `.pen` file with the Open button or by dropping it (with its folder, so images,
+fonts and libraries come along; files dropped together are matched by name), or by URL:
+`?file=/path` on the same server, `?url=https://…` for a public file elsewhere (its server
+must allow cross-origin reads; a GitHub file page is read from its raw URL). The sidebar
+lists pages and frames; drag to pan, scroll or pinch to zoom, 0 to fit, F to zoom to the
+selection. Click selects a layer (double-click goes one level in, ⌘/Ctrl-click takes the
+deepest, Shift Enter the parent) and shows its name, type and box; Export writes the
+selection or the page as PNG. The bar picks a value per theme axis (`&theme=mode:dark` in
+the URL). Notices say when a library, image or font file is missing and which families
+are drawn with Noto Sans. The website around it is in `site/` ([site/README.md](site/README.md)).
 
 Connect it to Claude Code for every project:
 
@@ -265,6 +274,7 @@ Contributing).
 | `src/nanovg/wgpu`, `src/wgpu`, `src/metal_darwin.odin` | NanoVG on WebGPU; the wgpu-native bindings (library fetched by `tools/fetch_wgpu.sh`); the window's Metal layer |
 | `src/nanovg`, `src/fontstash` | vendored NanoVG/fontstash ports with text rendering fixes (see `src/nanovg/README.md`) |
 | `src/web/`, `web/`, `tools/build_web.sh` | the browser viewer: its host, the page, the build |
+| `site/`, `Dockerfile.bunderhost` | the website (agentic-design.kcrz.dev): the landing page, the viewer under `/view`, how it is built and served |
 | `tools/font_instances.py` | static instances of variable fonts for the app's font folder |
 
 ## Contributing
