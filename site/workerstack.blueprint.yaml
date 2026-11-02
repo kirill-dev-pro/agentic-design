@@ -163,7 +163,10 @@ api:
       path: /api/version
 background:
   jobs: []
-  cron: []
+  cron:
+    - name: cleanup
+      schedule: "30 3 * * *"
+      timezone: UTC
   maintenance:
     - name: storage-sweep
       schedule: "0 4 * * *"
