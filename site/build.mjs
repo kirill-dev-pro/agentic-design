@@ -1,23 +1,21 @@
-// Builds the site's static files into site/dist/client (the Worker's assets directory): the
-// pages from site/pages and, when it has been built, the browser viewer (build/web,
-// tools/build_web.sh) under /view. Assets get content hashes in their names; _headers marks
-// those immutable. Plain files: any static host can serve the folder.
+// Builds the website into site/dist, plain static files (GitHub Pages serves them, see
+// .github/workflows/pages.yml): the pages from site/pages and, when it has been built, the
+// browser viewer (build/web, tools/build_web.sh) under /view with the sample design. Every
+// asset but the pages, the crawler files and the icons gets a content hash in its name, so a
+// cached copy can never be a stale one (Pages sets no long cache and takes no headers).
 //   node site/build.mjs      (or bun; from anywhere)
-// VIEWER=path/to/web overrides where the viewer build is read from. COMPRESS=1 also writes
-// .br and .gz copies, for a server that serves precompressed files (Cloudflare compresses
-// at its edge, so the Worker's build leaves them out).
+// VIEWER=path/to/web overrides where the viewer build is read from; CNAME=host writes the
+// custom domain file (default agentic-design.kcrz.dev, CNAME= for none).
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.join(here, "pages");
-const out = path.join(here, "dist", "client");
+const out = path.join(here, "dist");
 const viewer = process.env.VIEWER || path.join(here, "..", "build", "web");
 
-// (Vite has written the Worker into dist/server; the client folder is this script's)
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
@@ -101,43 +99,15 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	console.log("viewer: not built (", viewer, "), /view is left out");
 }
 
-// ---------------------------------------------------------------- headers
+// ---------------------------------------------------------------- Pages
 
 const all = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
 	const p = path.join(dir, e.name);
 	return e.isDirectory() ? all(p) : [p];
 });
-// Cloudflare's static assets read _headers (Netlify's format): names with a content hash
-// never change; the rest revalidate.
-write("_headers", [
-	"/*",
-	"  X-Content-Type-Options: nosniff",
-	"  Referrer-Policy: strict-origin-when-cross-origin",
-	...[...new Set(all(out).map((f) => path.relative(out, f).split(path.sep).join("/")).filter((f) => /\.[0-9a-f]{10}\.[a-z0-9]+$/.test(f)))]
-		.flatMap((f) => ["/" + f, "  Cache-Control: public, max-age=31536000, immutable"]),
-	"/img/*",
-	"  Cache-Control: public, max-age=86400",
-	"/favicon.ico",
-	"  Cache-Control: public, max-age=86400",
-	"/view/samples/*",
-	"  Cache-Control: public, max-age=3600",
-	"",
-].join("\n"));
+const domain = process.env.CNAME ?? "agentic-design.kcrz.dev";
+if (domain) write("CNAME", domain + "\n");
+write(".nojekyll", ""); // files as they are: no Jekyll pass over them
 
-// ---------------------------------------------------------------- compression
-
-let raw = 0, br = 0;
-if (process.env.COMPRESS === "1") {
-	for (const file of all(out)) {
-		if (!/\.(html|css|js|mjs|json|svg|wasm|txt|xml|webmanifest|pen|ico)$/.test(file)) continue;
-		const data = fs.readFileSync(file);
-		if (data.length < 1024) continue;
-		const b = zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } });
-		fs.writeFileSync(file + ".br", b);
-		fs.writeFileSync(file + ".gz", zlib.gzipSync(data, { level: 9 }));
-		raw += data.length;
-		br += b.length;
-	}
-}
 const written = all(out);
-console.log(`dist/client: ${written.length} files, ${(written.reduce((n, f) => n + fs.statSync(f).size, 0) / 1024).toFixed(0)} KB` + (raw ? `; compressible ${(raw / 1024).toFixed(0)} KB → ${(br / 1024).toFixed(0)} KB brotli` : ""));
+console.log(`dist: ${written.length} files, ${(written.reduce((n, f) => n + fs.statSync(f).size, 0) / 1024).toFixed(0)} KB`);

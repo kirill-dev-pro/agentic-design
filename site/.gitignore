@@ -1,8 +1,1 @@
 dist/
-node_modules/
-.wrangler/
-.workerstack/
-.celld/
-.dev.vars
-wrangler.json
-data.db*
