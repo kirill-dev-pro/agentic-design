@@ -6,7 +6,6 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import "core:sys/posix"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // The onboarding: a modal sheet with four steps (welcome, agents, features, start). It
@@ -310,7 +309,7 @@ ob_step_agents :: proc(vg: ^nvg.Context, body: Rect) {
 		ob_text(vg, cx, body.y + body.h - 6, link, 13, TEXT_FG if hovered(lr) else {0.6, 0.61, 0.64, 1}, 400, .CENTER)
 		if clicked(lr) {
 			cmd := fmt.tprintf("claude mcp add --scope user %s -- '%s' mcp", MCP_NAME, mcp_executable())
-			glfw.SetClipboardString(pf.window, strings.clone_to_cstring(cmd, context.temp_allocator))
+			platform_clipboard_set(cmd)
 			set_status("Command copied to the clipboard")
 		}
 	}

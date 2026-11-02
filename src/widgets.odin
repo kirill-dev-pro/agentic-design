@@ -8,7 +8,6 @@ import "core:strconv"
 import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // A small immediate-mode widget library drawn with NanoVG, in the dark style of the
@@ -645,11 +644,11 @@ field_keys :: proc(index: int, numeric: bool) {
 		case key_pressed(KEY_C), key_pressed(KEY_X):
 			if has_sel {
 				a, bb := min(ui.sel, ui.caret), max(ui.sel, ui.caret)
-				glfw.SetClipboardString(pf.window, strings.clone_to_cstring(text[a:bb], context.temp_allocator))
+				platform_clipboard_set(text[a:bb])
 				if key_pressed(KEY_X) do replace_selection("")
 			}
 		case key_pressed(KEY_V):
-			paste := string(glfw.GetClipboardString(pf.window))
+			paste := platform_clipboard_get()
 			replace_selection(strings.trim_space(paste) if numeric else paste)
 		case key_hit(KEY_LEFT):
 			if !shift do ui.sel = -1

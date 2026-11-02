@@ -3,6 +3,7 @@ package agentic_design
 
 import "core:c"
 import "core:os"
+import "core:strings"
 import "vendor:glfw"
 import "engine"
 
@@ -287,6 +288,35 @@ platform_gpu_surface :: proc() -> engine.Gpu_Surface {
 	else do return {metal_layer = platform_metal_layer(pf.window)}
 }
 
+// Seconds on GLFW's clock (the frame pacing and the agents' cursors read it).
+platform_time :: proc() -> f64 {
+	return glfw.GetTime()
+}
+
+// The system clipboard as text.
+platform_clipboard_set :: proc(text: string) {
+	glfw.SetClipboardString(pf.window, strings.clone_to_cstring(text, context.temp_allocator))
+}
+
+platform_clipboard_get :: proc() -> string {
+	return string(glfw.GetClipboardString(pf.window))
+}
+
+platform_set_window_pos :: proc(x, y: int) {
+	glfw.SetWindowPos(pf.window, i32(x), i32(y))
+}
+
+// Asks the main loop to end (as the window's close button does).
+platform_request_close :: proc() {
+	glfw.SetWindowShouldClose(pf.window, true)
+}
+
+// Files dropped on the window land where the pointer is (files_ui.odin, handle_drops).
+drop_callback :: proc "c" (window: glfw.WindowHandle, count: c.int, paths: [^]cstring) {
+	context = app_context()
+	for i in 0 ..< int(count) do append(&pf.dropped, strings.clone(string(paths[i])))
+}
+
 // keys.odin's numbers are GLFW's: checked at compile time on the desktop build
 #assert(KEY_0 == glfw.KEY_0)
 #assert(KEY_1 == glfw.KEY_1)
@@ -341,3 +371,8 @@ platform_gpu_surface :: proc() -> engine.Gpu_Surface {
 #assert(MOUSE_BUTTON_LEFT == glfw.MOUSE_BUTTON_LEFT)
 #assert(MOUSE_BUTTON_MIDDLE == glfw.MOUSE_BUTTON_MIDDLE)
 #assert(MOUSE_BUTTON_RIGHT == glfw.MOUSE_BUTTON_RIGHT)
+#assert(KEY_LAST == glfw.KEY_LAST)
+#assert(MOD_SHIFT == glfw.MOD_SHIFT)
+#assert(MOD_CONTROL == glfw.MOD_CONTROL)
+#assert(MOD_ALT == glfw.MOD_ALT)
+#assert(MOD_SUPER == glfw.MOD_SUPER)

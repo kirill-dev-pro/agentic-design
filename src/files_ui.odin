@@ -6,7 +6,6 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import NS "core:sys/darwin/Foundation"
-import "vendor:glfw"
 import "engine"
 
 // Copies an image next to the document (images/) and adds a rectangle filled with it.
@@ -43,12 +42,6 @@ place_image :: proc(src: string, at: [2]f32) -> bool {
 	app.tool = .Select
 	mark_dirty()
 	return true
-}
-
-// Files dropped on the window land where the pointer is.
-drop_callback :: proc "c" (window: glfw.WindowHandle, count: c.int, paths: [^]cstring) {
-	context = app_context()
-	for i in 0 ..< int(count) do append(&pf.dropped, strings.clone(string(paths[i])))
 }
 
 handle_drops :: proc() {

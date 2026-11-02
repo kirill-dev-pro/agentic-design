@@ -7,7 +7,6 @@ import "core:fmt"
 import "core:math"
 import "core:slice"
 import "core:strings"
-import "vendor:glfw"
 
 // Editing commands shared by shortcuts, the context menu and the inspector.
 
@@ -295,7 +294,7 @@ copy_selection :: proc() {
 	strings.write_byte(&b, ']')
 	delete(clipboard)
 	clipboard = strings.to_string(b)
-	glfw.SetClipboardString(pf.window, strings.clone_to_cstring(clipboard, context.temp_allocator))
+	platform_clipboard_set(clipboard)
 	set_status("Copied %d %s", len(roots), "layer" if len(roots) == 1 else "layers")
 }
 
@@ -303,7 +302,7 @@ copy_selection :: proc() {
 // internal one, into the selected frame (or beside the selection).
 paste_clipboard :: proc() {
 	text := clipboard
-	st := strings.trim_space(string(glfw.GetClipboardString(pf.window)))
+	st := strings.trim_space(platform_clipboard_get())
 	if strings.has_prefix(st, "[") || strings.has_prefix(st, "{") do text = st
 	if text == "" do return
 	root, err := json.parse_string(text, .JSON5, false, context.temp_allocator)

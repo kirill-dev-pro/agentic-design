@@ -9,7 +9,6 @@ import "core:strconv"
 import "core:strings"
 import "core:sync"
 import "core:time"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // Window regions: tab bar on top, sidebar + tool strip on the left, inspector on the right.
@@ -133,7 +132,7 @@ app_main :: proc(path: string) {
 		if parts := strings.split(v, ",", context.temp_allocator); len(parts) == 2 {
 			x, xok := strconv.parse_int(parts[0])
 			y, yok := strconv.parse_int(parts[1])
-			if xok && yok do glfw.SetWindowPos(pf.window, i32(x), i32(y))
+			if xok && yok do platform_set_window_pos(x, y)
 		}
 	}
 	app.vg = engine.gpu_create(platform_gpu_surface())
@@ -169,7 +168,7 @@ app_main :: proc(path: string) {
 	install_exit_handlers()
 	app_log("start: %s (port %d%s)", app.file_path, server_port(), ", opened by an agent" if pf.no_focus else "")
 
-	active_until = glfw.GetTime() + 1
+	active_until = platform_time() + 1
 	trimmed := false
 	for !platform_should_close() && exit_signal == {} {
 		free_all(context.temp_allocator)
@@ -187,12 +186,12 @@ app_main :: proc(path: string) {
 			// wait short (server.odin posts pace_wake): in a window started by an agent
 			// macOS stretched this sleep to ~130 ms, and every request and screenshot
 			// frame paid it (dogfooding D35).
-			if rest := frame_started + 1 / pf.refresh - glfw.GetTime(); rest > 0.0005 do _ = sync.sema_wait_with_timeout(&pace_wake, time.Duration(rest * 1e9))
+			if rest := frame_started + 1 / pf.refresh - platform_time(); rest > 0.0005 do _ = sync.sema_wait_with_timeout(&pace_wake, time.Duration(rest * 1e9))
 		}
 		platform_poll(wait)
-		frame_started = glfw.GetTime()
+		frame_started = platform_time()
 		frames_drawn += 1
-		if platform_had_input() do active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
+		if platform_had_input() do active_until = platform_time() + ACTIVE_AFTER_INPUT
 		fb := frame_size()
 		if added := engine.fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
 		if libraries_refresh() do set_status("A library changed on disk; its components were read again")
@@ -205,7 +204,7 @@ app_main :: proc(path: string) {
 		app.needs_layout = false
 		ran := process_requests()
 		if ran {
-			active_until = glfw.GetTime() + ACTIVE_AFTER_INPUT
+			active_until = platform_time() + ACTIVE_AFTER_INPUT
 			agent_activity_touch()
 		}
 		agent_activity_tick()
@@ -229,7 +228,7 @@ app_main :: proc(path: string) {
 		autosave()
 		t2 := time.tick_now()
 
-		presence_tick(glfw.GetTime())
+		presence_tick(platform_time())
 		if shot_pending() do render_screenshot()
 		thumbs_render()
 		export_render()
@@ -325,7 +324,7 @@ frame_started: f64
 frames_drawn: int // since the last `perf` request
 
 idle_wait :: proc() -> f64 {
-	now := glfw.GetTime()
+	now := platform_time()
 	if now < active_until || shot.req != nil || len(thumb_queue) > 0 || export_pending || copy_png_pending || app.needs_layout do return 0
 	// agents' cursors and flashes (presence.odin): paced, since a covered window gets no vsync
 	if busy, fast := presence_animating(now); busy {

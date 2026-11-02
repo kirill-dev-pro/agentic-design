@@ -15,7 +15,6 @@ import "core:sync"
 import "core:sys/posix"
 import "core:thread"
 import "core:time"
-import "vendor:glfw"
 
 // Updates (decision #57, docs/releasing.md). The window checks a manifest on GitHub
 // Releases at launch and once a day, and from Settings:
@@ -310,7 +309,7 @@ update_install :: proc() {
 	if p, err := os.process_start({command = {"/bin/sh", "-c", script, "sh", fmt.tprintf("%d", posix.getpid()), target, app.file_path, test}}); err == nil {
 		_, _ = os.process_wait(p)
 	}
-	glfw.SetWindowShouldClose(pf.window, true)
+	platform_request_close()
 }
 
 // ---------------------------------------------------------------- socket (tests)

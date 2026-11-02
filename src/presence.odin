@@ -11,7 +11,6 @@ import "core:mem"
 import "core:strconv"
 import "core:strings"
 import "core:sys/posix"
-import "vendor:glfw"
 import nvg "nanovg"
 
 // Others on the canvas. Agents working through the API (the MCP proxy names them from the
@@ -231,7 +230,7 @@ presence_after_request :: proc(obj: json.Object, before: map[int]Node_Sig, ok: b
 	agent, is_agent := agent_of(obj)
 	if !is_agent do return
 	c := agent_cursor(agent)
-	now := glfw.GetTime()
+	now := platform_time()
 	cursor_set_file(c)
 	method := string(obj["method"].(json.String) or_else "")
 	params, _ := obj["params"].(json.Object)
@@ -424,7 +423,7 @@ api_presence :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	c := presence_cursor(key, name, color, person)
 	c.color = color
 	cursor_set_file(c)
-	now := glfw.GetTime()
+	now := platform_time()
 	x, xok := params["x"].(json.Float)
 	y, yok := params["y"].(json.Float)
 	if xok && yok do cursor_activate(c, {f32(x), f32(y)}, now)
@@ -501,7 +500,7 @@ presence_tick :: proc(now: f64) {
 // under the selection.
 draw_presence_effects :: proc(vg: ^nvg.Context) {
 	if !settings.agent_cursors do return
-	now := glfw.GetTime()
+	now := platform_time()
 	working := false // an agent is around: placeholders move
 	for &c in cursors do if !c.person && c.file == app.file_path && cursor_shown(&c, now) do working = true
 	draw_placeholders(vg, now, working)
@@ -601,7 +600,7 @@ draw_placeholders :: proc(vg: ^nvg.Context, now: f64, moving: bool) {
 draw_cursors :: proc(vg: ^nvg.Context) {
 	if !settings.agent_cursors do return
 	if len(cursor_cmds) == 0 do cursor_cmds, _, _ = engine.parse_svg_path(CURSOR_PATH)
-	now := glfw.GetTime()
+	now := platform_time()
 	cv := app.canvas
 	for &c in cursors {
 		if c.file != app.file_path || !cursor_shown(&c, now) do continue
