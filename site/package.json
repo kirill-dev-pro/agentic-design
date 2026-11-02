@@ -1,0 +1,13 @@
+{
+	"name": "agentic-design-site",
+	"private": true,
+	"type": "module",
+	"//": "Static files: nothing to install. Bunderhost's contract asks for a bunderstack dependency and build and start scripts; Dockerfile.bunderhost runs the build, Caddy serves.",
+	"scripts": {
+		"build": "node build.mjs",
+		"start": "caddy run --config Caddyfile --adapter caddyfile"
+	},
+	"devDependencies": {
+		"bunderstack": "0.24.0"
+	}
+}
