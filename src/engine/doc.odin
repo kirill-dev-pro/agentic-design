@@ -1502,8 +1502,6 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 			n.clip = json_bool(doc, v) or_else false
 		case "layoutPosition":
 			n.abs_pos = json_str(doc, v) == "absolute"
-		case "metadata":
-			n.flow = flow_role(v)
 		case "fill":
 			n.fill, n.has_fill = color_of(doc, v)
 			if url, mode, ok := image_of(doc, v); ok {
@@ -1525,6 +1523,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 		case "strokeDashPattern":
 			parse_dash(doc, n, v)
 		case "metadata":
+			// the role (a connector, its label, a shape) and the dash pattern, side by side
+			n.flow = flow_role(v)
 			if m, is_obj := v.(json.Object); is_obj {
 				if d, has := m[DASH_KEY]; has do parse_dash(doc, n, d)
 			}

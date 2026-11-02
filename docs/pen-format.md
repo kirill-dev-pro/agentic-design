@@ -103,7 +103,7 @@ The reader accepts both. Edits keep the form the node already uses (`Node.stroke
 - **Image files.** Images placed through the app are copied into `images/` next to the
   document and referenced as `./images/<name>`.
 
-- **Connectors, labels and shapes with text** (decision #67) are plain nodes that pen.dev
+- **Connectors, labels and shapes with text** (decision #69) are plain nodes that pen.dev
   draws as last saved, with their live part in `metadata`, the only place pen.dev 1.2.21
   keeps data it does not know:
   - a connector: a stroked `path` with `layoutPosition: "absolute"` and `metadata

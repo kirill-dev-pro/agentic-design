@@ -1690,7 +1690,7 @@ so the engine's PNG path cannot export.
 - No WebGL fallback: the GL backend is desktop OpenGL. Without WebGPU the page says which
   browsers work and links the app.
 
-## 67. Connectors, markers and shapes with text, as plain .pen that pen.dev draws
+## 69. Connectors, markers and shapes with text, as plain .pen that pen.dev draws
 
 **Problem.** Agents draw flowcharts (D54–D57 of the dogfooding log: a chat bot's flows,
 seven pages, 120 arrows). An arrow was a free path that stayed behind when a box moved or
@@ -1723,6 +1723,8 @@ is in `metadata`, which pen.dev keeps.
     "connection": id, "at": 0.5}`, kept centred on the route; pen.dev shows it where it
     was saved. Its fill is the nearest solid container fill.
   - Native `connection` nodes are not written (pen.dev would drop them).
+  - A dashed connector keeps its `strokeDashPattern` in the same metadata (#67): `connect`
+    takes one, and rewriting the connector's ends, routing or markers keeps it.
 - A shape with text is a frame with `metadata {"type": "shape", "shape": "diamond" |
   "ellipse" | "capsule"}`: layout gives it the padding that puts its content in the
   shape's inscribed box (a diamond's middle half, an ellipse's 71 %, a capsule between its
@@ -1755,7 +1757,7 @@ file and a screenshot of a product design are byte-identical); the D43 batch tak
 long as before. A connector inside a turned frame is routed in page space; routes do not
 avoid other boxes.
 
-## 68. create_nodes, update_nodes and batch answer with the layers' bounds
+## 70. create_nodes, update_nodes and batch answer with the layers' bounds
 
 **Problem.** Placing the next box of a diagram needs the size the last one got after
 layout (its text wrapped, a shape grew), so an agent's script did create, `get_document`,
@@ -1771,7 +1773,7 @@ gives them. `created` (the ids) stays as it was.
 the answers against `get_document`. A request that changes a layer can move others (its
 siblings in a flex frame); those still need a read.
 
-## 69. PDF is vector, with real text, and exports pages into one file
+## 71. PDF is vector, with real text, and exports pages into one file
 
 **Problem.** `screenshot {format: "pdf"}` wrapped a JPEG: a seven-page diagram came out as
 seven pictures, 10.6 MB, with no text to select, search or copy, and one layer per call
@@ -1806,7 +1808,7 @@ baseline snapping). `tools/pdfexport.py` checks pages, sizes, text, subset fonts
 `export_pages` by page and ids, and both pages against the canvas (17 checks). Canvas,
 saved files and screenshots of files are unchanged.
 
-## 70. Lint for diagrams
+## 72. Lint for diagrams
 
 **Problem.** In a hand-built diagram an arrow that runs through a box, a label on another
 label or an arrow whose end touches nothing was found by eye on every page (D60).
@@ -1830,7 +1832,7 @@ longer reports connectors, labels and shape outlines, whose positions the app co
 **Consequences.** On a product design without connectors lint answers exactly as before.
 `tools/connectors.py` checks each rule and that rerouting clears them.
 
-## 71. Text metrics at fractional sizes
+## 73. Text metrics at fractional sizes
 
 **Problem.** Three step headings of the product design (Inter Variable 21.6 px, weight
 500) sat a pixel above Chrome after #65 (D69). fontstash's `VerticalMetrics`, behind
@@ -1847,7 +1849,7 @@ desktop dark 1.56 → 1.49 %, mobile light and dark 2.82 → 2.80 %; desktop "ho
 explicit line height at a fractional size moves by up to a third of a pixel, to where
 pen.dev puts it.
 
-## 72. Connectors go around boxes, spread along sides and sit under the boxes
+## 74. Connectors go around boxes, spread along sides and sit under the boxes
 
 **Problem.** The dogfooder rebuilt a page of the chat-bot diagram with connectors (D72–D84
 of its log): routes ran straight through other boxes, two boxes closer than two stubs got

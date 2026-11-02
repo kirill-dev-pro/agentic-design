@@ -19,6 +19,7 @@ Connect_Options :: struct {
 	label:              string,
 	label_fill:         string, // raw JSON; "" = the stroke's colour
 	label_size:         f32,
+	dash:               json.Value, // a strokeDashPattern for the metadata, or nil
 	parent:             int, // -1: the frame that holds both ends
 	id:                 string,
 }
@@ -56,14 +57,25 @@ label_background :: proc(parent: int) -> string {
 	return `"#FFFFFF"`
 }
 
-// Keys in the order the document loader keeps them (sorted), so a file saved right after
-// an edit reads back and saves to the same bytes.
-connector_metadata :: proc(b: ^strings.Builder, o: Connect_Options) {
-	fmt.sbprintf(b, `{{"endMarker":"%s","routing":"%s","source":{{"anchor":"%s","path":`, engine.MARKER_NAMES[o.end], engine.ROUTING_NAMES[o.routing], engine.ANCHOR_NAMES[o.from_side])
-	engine.json_write_string(b, o.from)
-	fmt.sbprintf(b, `}},"startMarker":"%s","target":{{"anchor":"%s","path":`, engine.MARKER_NAMES[o.start], engine.ANCHOR_NAMES[o.to_side])
-	engine.json_write_string(b, o.to)
-	strings.write_string(b, `},"type":"connector"}`)
+// The connector's metadata, keys sorted as the document loader keeps them (so a file saved
+// right after an edit reads back and saves to the same bytes). `extra` keeps what else the
+// metadata held, such as the dash pattern (decision #67).
+connector_metadata :: proc(b: ^strings.Builder, o: Connect_Options, extra: json.Object = nil) {
+	m := make(json.Object, 8, context.temp_allocator)
+	for k, v in extra do m[k] = v
+	end :: proc(path: string, a: engine.Anchor) -> json.Object {
+		e := make(json.Object, 2, context.temp_allocator)
+		e["path"] = json.String(path)
+		e["anchor"] = json.String(engine.ANCHOR_NAMES[a])
+		return e
+	}
+	m["type"] = json.String("connector")
+	m["source"] = end(o.from, o.from_side)
+	m["target"] = end(o.to, o.to_side)
+	m["routing"] = json.String(engine.ROUTING_NAMES[o.routing])
+	m["startMarker"] = json.String(engine.MARKER_NAMES[o.start])
+	m["endMarker"] = json.String(engine.MARKER_NAMES[o.end])
+	engine.write_json_value(b, m)
 }
 
 // Adds a connector (and its label) and routes it. Returns its uid, or an error.
@@ -80,7 +92,12 @@ connect_layers :: proc(o: Connect_Options) -> (uid: int, label_uid: int, err: st
 	strings.write_string(&sb, `{"type":"path","name":"Connector","layoutPosition":"absolute","x":0,"y":0,"width":1,"height":1,"viewBox":[0,0,1,1],"geometry":"M0 0","stroke":`)
 	strings.write_string(&sb, o.stroke)
 	fmt.sbprintf(&sb, `,"strokeWidth":%s,"strokeLinejoin":"round","strokeLinecap":"round","metadata":`, engine.num_text(o.stroke_width))
-	connector_metadata(&sb, o)
+	extra: json.Object
+	if o.dash != nil {
+		extra = make(json.Object, 1, context.temp_allocator)
+		extra[engine.DASH_KEY] = o.dash
+	}
+	connector_metadata(&sb, o, extra)
 	if o.id != "" {
 		strings.write_string(&sb, `,"id":`)
 		engine.json_write_string(&sb, o.id)
@@ -214,6 +231,7 @@ api_connect :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		o.label_fill = strings.to_string(sb)
 	}
 	if s, has := params["labelFontSize"]; has do o.label_size = engine.json_f32(s)
+	if d, has := params[engine.DASH_KEY]; has do o.dash = d
 	o.id = string(params["id"].(json.String) or_else "")
 	if pid, has := params["parent_id"].(json.String); has {
 		if pid == "" do o.parent = 0
@@ -276,8 +294,21 @@ update_connector :: proc(n: ^engine.Node, o: json.Object) -> string {
 	if engine.resolve_path(&app.doc, opt.from) == nil do return fmt.tprintf("source: '%s' not found", opt.from)
 	if engine.resolve_path(&app.doc, opt.to) == nil do return fmt.tprintf("target: '%s' not found", opt.to)
 	if e = connect_style_params(&opt, o); e != "" do return e
+	// what else the metadata holds (the dash pattern) stays
+	extra := make(json.Object, 4, context.temp_allocator)
+	if mv, has := engine.prop_value(n, "metadata"); has {
+		if mo, is_obj := mv.(json.Object); is_obj {
+			for k, v in mo {
+				switch k {
+				case "type", "source", "target", "routing", "startMarker", "endMarker", "waypoints":
+				case: extra[k] = v
+				}
+			}
+			if w, has_w := mo["waypoints"]; has_w do extra["waypoints"] = w
+		}
+	}
 	sb := strings.builder_make(context.temp_allocator)
-	connector_metadata(&sb, opt)
+	connector_metadata(&sb, opt, extra)
 	engine.node_set_raw(n, "metadata", strings.to_string(sb))
 	engine.node_refresh(&app.doc, n)
 	if lv, has := o["label"].(json.String); has {
