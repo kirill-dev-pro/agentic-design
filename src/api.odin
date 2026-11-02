@@ -489,9 +489,39 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		engine.json_write_string(b, n.id)
 	}
 	strings.write_byte(b, ']')
+	write_node_bounds(b, created[:])
 	write_warnings(b, warnings[:])
 	strings.write_byte(b, '}')
 	return ""
+}
+
+// ,"nodes":[{"id", "bounds": [x, y, w, h]}, ...] for layers just created or changed, after
+// layout (D58): an agent placing things next needs no get_document round trip. A turned
+// layer also has "visual_bounds", a connector its "route".
+write_node_bounds :: proc(b: ^strings.Builder, uids: []int) {
+	engine.layout_document(&app.doc)
+	strings.write_string(b, `,"nodes":[`)
+	first := true
+	for uid in uids {
+		n, _ := engine.doc_find_uid(&app.doc, uid)
+		if n == nil do continue
+		if !first do strings.write_byte(b, ',')
+		first = false
+		strings.write_string(b, `{"id":`)
+		engine.json_write_string(b, n.id)
+		fmt.sbprintf(b, `,"bounds":[%s,%s,%s,%s]`, engine.num_text(n.x), engine.num_text(n.y), engine.num_text(n.w), engine.num_text(n.h))
+		engine.write_visual_bounds(b, n)
+		if route, has := engine.connector_routes[n.uid]; has && n.flow == .Connector {
+			strings.write_string(b, `,"route":[`)
+			for p, i in route {
+				if i > 0 do strings.write_byte(b, ',')
+				fmt.sbprintf(b, "[%s,%s]", engine.num_text(p.x), engine.num_text(p.y))
+			}
+			strings.write_byte(b, ']')
+		}
+		strings.write_byte(b, '}')
+	}
+	strings.write_byte(b, ']')
 }
 
 // What an agent should hear about the nodes it just wrote: icon names the library does
@@ -600,6 +630,7 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	if !ok || len(updates) == 0 do return "updates must be a non-empty array"
 	push_undo()
 	warnings := make([dynamic]string, context.temp_allocator)
+	changed := make([dynamic]int, context.temp_allocator)
 	for u in updates {
 		o, is_obj := u.(json.Object)
 		if !is_obj do return "each update must be an object"
@@ -632,8 +663,10 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			}
 		}
 		if "icon" in o || "iconFontName" in o || "padding" in o || "fill" in o do api_check_nodes(n.uid, false, &warnings)
+		append(&changed, n.uid)
 	}
 	strings.write_string(b, `{"updated":true`)
+	write_node_bounds(b, changed[:])
 	write_warnings(b, warnings[:])
 	strings.write_byte(b, '}')
 	return ""

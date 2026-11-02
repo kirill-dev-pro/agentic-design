@@ -1754,3 +1754,19 @@ outlines. Files without connectors or shapes are unchanged (`get_document`, the 
 file and a screenshot of a product design are byte-identical); the D43 batch takes as
 long as before. A connector inside a turned frame is routed in page space; routes do not
 avoid other boxes.
+
+## 68. create_nodes, update_nodes and batch answer with the layers' bounds
+
+**Problem.** Placing the next box of a diagram needs the size the last one got after
+layout (its text wrapped, a shape grew), so an agent's script did create, `get_document`,
+move, `get_document` again: two extra round trips per page (D58).
+
+**Decision.** `create_nodes` and `update_nodes` (and the `create` and `update` operations of
+`batch`) answer, after layout, with `nodes: [{"id", "bounds": [x, y, w, h]}]` in page
+coordinates for each layer they created (the top-level ones of the request) or changed,
+plus `visual_bounds` for a turned layer and `route` for a connector, as `get_document`
+gives them. `created` (the ids) stays as it was.
+
+**Consequences.** The `get_document` after each step is gone. `tools/connectors.py` checks
+the answers against `get_document`. A request that changes a layer can move others (its
+siblings in a flex frame); those still need a read.
