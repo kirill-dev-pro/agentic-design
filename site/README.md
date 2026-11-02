@@ -8,7 +8,7 @@ into `site/dist` and published on GitHub Pages by `.github/workflows/pages.yml`.
 | `pages/index.html`, `pages/styles.css`, `pages/main.js` | the landing page, written by hand after the design in `designs/sample/agentic-design.pen` (its HTML export was the starting point): the same tokens, light and dark (the system's, or the button), desktop and phone layouts |
 | `pages/fonts/` | Inter and JetBrains Mono, Latin subsets as woff2 (`tools/fonts.py` writes them from `designs/sample/fonts`; OFL) |
 | `pages/favicon.*`, `pages/img/apple-touch-icon.png`, `pages/img/icon-*.png` | the app icon's web set, made by the Dogfooder from the icon's masters: the ico's 16 and 32 px and the SVG from the small-size master (the SVG switches light and dark with the system), 48 px and up from the 1024 one; the touch icon full bleed |
-| `pages/img/og.png` | the Open Graph image: the design's desktop frame rendered by the app (`screenshot`, scale 2), cropped to 1200 × 630 |
+| `pages/img/og.png` | the Open Graph card: the app icon on cream, 1200 × 630, from the Dogfooder's icon set |
 | `build.mjs` | `node site/build.mjs` → `site/dist`: the pages with the stylesheet inlined, the viewer from `build/web` under `/view` with the sample design, the `CNAME` file. Every other asset has a content hash in its name, since Pages takes no cache headers |
 
 ## Build and run locally
