@@ -532,8 +532,21 @@
 		pointers.set(e.pointerId, [x, y]);
 		ex.viewer_pan(x - px, y - py);
 	});
+	let lastTap = null; // a touch tap, for double taps: { at, time }
 	const release = (e) => {
-		if (press && e.type === "pointerup") ex.viewer_pick(press.at[0], press.at[1], press.deep ? 2 : 0);
+		if (press && e.type === "pointerup") {
+			const [x, y] = press.at;
+			if (e.pointerType === "touch" && lastTap && e.timeStamp - lastTap.time < 350 && Math.hypot(x - lastTap.at[0], y - lastTap.at[1]) < 30) {
+				// a double tap zooms to the layer under the finger, or fits the page
+				ex.viewer_pick(x, y, 0);
+				if (info && info.sel) ex.viewer_zoom_to(0);
+				else ex.viewer_fit();
+				lastTap = null;
+			} else {
+				ex.viewer_pick(x, y, press.deep ? 2 : 0);
+				lastTap = e.pointerType === "touch" ? { at: [x, y], time: e.timeStamp } : null;
+			}
+		}
 		press = null;
 		pointers.delete(e.pointerId);
 		pinch = pointers.size === 2 ? spread()[0] : 0;
@@ -632,4 +645,19 @@
 		else for (const f of e.dataTransfer.files) out.push([f.name, f]);
 		if (out.length) addLocal(out);
 	});
+
+	// ---------------------------------------------------------------- installed app
+
+	// .pen files opened with the installed viewer (Chrome's file handlers)
+	if ("launchQueue" in window) {
+		window.launchQueue.setConsumer(async (params) => {
+			if (!params.files || !params.files.length) return;
+			const files = await Promise.all(params.files.map(async (h) => [h.name, await h.getFile()]));
+			addLocal(files);
+		});
+	}
+	// offline and instant reopening (sw.js)
+	if ("serviceWorker" in navigator && window.isSecureContext) {
+		navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});
+	}
 })();

@@ -68,27 +68,37 @@ for (const rel of files.sort((a, b) => order(a) - order(b))) {
 
 if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	const vmap = new Map();
+	const shell = []; // the viewer's hashed files, cached by sw.js
 	for (const name of ["viewer.wasm", "odin.js", "wgpu.js", "viewer.css"]) {
 		if (!fs.existsSync(path.join(viewer, name))) continue;
 		const data = fs.readFileSync(path.join(viewer, name));
 		const h = hashed(name, data);
 		vmap.set(`"${name}"`, `"${h}"`);
 		write("view/" + h, data);
+		shell.push(h);
 	}
 	// viewer.js names the wasm; it is hashed after that
 	let js = rewrite(fs.readFileSync(path.join(viewer, "viewer.js"), "utf8"), vmap);
 	const jsName = hashed("viewer.js", js);
 	vmap.set(`"viewer.js"`, `"${jsName}"`);
 	write("view/" + jsName, js);
+	shell.push(jsName);
 	let html = rewrite(fs.readFileSync(path.join(viewer, "index.html"), "utf8"), vmap);
 	html = rewrite(html, map); // the site's shared assets (fonts, icons) by their hashed names
 	write("view/index.html", html);
 	for (const extra of fs.readdirSync(viewer)) {
 		// samples and other files the page links to by name
-		if (/^(index\.html|viewer\.(wasm|js|css)|odin\.js|wgpu\.js)$/.test(extra)) continue;
+		if (/^(index\.html|viewer\.(wasm|js|css)|odin\.js|wgpu\.js|sw\.js)$/.test(extra)) continue;
 		const p = path.join(viewer, extra);
 		if (fs.statSync(p).isDirectory()) fs.cpSync(p, path.join(out, "view", extra), { recursive: true });
 		else write("view/" + extra, fs.readFileSync(p));
+	}
+	// the service worker: a new build is a new cache, holding the hashed files
+	if (fs.existsSync(path.join(viewer, "sw.js"))) {
+		const sw = fs.readFileSync(path.join(viewer, "sw.js"), "utf8")
+			.replace('"__BUILD__"', JSON.stringify(hash(shell.join(","))))
+			.replace("__ASSETS__", JSON.stringify(shell));
+		write("view/sw.js", sw);
 	}
 	// the sample design (the landing page, with its fonts) for "Try the sample"
 	const sample = path.join(here, "..", "designs", "sample");
