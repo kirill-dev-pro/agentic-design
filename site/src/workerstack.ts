@@ -10,6 +10,7 @@ import { libsql } from 'workerstack/libsql'
 import * as v from 'valibot'
 import { WorkerstackError } from 'workerstack'
 
+import { access } from './access'
 import type { App } from './blobs'
 import { cleanup } from './cleanup'
 import { fileRoutes } from './files'
@@ -19,6 +20,7 @@ import { currentWorkspace, ensurePersonalWorkspace } from './workspaces'
 
 export const backend = workerstack({
 	schema,
+	access,
 	database: { adapter: libsql() },
 	auth: ({ db, env }) => ({
 		baseURL: env.APP_URL,
