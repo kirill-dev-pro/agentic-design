@@ -1211,9 +1211,11 @@ VerticalMetrics :: proc(
 	state := __getState(ctx)
 	isize := i16(state.size * 10.0)
 	font  := __getFont(ctx, state.font)
-	ascender   = font.ascender * f32(isize / 10)
-	descender  = font.descender * f32(isize / 10)
-	lineHeight = font.lineHeight * f32(isize / 10)
+	// Agentic Design patch: f32(isize) / 10, not f32(isize / 10), whose integer division
+	// gave a 21.6 px font the metrics of a 21 px one
+	ascender   = font.ascender * f32(isize) / 10
+	descender  = font.descender * f32(isize) / 10
+	lineHeight = font.lineHeight * f32(isize) / 10
 	return
 }
 

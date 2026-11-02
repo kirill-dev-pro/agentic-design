@@ -1829,3 +1829,20 @@ longer reports connectors, labels and shape outlines, whose positions the app co
 
 **Consequences.** On a product design without connectors lint answers exactly as before.
 `tools/connectors.py` checks each rule and that rerouting clears them.
+
+## 71. Text metrics at fractional sizes
+
+**Problem.** Three step headings of the product design (Inter Variable 21.6 px, weight
+500) sat a pixel above Chrome after #65 (D69). fontstash's `VerticalMetrics`, behind
+`nvg.TextMetrics`, scaled the font's ascender by `f32(isize / 10)`, an integer division:
+a 21.6 px font got the ascender of a 21 px one (20.34 instead of 20.93), which #65 rounded
+down to 20 where Blink rounds to 21. The half leading used the same wrong value.
+
+**Decision.** `f32(isize) / 10`. Text at whole-pixel sizes is unchanged.
+
+**Consequences.** The headings match Chrome again. Landing sections against the live
+captures (`secdiff`, share of pixels more than 16 off): desktop light 1.51 → 1.43 %,
+desktop dark 1.56 → 1.49 %, mobile light and dark 2.82 → 2.80 %; desktop "how" 1.06 →
+0.73 %; mobile "keywords" 3.94 → 4.01 %, the only section a little worse. Text with an
+explicit line height at a fractional size moves by up to a third of a pixel, to where
+pen.dev puts it.

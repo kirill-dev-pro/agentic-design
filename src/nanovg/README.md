@@ -60,3 +60,5 @@ index lists), sits next to the GL one, and so that the following fixes can be ap
   their path (device space), paint, scissor and stroke style, or their glyphs and origins,
   to instead of drawing; fontstash keeps the last glyph's origin (`last_pen`) for it.
   Vector PDF export draws through it (`engine/pdf.odin`).
+- fontstash: `VerticalMetrics` scales by `f32(isize) / 10`; upstream's `f32(isize / 10)`
+  divided as integers and gave a 21.6 px font the ascender of a 21 px one.
