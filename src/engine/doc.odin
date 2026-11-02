@@ -712,7 +712,15 @@ doc_add :: proc(doc: ^Document, n: Node) -> ^Node {
 	}
 	b := strings.builder_make(context.temp_allocator)
 	json_write_string(&b, n.id)
-	node_set_raw(&n, "id", strings.to_string(b))
+	if prop_index(&n, "id") < 0 {
+		// where the loader puts it (after the type), so that a file saved now reads back and
+		// saves to the same bytes
+		at := 0
+		for p, i in n.props do if prop_rank(p.key) <= prop_rank("id") do at = i + 1
+		inject_at(&n.props, at, Prop{strings.clone("id"), strings.clone(strings.to_string(b))})
+	} else {
+		node_set_raw(&n, "id", strings.to_string(b))
+	}
 	append(&doc.nodes, n)
 	p := &doc.nodes[len(doc.nodes) - 1]
 	// keep the indexes current, so that the layers created after it find it
