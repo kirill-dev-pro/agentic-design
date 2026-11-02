@@ -1149,6 +1149,7 @@ TextBounds :: proc(
 	for byte_offset in 0..<len(text) {
 		if __decutf8(&utf8state, &codepoint, text[byte_offset]) {
 			if glyph, ok := __getGlyph(ctx, font, codepoint, isize, iblur); ok {
+				index := glyph.index // __getQuad may add a glyph (another subpixel bin) and move font.glyphs
 				__getQuad(ctx, font, previousGlyphIndex, glyph, scale, state.spacing, &x, &y, &quad)
 
 				if quad.x0 < minx {
@@ -1174,7 +1175,7 @@ TextBounds :: proc(
 					}
 				}
 
-				previousGlyphIndex = glyph.index
+				previousGlyphIndex = index
 			} else {
 				previousGlyphIndex = -1
 			}
