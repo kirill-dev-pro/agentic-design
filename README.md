@@ -281,7 +281,7 @@ Contributing).
 | `src/nanovg/wgpu`, `src/wgpu`, `src/metal_darwin.odin` | NanoVG on WebGPU; the wgpu-native bindings (library fetched by `tools/fetch_wgpu.sh`); the window's Metal layer |
 | `src/nanovg`, `src/fontstash` | vendored NanoVG/fontstash ports with text rendering fixes (see `src/nanovg/README.md`) |
 | `src/web/`, `web/`, `tools/build_web.sh` | the browser viewer: its host, the page, the build |
-| `site/`, `package.json` | the website (agentic-design.kcrz.dev), a Workerstack app on Cloudflare Workers: the landing page and the viewer under `/view` as static assets, an API under `/api`; the root `package.json` only names `site` as a workspace |
+| `site/`, `Dockerfile.bunderhost` | the website (agentic-design.kcrz.dev): the landing page, the viewer under `/view`, how it is built and served |
 | `tools/font_instances.py` | static instances of variable fonts for the app's font folder |
 
 ## Contributing
