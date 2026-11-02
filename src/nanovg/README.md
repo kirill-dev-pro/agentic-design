@@ -41,3 +41,11 @@ index lists), sits next to the GL one, and so that the following fixes can be ap
 - nanovg: builds for `js` too (upstream lists only Windows, Linux and macOS), for the
   browser viewer; `CreateImagePath` returns 0 there, as stb_image has no file access in
   WebAssembly (the engine reads an image's bytes and calls `CreateImageMem`).
+- fontstash/nanovg: small text is drawn as Skia draws it in Chrome: each glyph rasterised
+  at the pen's subpixel offset (4 bins across a pixel, `MakeGlyphBitmapSubpixel`, the bin
+  part of the glyph's cache key) and its quad placed on whole device pixels, with the
+  baseline on a whole pixel row. It applies when a unit of fontstash's space is a device
+  pixel (an axis-aligned transform at the scale `__textScale` uses: screenshots at whole
+  scales, the canvas at 100 % and 200 %); elsewhere glyphs keep their fractional positions.
+  Before, every glyph bitmap was drawn at a fractional position and blurred by the
+  texture's bilinear sampling. Advances stay unrounded, so text keeps its width.

@@ -76,6 +76,7 @@ Glyph :: struct {
 	x0, y0, x1, y1: i16,
 	xoff, yoff:     i16,
 	xadvance:       f32, // unrounded: text keeps its width at every zoom
+	subx:           u8, // Agentic Design patch: the subpixel bin it was rasterised at (SUBPIXEL_X)
 }
 
 AtlasNode :: struct {
@@ -118,7 +119,15 @@ FontContext :: struct {
 	userData: rawptr, // by default set to the context
 
 	// called when a texture is expanded and needs handling
-	callbackResize: proc(data: rawptr, w, h: int), 
+	callbackResize: proc(data: rawptr, w, h: int),
+
+	// Agentic Design patch: while set (nanovg.Text, for an axis-aligned transform where a
+	// unit here is a device pixel), quads are placed on whole device pixels from glyphs
+	// rasterised at the pen's subpixel offset (SUBPIXEL_X bins), and the baseline on a whole
+	// pixel row, as Skia draws text in Chrome. Without it glyph bitmaps were drawn at
+	// fractional positions and smeared by the texture's bilinear sampling.
+	snap:     bool,
+	snap_off: [2]f32, // device pixel = position here + snap_off
 	// called in state_end to update the texture region that changed
 	callbackUpdate: proc(data: rawptr, dirtyRect: [4]f32, textureData: rawptr), 
 }
@@ -418,8 +427,9 @@ __renderGlyphBitmap :: proc(
 	scaleX:     f32,
 	scaleY:     f32,
 	glyphIndex: Glyph_Index,
+	shift:      f32 = 0,
 ) {
-	stbtt.MakeGlyphBitmap(&font.info, raw_data(output), outWidth, outHeight, outStride, scaleX, scaleY, glyphIndex)
+	stbtt.MakeGlyphBitmapSubpixel(&font.info, raw_data(output), outWidth, outHeight, outStride, scaleX, scaleY, shift, 0, glyphIndex)
 }
 
 __buildGlyphBitmap :: proc(
@@ -427,12 +437,14 @@ __buildGlyphBitmap :: proc(
 	glyphIndex: Glyph_Index,
 	pixelSize:  f32,
 	scale:      f32,
+	shift:      f32 = 0,
 ) -> (advance, lsb, x0, y0, x1, y1: i32) {
 	stbtt.GetGlyphHMetrics(&font.info, glyphIndex, &advance, &lsb)
-	stbtt.GetGlyphBitmapBox(&font.info, glyphIndex, scale, scale, &x0, &y0, &x1, &y1)
+	stbtt.GetGlyphBitmapBoxSubpixel(&font.info, glyphIndex, scale, scale, shift, 0, &x0, &y0, &x1, &y1)
 	return
 }
 
+SUBPIXEL_X :: 4
 // get glyph and push to atlas if not exists
 __getGlyph :: proc(
 	ctx:       ^FontContext,
@@ -440,6 +452,7 @@ __getGlyph :: proc(
 	codepoint: rune,
 	isize:     i16,
 	blur:      i16 = 0,
+	subx:      u8 = 0,
 ) -> (res: ^Glyph, ok: bool) #no_bounds_check {
 	if isize < 2 {
 		return
@@ -452,7 +465,8 @@ __getGlyph :: proc(
 		
 		if glyph.codepoint == codepoint &&
 		   glyph.isize     == isize &&
-		   glyph.blurSize  == blur {
+		   glyph.blurSize  == blur &&
+		   glyph.subx      == subx {
 			res = glyph
 			ok = true
 			return
@@ -482,7 +496,8 @@ __getGlyph :: proc(
 	blurSize   := min(blur, 20)
 	padding    := i16(blurSize + 2) // 2 minimum padding
 	scale      := __getPixelHeightScale(render_font, pixel_size)
-	advance, _, x0, y0, x1, y1 := __buildGlyphBitmap(render_font, glyph_index, pixel_size, scale)
+	shift      := f32(subx) / SUBPIXEL_X
+	advance, _, x0, y0, x1, y1 := __buildGlyphBitmap(render_font, glyph_index, pixel_size, scale, shift)
 	gw := (x1 - x0) + i32(padding) * 2
 	gh := (y1 - y0) + i32(padding) * 2 
 
@@ -507,6 +522,7 @@ __getGlyph :: proc(
 		xadvance  = scale * f32(advance),
 		xoff      = i16(x0 - i32(padding)),
 		yoff      = i16(y0 - i32(padding)),
+		subx      = subx,
 
 		// insert char to hash lookup.
 		next = font.lut[h],
@@ -525,6 +541,7 @@ __getGlyph :: proc(
 		scale,
 		scale,
 		glyph_index,
+		shift,
 	)
 
 	// make sure there is one pixel empty border.
@@ -968,6 +985,22 @@ __getQuad :: proc(
 		adv := f32(__getGlyphKernAdvance(font, previousGlyphIndex, glyph.index)) * scale
 		x^ += adv + spacing
 	}
+	advance := glyph.xadvance
+	pen := [2]f32{x^, y^}
+	glyph := glyph
+	if ctx.snap {
+		// the glyph rasterised at the pen's subpixel offset, on whole device pixels
+		px := pen.x + ctx.snap_off.x
+		ix := math.floor(px)
+		bin := int(math.round((px - ix) * SUBPIXEL_X))
+		if bin == SUBPIXEL_X {
+			ix += 1
+			bin = 0
+		}
+		if g, gok := __getGlyph(ctx, font, glyph.codepoint, glyph.isize, glyph.blurSize, u8(bin)); gok do glyph = g
+		pen.x = ix - ctx.snap_off.x
+		pen.y = math.round(pen.y + ctx.snap_off.y) - ctx.snap_off.y
+	}
 
 	// fill props right
 	rx, ry, x0, y0, x1, y1, xoff, yoff: f32
@@ -980,8 +1013,8 @@ __getQuad :: proc(
 
 	switch ctx.location {
 	case .TOPLEFT:
-		rx = x^ + xoff
-		ry = y^ + yoff
+		rx = pen.x + xoff
+		ry = pen.y + yoff
 		
 		quad.x0 = rx
 		quad.y0 = ry
@@ -994,8 +1027,8 @@ __getQuad :: proc(
 		quad.t1 = y1 * ctx.ith
 
 	case .BOTTOMLEFT:
-		rx = x^ + xoff
-		ry = y^ - yoff
+		rx = pen.x + xoff
+		ry = pen.y - yoff
 
 		quad.x0 = rx
 		quad.y0 = ry
@@ -1008,7 +1041,7 @@ __getQuad :: proc(
 		quad.t1 = y1 * ctx.ith
 	}
 
-	x^ += glyph.xadvance
+	x^ += advance
 }
 
 // init text iter struct with settings
@@ -1073,8 +1106,9 @@ TextIterNext :: proc(
 			iter.y = iter.nexty
 			iter.codepointCount += 1
 			if glyph, glyph_ok := __getGlyph(ctx, iter.font, iter.codepoint, iter.isize, iter.iblur); glyph_ok {
+				index := glyph.index // __getQuad may add a glyph (another subpixel bin) and move font.glyphs
 				__getQuad(ctx, iter.font, iter.previousGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad)
-				iter.previousGlyphIndex = glyph.index
+				iter.previousGlyphIndex = index
 			} else {
 				iter.previousGlyphIndex = -1
 			}

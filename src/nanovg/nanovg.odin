@@ -2955,6 +2955,15 @@ Text :: proc(ctx: ^Context, x, y: f32, text: string) -> f32 {
 	verts := __allocTempVerts(ctx, cverts)
 	nverts: int
 
+	// Agentic Design patch: glyphs on whole device pixels at their subpixel offset, as Skia
+	// draws text, when a unit of fontstash's space is a device pixel: an axis-aligned
+	// transform with the same scale both ways that __textScale did not cap or round.
+	// A device pixel is then position + xform translation * pixel ratio.
+	xf := state.xform
+	fs.snap = xf[1] == 0 && xf[2] == 0 && xf[0] > 0 && abs(xf[0] - xf[3]) < 1e-5 && abs(scale - xf[0] * ctx.devicePxRatio) < 1e-4
+	fs.snap_off = {xf[4] * ctx.devicePxRatio, xf[5] * ctx.devicePxRatio}
+	defer fs.snap = false
+
 	iter := fontstash.TextIterInit(fs, x * scale, y * scale, text)
 	prev_iter := iter
 	q: fontstash.Quad

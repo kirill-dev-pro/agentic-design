@@ -1456,3 +1456,45 @@ antialiases differently from any vector fill (6 % of pixels). Undo gives back th
 byte for byte. pen.dev opens the outlined file, keeps the stroke added to it and draws the
 same picture (2 % of pixels at 2×, on edges). An outlined layer is no longer editable as
 text.
+
+## 63. Small text on whole pixels, from glyphs rasterised at their subpixel offset
+
+**Problem.** Small text was the largest difference left between a product design and
+its live site in Chrome (D44): every paragraph and label came out softer and slightly
+heavier. A 14 px bullet line differed from Chrome's by a mean of 3.2 per channel, with 7.5 %
+of its pixels more than 16 off. fontstash placed each glyph's bitmap at the pen's exact
+fractional position (decision #10 removed its rounding so that text keeps its width at any
+zoom), and the texture's bilinear sampling then spread every glyph over a pixel more.
+Skia, which Chrome and pen.dev use, rasterises a glyph at the pen's subpixel offset and
+draws it on whole pixels, with the baseline on a pixel row.
+
+**Decision.** fontstash rasterises a glyph at one of four subpixel offsets across a pixel
+(`MakeGlyphBitmapSubpixel`; the offset is part of the glyph's cache key) and places its quad
+on whole device pixels, the baseline rounded to a pixel row. nanovg turns this on for a
+`Text` call when a unit of fontstash's space is a device pixel: an axis-aligned transform
+with the same scale both ways that `__textScale` neither capped nor rounded. That covers
+screenshots and exports at whole scales and the canvas at 100 % and 200 %; at other zooms
+glyphs keep their fractional positions. Pen positions and advances are unchanged, so line
+breaks, widths and layout are exactly as before.
+
+Also tried, and not kept: a coverage curve fitted to headless Chrome (whose text is
+darker than the user's Chrome, which follows macOS's font smoothing setting: on the live
+captures our glyphs already carry about 5 % more ink than Chrome's), and curves that thin
+or thicken the coverage. On the live site's captures each was worse than raw coverage.
+
+**Consequences.**
+
+- On the dogfooder's live captures of the landing (`secdiff`, 12 sections × desktop and
+  mobile × light and dark): the share of pixels more than 16 off fell from 2.46 % to 1.83 %
+  (desktop light), 4.55 % to 3.32 % (mobile light), 2.47 % to 1.88 % and 4.46 % to 3.31 %
+  (dark); the mean difference by 13–15 %; pixels more than 48 off by 3–7 %. The 14 px
+  bullet line: mean 3.23 → 1.57, more than 16 off 7.47 % → 3.47 %.
+- Against pen.dev's export of the same lines (12–20 px and two headings): mean 6.25 →
+  4.59 at 1×, 3.51 → 2.56 at 2×; headings 2.22 → 1.90.
+- `get_document` and the saved file are byte-identical before and after on that product design.
+- Up to four bitmaps per glyph and size: at 100 % the atlas of sample-screens grows from
+  1024 to 2048 pixels square while panning (the trim budget; the whole product landing page
+  pans at 100 % without a reset), and a frame takes 0.33 ms instead of 0.27.
+- Remaining: Blink rounds a font's ascent and descent to whole pixels before centring a
+  line, so some sizes (13 px) sit a pixel row away from Chrome's; and the app's instances
+  of a variable font at in-between weights (500, 600) are a little thinner than Chrome's.
