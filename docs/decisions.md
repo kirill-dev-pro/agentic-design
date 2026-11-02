@@ -1921,3 +1921,18 @@ refused and `untitled.pen` is byte-identical afterwards; `open` again and the ed
 `a.pen`; a fresh session can pass `document`, and a `document` the window does not show is
 refused.
 
+## 76. The window's PDF export is vector too
+
+**Problem.** #71 made PDF vector for agents (`screenshot` with format pdf, `export_pages`),
+but the Export panel's PDF (inspector, and a `.pdf` name typed in the save panel, #64)
+still wrapped a picture of the layer: large, and no text to select or search.
+
+**Decision.** The window's export writes PDF with the same writer as #71: one layer as one
+PDF page, the page with nothing selected as one PDF page per top-level frame (as
+`export_pages` writes a page), several selected layers as one PDF file each. The scale
+does not apply, so a PDF's name has no `@2x`.
+
+**Consequences.** The sample's Hero frame from the inspector (PDF, "Export layer"): one
+1440 × 1164 page, 93 KB, whose text PDFKit reads back. As in #71, blurs are drawn without
+the blur, and gradients and shadows are images; the raster PDF had them as pixels.
+

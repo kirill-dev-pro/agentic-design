@@ -1308,6 +1308,15 @@ copy_png_render :: proc() {
 // The layers `uids` as one image: a single layer by its own bounds, several (the whole
 // page) by their union with a 20-unit margin.
 export_encode :: proc(uids: []int, scale: f32, format: engine.Export_Format) -> ([]u8, bool) {
+	if format == .PDF {
+		// vector, with real text (decision 76): one layer as one page; the whole page as one
+		// PDF page per top-level frame, as export_pages writes it. Scale does not apply.
+		pages := uids
+		if len(uids) != 1 {
+			if frames := page_frames(app.page); len(frames) > 0 do pages = frames
+		}
+		return engine.export_pdf(engine.renderer, &app.doc, pages)
+	}
 	r, ok := bounds_of(uids)
 	if !ok do return nil, false
 	target: ^engine.Node
@@ -1341,7 +1350,7 @@ export_render :: proc() {
 		for uid in uids {
 			n, _ := engine.doc_find_uid(&app.doc, uid)
 			if n == nil do continue
-			stem := export_file_stem(engine.node_label(n), export_scale)
+			stem := export_file_stem(engine.node_label(n), 1 if export_format == .PDF else export_scale)
 			name := fmt.tprintf("%s.%s", stem, ext)
 			for i := 2; used[strings.to_lower(name, context.temp_allocator)]; i += 1 do name = fmt.tprintf("%s %d.%s", stem, i, ext)
 			used[strings.to_lower(name, context.temp_allocator)] = true
@@ -1372,7 +1381,7 @@ export_render :: proc() {
 	append(&types, ext)
 	for f in engine.Export_Format do if f != export_format do append(&types, engine.EXPORT_EXTENSIONS[f])
 	if export_format == .JPEG do append(&types, "jpeg")
-	path, ok := ask_save_path(export_file_stem(label, export_scale), types[:])
+	path, ok := ask_save_path(export_file_stem(label, 1 if export_format == .PDF else export_scale), types[:])
 	if !ok do return
 	format := export_format
 	if f, fok := engine.export_format_from(strings.trim_prefix(filepath_ext(path), ".")); fok do format = f
