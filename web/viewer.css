@@ -31,8 +31,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 	background: var(--bg); border-bottom: 1px solid var(--line);
 }
 .home { display: flex; flex: none; }
-.mark { position: relative; width: 26px; height: 26px; border-radius: 7px; background: #C8643F; }
-.mark svg { position: absolute; left: 5.5px; top: 4.5px; width: 16px; height: 17px; fill: #fff; stroke: none; }
+.mark { display: block; width: 30px; height: 30px; }
 #title { min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spacer { flex: 1; }
 #themes { display: flex; gap: 6px; }

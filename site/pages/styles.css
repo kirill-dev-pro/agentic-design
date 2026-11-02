@@ -130,8 +130,14 @@ code { font-family: var(--mono); font-size: 0.9em; }
 	display: flex; align-items: center; justify-content: space-between; gap: 24px;
 }
 .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-.mark { position: relative; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); flex: none; }
-.mark svg { position: absolute; left: 6px; top: 5px; width: 17px; height: 18px; fill: var(--on-accent); }
+/* the app icon, light or dark with the page's theme */
+.mark { display: block; width: 32px; height: 32px; flex: none; margin: -2px -2px -2px -4px; }
+.mark.dark, :root[data-theme="dark"] .mark.light { display: none; }
+:root[data-theme="dark"] .mark.dark { display: block; }
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .mark.light { display: none; }
+	:root:not([data-theme="light"]) .mark.dark { display: block; }
+}
 .word { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.21; }
 .links { display: flex; gap: 32px; }
 .links a, .footer-links a { font-size: 15px; font-weight: 500; line-height: 1.21; color: var(--text-muted); text-decoration: none; }
