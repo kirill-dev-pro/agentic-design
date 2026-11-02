@@ -7,6 +7,7 @@ framework.
 | --- | --- |
 | `src/index.html`, `src/styles.css`, `src/main.js` | the landing page, written by hand after the design in `designs/sample/agentic-design.pen` (its HTML export was the starting point): the same tokens, light and dark (the system's, or the button), desktop and phone layouts |
 | `src/fonts/` | Inter and JetBrains Mono, Latin subsets as woff2 (`tools/fonts.py` writes them from `designs/sample/fonts`; OFL) |
+| `src/favicon.ico`, `src/img/icon*` | the app icon (`assets/icon`): the ico's 16 and 32 px from `icon-small-1024.png`, 48 px and up from `icon-1024.png`, the SVG as is; the touch icon full bleed |
 | `src/img/og.png` | the Open Graph image: the design's desktop frame rendered by the app (`screenshot`, scale 2), cropped to 1200 × 630 |
 | `build.mjs` | `node site/build.mjs` → `site/dist`: hashed asset names, the stylesheet inlined, the viewer from `build/web` (`tools/build_web.sh`) under `/view`, `.br` and `.gz` copies |
 | `Caddyfile` | serves `dist` on :3000: precompressed files, immutable caching of hashed names, `/api/health` |
