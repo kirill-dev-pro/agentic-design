@@ -35,9 +35,9 @@ Prototype. What works in `.pen` files today:
   alignment, vertical alignment and growth, with GPOS kerning
 
 - linear, radial and angular gradients with any number of stops, several fills and
-  shadows per layer (inner and drop), rotation and flips
+  shadows per layer (inner and drop), layer and background blur, rotation and flips
 
-Not yet: rich text runs, blur effects, mesh and shader fills, icon libraries other than
+Not yet: rich text runs, mesh and shader fills, shader effects, icon libraries other than
 Lucide. [docs/pen-dev-comparison.md](docs/pen-dev-comparison.md) lists what pen.dev has and
 this app does not.
 
