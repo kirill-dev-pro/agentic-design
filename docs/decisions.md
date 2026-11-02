@@ -1647,6 +1647,8 @@ JSON.
 
 ## 68. The website and the viewer at /view: static files on Bunderhost, the viewer exports through the canvas
 
+*The hosting part (Caddy in a container on a server) is superseded by #78.*
+
 **Problem.** The app needs a website, and the browser viewer (#55) needs to be a product:
 opening files without a server of one's own, layer info, PNG export, notices for what is
 missing. Bunderhost, where the site is hosted, deploys Bunderstack and Workerstack apps and
@@ -1965,4 +1967,38 @@ alone, with its library `reaktor.lib.pen` imported; `open -a` with a second file
 second tab in the running app, the first file again activated its tab, the library file
 opened in a third. `mdls` reports `.pen` files as `dev.kcrz.agentic-design.pen` under
 `public.json`. A double-click in Finder and a drop on the Dock icon send the same event.
+
+## 78. The website is a Workerstack app on Cloudflare Workers (supersedes the hosting of #68)
+
+**Problem.** #68 served the site as static files from a Caddy container on a Bunderhost
+server, with stub Bunderstack files to satisfy the deploy contract. The site will not stay
+static: sharing, accounts and an API for the web editor are coming.
+
+**Decision.**
+
+- `site/` is a Workerstack 0.2.4 app (`render: spa`) on Bunderhost's Cloudflare target. The
+  pages and the viewer are the Worker's static assets, `site/dist/client`, written by
+  `site/build.mjs` as plain files after the Worker's Vite build; the Worker answers `/api/*`,
+  empty except `GET /api/version`. The pages moved from `site/src` to `site/pages`; `src/` is
+  the Worker's. The schema has only Workerstack's own tables; the database Bunderhost
+  provisions is unused for now.
+- Bunderhost installs dependencies from the repository root, so the root has a
+  `package.json` naming `site` as its only workspace, and the `bun.lock`.
+- The build runs in Bunderhost's Bun image, which has no Odin or `wasm-ld`:
+  `site/scripts/viewer.sh` fetches the pinned Odin release (checked by SHA-256, as the
+  release workflow pins it) and installs `lld`, then runs `tools/build_web.sh`.
+- Cloudflare compresses at its edge and serves `.wasm` as `application/wasm`; the build
+  writes no `.br` or `.gz` copies (`COMPRESS=1` still does, for other hosts). `_headers` marks
+  names with a content hash immutable. The domain is a Workers custom domain that Bunderhost
+  manages; the CNAME of #68 is gone.
+
+**Consequences.**
+
+- Lighthouse on the live site: 99–100 for performance, 100 for the rest, mobile and
+  desktop. The viewer runs from the Worker in Chrome 156 and Safari 27.
+- Cloudflare's edge brotli sends the viewer's wasm as 2.76 MB, against 2.08 MB at brotli 11.
+  Serving the precompressed file would need the Worker in front of `/view`.
+- In `spa` mode an unknown path answers with the landing page and status 200, not the 404 page.
+- `Dockerfile.bunderhost`, the Caddyfile and the Bunderstack blueprint are gone. The build
+  output stays a plain folder, so moving to another static host is a copy.
 
