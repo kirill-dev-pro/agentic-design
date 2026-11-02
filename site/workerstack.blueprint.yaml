@@ -11,6 +11,12 @@ application:
     main: src/server.ts
     compatibilityDate: 2026-11-02
     assets: dist/client
+authentication:
+  managedIdentity:
+    protocolVersion: 2
+    adapterVersion: 2
+    discovery: true
+    callbackPath: /api/auth/callback/bunderhost
 workerstack:
   entry: src/workerstack.ts
   manifestVersion: 4
@@ -32,9 +38,45 @@ resources:
       - exportName: _system.messages
         physicalName: _bunderstack_messages
         system: true
+      - exportName: account
+        physicalName: account
+        system: false
+      - exportName: asset
+        physicalName: asset
+        system: false
       - exportName: _system.files
         physicalName: bunderstack_file_meta
         system: true
+      - exportName: document
+        physicalName: document
+        system: false
+      - exportName: invitation
+        physicalName: invitation
+        system: false
+      - exportName: member
+        physicalName: member
+        system: false
+      - exportName: organization
+        physicalName: organization
+        system: false
+      - exportName: session
+        physicalName: session
+        system: false
+      - exportName: shareLink
+        physicalName: share_link
+        system: false
+      - exportName: user
+        physicalName: user
+        system: false
+      - exportName: verification
+        physicalName: verification
+        system: false
+      - exportName: version
+        physicalName: version
+        system: false
+      - exportName: workspacePlan
+        physicalName: workspace_plan
+        system: false
   storage:
     defaultBucket: default
     buckets:
@@ -42,9 +84,78 @@ resources:
         visibility: private
   messaging:
     channels: []
-environment: []
+environment:
+  - key: BUNDERHOST_AUTH_CONFIG
+    required: false
+    scope: server
+    sensitive: true
 api:
   operations:
+    - handle: commitVersion
+      operationId: commitVersion
+      effect: mutation
+      method: POST
+      path: /api/docs/{docId}/versions/{versionId}/commit
+    - handle: createFile
+      operationId: createFile
+      effect: mutation
+      method: POST
+      path: /api/docs
+    - handle: createLink
+      operationId: createLink
+      effect: mutation
+      method: POST
+      path: /api/docs/{docId}/links
+    - handle: deleteFile
+      operationId: deleteFile
+      effect: mutation
+      method: DELETE
+      path: /api/docs/{docId}
+    - handle: getFile
+      operationId: getFile
+      effect: read
+      method: GET
+      path: /api/docs/{docId}
+    - handle: listFiles
+      operationId: listFiles
+      effect: read
+      method: GET
+      path: /api/docs
+    - handle: me
+      operationId: me
+      effect: read
+      method: GET
+      path: /api/me
+    - handle: newVersion
+      operationId: newVersion
+      effect: mutation
+      method: POST
+      path: /api/docs/{docId}/versions
+    - handle: oembed
+      operationId: oembed
+      effect: read
+      method: GET
+      path: /api/oembed
+    - handle: renameFile
+      operationId: renameFile
+      effect: mutation
+      method: PATCH
+      path: /api/docs/{docId}
+    - handle: revokeLink
+      operationId: revokeLink
+      effect: mutation
+      method: DELETE
+      path: /api/links/{linkId}
+    - handle: share
+      operationId: share
+      effect: read
+      method: GET
+      path: /api/share/{token}
+    - handle: updateLink
+      operationId: updateLink
+      effect: mutation
+      method: PATCH
+      path: /api/links/{linkId}
     - handle: version
       operationId: version
       effect: read
