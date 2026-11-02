@@ -10,7 +10,6 @@ import "core:math/rand"
 import "core:mem"
 import "core:strconv"
 import "core:strings"
-import "core:sys/posix"
 import nvg "nanovg"
 
 // Others on the canvas. Agents working through the API (the MCP proxy names them from the
@@ -171,14 +170,6 @@ cursor_name_is :: proc(label, name: string) -> bool {
 	return ok
 }
 
-// A numeric agent id is the MCP proxy's process id: true once that process has ended.
-// Other ids (tests, other front ends) never count as ended.
-agent_process_gone :: proc(id: string) -> bool {
-	pid, ok := strconv.parse_int(id)
-	if !ok || pid <= 0 do return false
-	if posix.kill(posix.pid_t(pid), posix.Signal(0)) == .OK do return false
-	return posix.errno() == .ESRCH
-}
 
 cursor_set_file :: proc(c: ^Peer) {
 	if c.file == app.file_path do return

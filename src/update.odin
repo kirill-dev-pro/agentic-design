@@ -1,3 +1,4 @@
+#+build !js
 package agentic_design
 
 import "base:runtime"
