@@ -77,6 +77,15 @@ is compiled into the app (`UPDATE_FEED`, set by the workflow from `github.reposi
 To hold an update back, publish the release as a draft or a prerelease: `latest` skips
 both.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` builds the browser viewer (`tools/build_web.sh`, the engine for
+`js_wasm32`) on every push and pull request, on Linux with the pinned Odin release, so a
+change to the engine that breaks the WebAssembly build fails there, before the website's
+deploy (`pages.yml`) would. The macOS app is built by `release.yml` on tags; locally, run
+both `./build.sh` and `tools/build_web.sh` before pushing engine changes. The Odin release
+is pinned in `release.yml`, `pages.yml` and `ci.yml`: bump them together.
+
 ## Building locally
 
 ```sh
