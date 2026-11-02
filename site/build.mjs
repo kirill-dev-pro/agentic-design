@@ -39,7 +39,7 @@ const rewrite = (text, map) => {
 
 const map = new Map();
 // files kept at their names: crawlers, the og image and favicons are fetched by URL
-const plain = new Set(["index.html", "404.html", "robots.txt", "sitemap.xml", "favicon.ico", "img/og.png", "img/apple-touch-icon.png", "img/icon.svg", "img/icon-512.png", "site.webmanifest"]);
+const plain = new Set(["index.html", "404.html", "robots.txt", "sitemap.xml", "favicon.ico", "img/og.png", "img/apple-touch-icon.png", "favicon.svg", "img/icon-192.png", "img/icon-512.png", "site.webmanifest"]);
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
 	const p = path.join(dir, e.name);
 	return e.isDirectory() ? walk(p) : [path.relative(src, p).split(path.sep).join("/")];
