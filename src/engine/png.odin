@@ -273,3 +273,18 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 png_encode :: proc(pixels: []u8, w, h: i32) -> (png: []u8, ok: bool) {
 	return png_write(pixels, int(w), int(h), context.temp_allocator)
 }
+
+// zlib (with its header), for FlateDecode streams.
+pdf_deflate :: proc(data: []u8) -> []u8 {
+	z := Z_Stream{}
+	if deflateInit2_(&z, 6, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY, zlibVersion(), size_of(Z_Stream)) != Z_OK do return nil
+	defer deflateEnd(&z)
+	bound := int(deflateBound(&z, c.ulong(len(data)))) + 64
+	out := make([]u8, bound, context.temp_allocator)
+	z.next_in = raw_data(data)
+	z.avail_in = c.uint(len(data))
+	z.next_out = raw_data(out)
+	z.avail_out = c.uint(bound)
+	if deflate(&z, Z_FINISH) != Z_STREAM_END do return nil
+	return out[:bound - int(z.avail_out)]
+}

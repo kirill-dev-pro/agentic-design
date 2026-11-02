@@ -469,21 +469,6 @@ pdf_raster_paint :: proc(p: ^Pdf, b: ^strings.Builder, paint: ^nvg.Paint, lo_in,
 	fmt.sbprintf(b, "cm /Im%d Do\n", idx)
 }
 
-// zlib (with its header), for FlateDecode streams.
-pdf_deflate :: proc(data: []u8) -> []u8 {
-	z := Z_Stream{}
-	if deflateInit2_(&z, 6, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY, zlibVersion(), size_of(Z_Stream)) != Z_OK do return nil
-	defer deflateEnd(&z)
-	bound := int(deflateBound(&z, c.ulong(len(data)))) + 64
-	out := make([]u8, bound, context.temp_allocator)
-	z.next_in = raw_data(data)
-	z.avail_in = c.uint(len(data))
-	z.next_out = raw_data(out)
-	z.avail_out = c.uint(bound)
-	if deflate(&z, Z_FINISH) != Z_STREAM_END do return nil
-	return out[:bound - int(z.avail_out)]
-}
-
 // Draws each layer onto a page of its own and returns the PDF file.
 export_pdf :: proc(vg: ^nvg.Context, doc: ^Document, uids: []int) -> (file: []u8, ok: bool) {
 	p := new(Pdf, context.temp_allocator)

@@ -31,3 +31,8 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 png_encode :: proc(pixels: []u8, w, h: i32) -> (png: []u8, ok: bool) {
 	return png_write(pixels, int(w), int(h), context.temp_allocator)
 }
+
+// No zlib here: PDF streams are written uncompressed (pdf.odin's stream takes nil as that).
+pdf_deflate :: proc(data: []u8) -> []u8 {
+	return nil
+}
