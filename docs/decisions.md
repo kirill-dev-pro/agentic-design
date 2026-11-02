@@ -1846,3 +1846,45 @@ desktop dark 1.56 → 1.49 %, mobile light and dark 2.82 → 2.80 %; desktop "ho
 0.73 %; mobile "keywords" 3.94 → 4.01 %, the only section a little worse. Text with an
 explicit line height at a fractional size moves by up to a third of a pixel, to where
 pen.dev puts it.
+
+## 72. Connectors go around boxes, spread along sides and sit under the boxes
+
+**Problem.** The dogfooder rebuilt a page of the chat-bot diagram with connectors (D72–D84
+of its log): routes ran straight through other boxes, two boxes closer than two stubs got
+a loop with the arrowhead buried in it, connectors leaving one side shared a line (and
+their colours merged), labels sat on crossing lines or, on curves, off the curve, a shape
+held one plain text, and lint counted the swimlanes behind everything as obstacles (25
+false crossings, 22 false label hits).
+
+**Decision.**
+
+- One set of obstacles for the router and lint, worked out once per document change: the
+  drawn boxes of a page (filled or stroked frames and rectangles, ellipses, shapes,
+  instances, filled paths) without backgrounds (a box with another box inside it that is
+  not its own, such as a lane) and without boxes inside one that counts (a card stands
+  for its button row). A connector's own ends and the boxes around or inside them are not
+  its obstacles; `metadata.lintIgnore` also takes a layer out of lint's.
+- An orthogonal route that would cross an obstacle is found again on the grid of lines 12
+  px outside the obstacles' edges (and halfway between them): the shortest path, a bend
+  costing 24 px. Only boxes near the two ends are considered.
+- Facing sides closer than two stubs get a shorter stub, not a loop.
+- Connectors that leave (or reach) one flat side of a box with an automatic side spread
+  along it, in the order of their other ends.
+- A new connector goes into its frame just under the first layer that holds one of its
+  ends: above what is behind the boxes, under the boxes.
+- Labels: a curve's route is sampled, so its label sits on it; a label at a spot on
+  another connector's line or on a box moves along its own line to the nearest free spot.
+  `connect` takes `labelFill` (default: the connector's colour) and `labelFontSize`; a
+  label's id is the connector's with `-label`.
+- Shapes: `caption` (with `captionFontSize`, `captionFontFamily`, `captionFill`) adds a
+  smaller second line; any `children` go inside the shape too.
+- Lint names obstacles with their ids and reports a label on another connector's line
+  (`label-on-line`).
+- PDF text on an unscaled, unrotated line has its baseline on a whole unit, as the canvas
+  puts it on a whole pixel.
+
+**Consequences.** On the rebuilt page lint went from 25 crossings, 7 overlaps and 23
+label hits to 0, 2 and 1 (the two overlaps and the label are real). Layout with routing
+takes 2.8 ms on it. `tools/connectors.py` checks routing around a box, the z-order, the
+label id and colour, the close boxes, spread ports, captions and the lint rules (47
+checks). Files without connectors are unchanged.

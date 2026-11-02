@@ -374,6 +374,8 @@ pdf_text :: proc(r: ^nvg.Recorder, run: ^nvg.Text_Run) {
 			}
 			ex := xf[0] * g.x + xf[2] * g.y + xf[4]
 			ey := xf[1] * g.x + xf[3] * g.y + xf[5]
+			// the baseline on a whole unit, as the canvas puts it on a whole pixel at 1x
+			if straight && xf[0] == 1 && xf[3] == 1 do ey = math.round(ey)
 			for v in ([6]f32{xf[0], xf[1], -xf[2], -xf[3], ex, ey}) do pdf_n(b, v)
 			strings.write_string(b, "Tm [")
 			open = true

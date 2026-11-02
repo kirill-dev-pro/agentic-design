@@ -173,7 +173,7 @@ edit_connector_label :: proc(n: ^engine.Node) {
 	label := connector_label(n)
 	if label == nil {
 		push_undo()
-		uid := add_connector_label(n.uid, "Label", n.parent)
+		uid := add_connector_label(n.uid, "Label", n.parent, engine.prop_raw(n, "stroke") if engine.prop_index(n, "stroke") >= 0 else `"#333333"`)
 		engine.layout_document(&app.doc)
 		label, _ = engine.doc_find_uid(&app.doc, uid)
 		if label == nil do return

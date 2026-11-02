@@ -17,12 +17,14 @@ Connect_Options :: struct {
 	stroke:             string, // raw JSON (a colour or "$variable")
 	stroke_width:       f32,
 	label:              string,
+	label_fill:         string, // raw JSON; "" = the stroke's colour
+	label_size:         f32,
 	parent:             int, // -1: the frame that holds both ends
 	id:                 string,
 }
 
 default_connect :: proc() -> Connect_Options {
-	return {end = .Arrow, stroke = `"#1E1E1E"`, stroke_width = 2, parent = -1}
+	return {end = .Arrow, stroke = `"#1E1E1E"`, stroke_width = 2, parent = -1, label_size = 12}
 }
 
 // The real layer an endpoint stands for in the tree: itself, or the instance a copy is in.
@@ -88,22 +90,55 @@ connect_layers :: proc(o: Connect_Options) -> (uid: int, label_uid: int, err: st
 	if perr != nil do return 0, 0, "internal: connector JSON"
 	uid, err = engine.node_from_json(&app.doc, v, parent)
 	if err != "" do return
-	if o.label != "" do label_uid = add_connector_label(uid, o.label, parent)
+	place_behind_ends(uid, ra, rb)
+	if o.label != "" do label_uid = add_connector_label(uid, o.label, parent, o.label_fill if o.label_fill != "" else o.stroke, o.label_size)
 	engine.layout_document(&app.doc)
 	return
 }
 
-add_connector_label :: proc(conn_uid: int, text: string, parent: int) -> int {
+// A new connector goes under the boxes it joins (as drawn diagrams have it), above what is
+// behind them: just before the first layer of its frame that holds one of its ends.
+place_behind_ends :: proc(uid: int, a, b: ^engine.Node) {
+	n, _ := engine.doc_find_uid(&app.doc, uid)
+	if n == nil do return
+	target := 0
+	for su in engine.children_of(&app.doc, n.parent) {
+		if su == uid do continue
+		if su == a.uid || su == b.uid || engine.is_descendant(&app.doc, a.uid, su) || engine.is_descendant(&app.doc, b.uid, su) {
+			target = su
+			break
+		}
+	}
+	if target == 0 do return
+	engine.doc_bump(&app.doc)
+	moved: engine.Node
+	for m, i in app.doc.nodes do if m.uid == uid {
+		moved = m
+		ordered_remove(&app.doc.nodes, i)
+		break
+	}
+	at := len(app.doc.nodes)
+	for m, i in app.doc.nodes do if m.uid == target {at = i; break}
+	inject_at(&app.doc.nodes, at, moved)
+	engine.doc_index(&app.doc)
+}
+
+// A label in the connector's colour (or `fill`), its id the connector's with "-label".
+add_connector_label :: proc(conn_uid: int, text: string, parent: int, fill := `"#333333"`, size: f32 = 12) -> int {
 	c, _ := engine.doc_find_uid(&app.doc, conn_uid)
 	if c == nil do return 0
 	sb := strings.builder_make(context.temp_allocator)
-	strings.write_string(&sb, `{"type":"frame","name":"Label","layout":"horizontal","layoutPosition":"absolute","padding":[2,6],"cornerRadius":4,"fill":`)
+	strings.write_string(&sb, `{"type":"frame","id":`)
+	lid := strings.concatenate({c.id, "-label"}, context.temp_allocator)
+	if existing, _ := engine.doc_find(&app.doc, lid); existing != nil do lid = ""
+	engine.json_write_string(&sb, lid)
+	strings.write_string(&sb, `,"name":"Label","layout":"horizontal","layoutPosition":"absolute","padding":[2,6],"cornerRadius":4,"fill":`)
 	strings.write_string(&sb, label_background(parent))
 	strings.write_string(&sb, `,"x":0,"y":0,"metadata":{"at":0.5,"connection":`)
 	engine.json_write_string(&sb, c.id)
 	strings.write_string(&sb, `,"type":"connection-label"},"children":[{"type":"text","content":`)
 	engine.json_write_string(&sb, text)
-	strings.write_string(&sb, `,"fontSize":12,"fill":"#333333"}]}`)
+	fmt.sbprintf(&sb, `,"fontSize":%s,"fill":%s}}]}}`, engine.num_text(size), fill)
 	v, perr := json.parse_string(strings.to_string(sb), .JSON5, false, context.temp_allocator)
 	if perr != nil do return 0
 	uid, err := engine.node_from_json(&app.doc, v, parent)
@@ -173,6 +208,12 @@ api_connect :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	}
 	if w, has := params["strokeWidth"]; has do o.stroke_width = engine.json_f32(w)
 	o.label = string(params["label"].(json.String) or_else "")
+	if v, has := params["labelFill"]; has {
+		sb := strings.builder_make(context.temp_allocator)
+		engine.write_json_value(&sb, v)
+		o.label_fill = strings.to_string(sb)
+	}
+	if s, has := params["labelFontSize"]; has do o.label_size = engine.json_f32(s)
 	o.id = string(params["id"].(json.String) or_else "")
 	if pid, has := params["parent_id"].(json.String); has {
 		if pid == "" do o.parent = 0
@@ -251,7 +292,7 @@ update_connector :: proc(n: ^engine.Node, o: json.Object) -> string {
 			}
 		} else {
 			conn, _ := engine.doc_find_uid(&app.doc, uid)
-			add_connector_label(uid, string(lv), conn.parent)
+			add_connector_label(uid, string(lv), conn.parent, engine.prop_raw(conn, "stroke") if engine.prop_index(conn, "stroke") >= 0 else `"#333333"`)
 		}
 	}
 	return ""
@@ -342,6 +383,24 @@ expand_shape_spec :: proc(v: json.Value) -> (out: json.Value, err: string) {
 		}
 		append(&kids, text)
 	}
+	if cap, has := o["caption"]; has {
+		// a second, smaller line under the text (a code reference, a note)
+		ct := make(json.Object, 8, context.temp_allocator)
+		ct["type"] = json.String("text")
+		ct["content"] = cap
+		ct["textAlign"] = json.String("center")
+		ct["fill"] = o["captionFill"] if "captionFill" in o else json.String("#666666")
+		size: f32 = 11
+		if fs, has_fs := o["fontSize"]; has_fs do size = engine.json_f32(fs) * 0.75
+		ct["fontSize"] = o["captionFontSize"] if "captionFontSize" in o else json.Float(f64(engine.round2(size)))
+		if ff, has_ff := o["captionFontFamily"]; has_ff do ct["fontFamily"] = ff
+		if is_number(o["width"]) {
+			ct["textGrowth"] = json.String("fixed-width")
+			ct["width"] = json.String("fill_container")
+		}
+		append(&kids, ct)
+		for k in ([?]string{"caption", "captionFill", "captionFontSize", "captionFontFamily"}) do delete_key(&res, k)
+	}
 	delete_key(&res, "textFill")
 	if existing, has := res["children"].(json.Array); has do append(&kids, ..existing[:])
 	res["children"] = json.Array(kids)
@@ -363,76 +422,21 @@ Diagram_Issue :: struct {
 	msg:  string,
 }
 
-// A box an arrow should go around: a shape, or a frame or rectangle that draws something
-// and holds no layers of its own other than its text (lanes and pages, which hold boxes,
-// are crossed by design).
-is_leaf_box :: proc(n: ^engine.Node) -> bool {
-	if !n.enabled || n.flow == .Connector || n.flow == .Label || engine.is_shape_outline(n) do return false
-	#partial switch n.kind {
-	case .Rectangle, .Ellipse: return true
-	case .Frame:
-		if n.flow == .Shape do return true
-		if !n.has_fill && !n.has_stroke do return false
-		for cu in engine.children_of(&app.doc, n.uid) {
-			c, _ := engine.doc_find_uid(&app.doc, cu)
-			if c != nil && c.kind != .Text && c.kind != .Icon && !engine.is_shape_outline(c) do return false
-		}
-		return true
-	}
-	return false
-}
-
-seg_hits_box :: proc(a, b: [2]f32, box: [4]f32) -> bool {
-	// inside by more than a pixel: touching an edge is not crossing
-	lo := [2]f32{box.x + 1, box.y + 1}
-	hi := [2]f32{box.x + box[2] - 1, box.y + box[3] - 1}
-	if hi.x <= lo.x || hi.y <= lo.y do return false
-	// Liang–Barsky clip of the segment against the box
-	t0, t1: f32 = 0, 1
-	d := b - a
-	ps := [4]f32{-d.x, d.x, -d.y, d.y}
-	qs := [4]f32{a.x - lo.x, hi.x - a.x, a.y - lo.y, hi.y - a.y}
-	for i in 0 ..< 4 {
-		if ps[i] == 0 {
-			if qs[i] < 0 do return false
-			continue
-		}
-		t := qs[i] / ps[i]
-		if ps[i] < 0 do t0 = max(t0, t)
-		else do t1 = min(t1, t)
-		if t0 > t1 do return false
-	}
-	return t1 - t0 > 0.001
-}
-
 boxes_overlap :: proc(a, b: [4]f32) -> bool {
 	return a.x + 1 < b.x + b[2] && b.x + 1 < a.x + a[2] && a.y + 1 < b.y + b[3] && b.y + 1 < a.y + a[3]
 }
 
-// The top-level layer a layer is drawn on.
-top_of :: proc(n: ^engine.Node) -> int {
-	cur := endpoint_layer(n)
-	for cur != nil && cur.parent != 0 do cur, _ = engine.doc_find_uid(&app.doc, cur.parent)
-	return cur.uid if cur != nil else 0
+box_name :: proc(n: ^engine.Node) -> string {
+	return fmt.tprintf("'%s' (%s)", engine.node_label(n), n.id)
 }
 
 diagram_issues :: proc() -> []Diagram_Issue {
 	out := make([dynamic]Diagram_Issue, context.temp_allocator)
 	doc := &app.doc
 	engine.layout_document(doc)
-	// boxes by the top-level layer they are on
-	boxes := make(map[int][dynamic]int, 16, context.temp_allocator)
-	labels := make([dynamic]int, context.temp_allocator)
-	for &n in doc.nodes {
-		if n.flow == .Label && n.enabled do append(&labels, n.uid)
-		if !is_leaf_box(&n) do continue
-		t := top_of(&n)
-		list := boxes[t] or_else make([dynamic]int, context.temp_allocator)
-		append(&list, n.uid)
-		boxes[t] = list
-	}
 	Seg :: struct {a, b: [2]f32, conn: int}
 	segs := make([dynamic]Seg, context.temp_allocator)
+	label_obstacles := make(map[int][]engine.Obstacle, 8, context.temp_allocator) // by connector
 	for &n in doc.nodes {
 		if n.flow != .Connector || !n.enabled do continue
 		c, ok := engine.connector_of(&n)
@@ -445,17 +449,14 @@ diagram_issues :: proc() -> []Diagram_Issue {
 		}
 		route, has := engine.connector_routes[n.uid]
 		if !has || len(route) < 2 do continue
-		ra, rb := endpoint_layer(ea), endpoint_layer(eb)
+		obs := engine.connector_obstacles(doc, &n, ea, eb)
+		label_obstacles[n.uid] = obs
 		crossed := make([dynamic]string, context.temp_allocator)
-		for uid in boxes[top_of(&n)] {
-			bn, _ := engine.doc_find_uid(doc, uid)
-			if bn == nil || bn == ra || bn == rb do continue
-			// the ends' own boxes, the boxes around them and inside them
-			if engine.is_descendant(doc, ra.uid, uid) || engine.is_descendant(doc, rb.uid, uid) || engine.is_descendant(doc, uid, ra.uid) || engine.is_descendant(doc, uid, rb.uid) do continue
-			box := engine.node_page_box(bn)
+		for o in obs {
+			if bn, _ := engine.doc_find_uid(doc, o.uid); bn != nil && lint_ignored(bn, "connector-crosses") do continue
 			for i in 1 ..< len(route) {
-				if seg_hits_box(route[i - 1], route[i], box) {
-					append(&crossed, fmt.tprintf("'%s'", engine.node_label(bn)))
+				if engine.seg_crosses_box(route[i - 1], route[i], o.box, 1) {
+					if bn, _ := engine.doc_find_uid(doc, o.uid); bn != nil do append(&crossed, box_name(bn))
 					break
 				}
 			}
@@ -483,23 +484,36 @@ diagram_issues :: proc() -> []Diagram_Issue {
 			append(&out, Diagram_Issue{s.conn, "connectors-overlap", fmt.tprintf("runs along connector '%s' for %d px: they read as one line", other.id if other != nil else "?", int(length))})
 		}
 	}
-	// labels on labels or on boxes
-	for lu, i in labels {
-		l, _ := engine.doc_find_uid(doc, lu)
+	// labels on labels, on boxes, on other connectors' lines
+	labels := make([dynamic]^engine.Node, context.temp_allocator)
+	for &n in doc.nodes do if n.flow == .Label && n.enabled do append(&labels, &n)
+	for l, i in labels {
 		lb := engine.node_page_box(l)
-		for ou in labels[i + 1:] {
-			o, _ := engine.doc_find_uid(doc, ou)
-			if o != nil && boxes_overlap(lb, engine.node_page_box(o)) do append(&out, Diagram_Issue{lu, "label-overlap", fmt.tprintf("sits on label '%s': move one along its line (metadata.at)", engine.node_label(o))})
+		v, _ := engine.prop_value(l, "metadata")
+		mo, _ := v.(json.Object)
+		own, _ := engine.doc_find(doc, string(mo["connection"].(json.String) or_else ""))
+		for o in labels[i + 1:] {
+			if boxes_overlap(lb, engine.node_page_box(o)) do append(&out, Diagram_Issue{l.uid, "label-overlap", fmt.tprintf("sits on label %s: move one along its line (metadata.at)", box_name(o))})
 		}
-		for uid in boxes[top_of(l)] {
-			bn, _ := engine.doc_find_uid(doc, uid)
-			if bn != nil && boxes_overlap(lb, engine.node_page_box(bn)) {
-				append(&out, Diagram_Issue{lu, "label-overlap", fmt.tprintf("sits on '%s'", engine.node_label(bn))})
+		if own != nil {
+			for ob in label_obstacles[own.uid] {
+				if boxes_overlap(lb, ob.box) {
+					if bn, _ := engine.doc_find_uid(doc, ob.uid); bn != nil do append(&out, Diagram_Issue{l.uid, "label-overlap", fmt.tprintf("sits on %s", box_name(bn))})
+					break
+				}
+			}
+		}
+		for s in segs {
+			if own != nil && s.conn == own.uid do continue
+			if engine.seg_crosses_box(s.a, s.b, lb, 0) {
+				other, _ := engine.doc_find_uid(doc, s.conn)
+				append(&out, Diagram_Issue{l.uid, "label-on-line", fmt.tprintf("sits on the line of connector '%s'", other.id if other != nil else "?")})
 				break
 			}
 		}
 	}
-	// free arrows that touch no box: candidates for connect
+	// free arrows: candidates for connect
+	m := engine.connector_obstacle_map(doc)
 	for &n in doc.nodes {
 		if n.kind != .Path || n.flow != .None || !n.enabled || !n.has_stroke || n.has_fill do continue
 		if !strings.contains(strings.to_lower(n.name, context.temp_allocator), "arrow") do continue
@@ -511,15 +525,15 @@ diagram_issues :: proc() -> []Diagram_Issue {
 			return p.x >= box.x - 3 && p.x <= box.x + box[2] + 3 && p.y >= box.y - 3 && p.y <= box.y + box[3] + 3
 		}
 		near_a, near_b := false, false
-		for uid in boxes[top_of(&n)] {
-			bn, _ := engine.doc_find_uid(doc, uid)
-			if bn == nil do continue
-			box := engine.node_page_box(bn)
-			if touches(first, box) do near_a = true
-			if touches(last, box) do near_b = true
+		for o in m[engine.top_level_of(doc, &n)] {
+			if touches(first, o.box) do near_a = true
+			if touches(last, o.box) do near_b = true
 		}
 		if !near_a || !near_b do append(&out, Diagram_Issue{n.uid, "arrow-unattached", "an arrow drawn as a free path, with an end on no box: connect the two boxes instead (it then follows them)"})
 		else do append(&out, Diagram_Issue{n.uid, "arrow-free", "an arrow drawn as a free path: `connect` the two boxes instead, so it follows them when they move"})
 	}
-	return out[:]
+	// a layer with metadata.lintIgnore is not an obstacle either
+	kept := make([dynamic]Diagram_Issue, context.temp_allocator)
+	for d in out do append(&kept, d)
+	return kept[:]
 }

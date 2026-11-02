@@ -204,19 +204,26 @@ side_point :: proc(b: [4]f32, s: Anchor) -> [2]f32 {
 }
 
 STUB :: 16 // how far an orthogonal route runs straight out of a side
+MARGIN :: 12 // how far a route keeps from the boxes it goes around
+BEND :: 24 // what a bend costs the router, in units of length
 
 Route :: struct {
-	pts:    [dynamic][2]f32, // polyline, or for a curve: start, control 1, control 2, end
+	pts:    [dynamic][2]f32, // the line as drawn (a curve sampled)
+	ctrl:   [4][2]f32, // a curve: start, control 1, control 2, end
 	curved: bool,
 }
 
-// The route between two boxes (page coordinates), before markers trim it.
-connector_route :: proc(c: Connector, a, b: [4]f32, flat_a, flat_b: bool) -> (r: Route) {
-	r.pts = make([dynamic][2]f32, context.temp_allocator)
-	s0 := c.from if c.from != .Center else facing_side(a, b)
-	s1 := c.to if c.to != .Center else facing_side(b, a)
-	p0, p1 := side_point(a, s0), side_point(b, s1)
-	d0, d1 := ANCHOR_DIRS[s0], ANCHOR_DIRS[s1]
+// Where a connector leaves and arrives: the sides and the points on them.
+Route_Ends :: struct {
+	s0, s1: Anchor,
+	p0, p1: [2]f32,
+}
+
+connector_ends :: proc(c: Connector, a, b: [4]f32, flat_a, flat_b: bool) -> (e: Route_Ends) {
+	e.s0 = c.from if c.from != .Center else facing_side(a, b)
+	e.s1 = c.to if c.to != .Center else facing_side(b, a)
+	e.p0, e.p1 = side_point(a, e.s0), side_point(b, e.s1)
+	d0, d1 := ANCHOR_DIRS[e.s0], ANCHOR_DIRS[e.s1]
 	if c.from == .Center && c.to == .Center && d0 == -d1 && len(c.waypoints) == 0 {
 		// facing sides that overlap across the flow: a straight line where they overlap,
 		// as long as the end can slide along a flat side (a diamond or an ellipse is only
@@ -224,13 +231,22 @@ connector_route :: proc(c: Connector, a, b: [4]f32, flat_a, flat_b: bool) -> (r:
 		cx := 1 if d0.y == 0 else 0
 		lo, hi := max(a[cx], b[cx]), min(a[cx] + a[cx + 2], b[cx] + b[cx + 2])
 		if flat_a && flat_b && hi - lo >= 4 {
-			p0[cx], p1[cx] = (lo + hi) / 2, (lo + hi) / 2
-		} else if flat_a && p1[cx] >= a[cx] + 2 && p1[cx] <= a[cx] + a[cx + 2] - 2 {
-			p0[cx] = p1[cx]
-		} else if flat_b && p0[cx] >= b[cx] + 2 && p0[cx] <= b[cx] + b[cx + 2] - 2 {
-			p1[cx] = p0[cx]
+			e.p0[cx], e.p1[cx] = (lo + hi) / 2, (lo + hi) / 2
+		} else if flat_a && e.p1[cx] >= a[cx] + 2 && e.p1[cx] <= a[cx] + a[cx + 2] - 2 {
+			e.p0[cx] = e.p1[cx]
+		} else if flat_b && e.p0[cx] >= b[cx] + 2 && e.p0[cx] <= b[cx] + b[cx + 2] - 2 {
+			e.p1[cx] = e.p0[cx]
 		}
 	}
+	return
+}
+
+// The route between two boxes (page coordinates), before markers trim it. Orthogonal
+// routes go around `obstacles` (page boxes) when the plain route would cross one.
+connector_route :: proc(c: Connector, a, b: [4]f32, e: Route_Ends, obstacles: [][4]f32) -> (r: Route) {
+	r.pts = make([dynamic][2]f32, context.temp_allocator)
+	p0, p1 := e.p0, e.p1
+	d0, d1 := ANCHOR_DIRS[e.s0], ANCHOR_DIRS[e.s1]
 	if len(c.waypoints) > 0 {
 		append(&r.pts, p0)
 		append(&r.pts, ..c.waypoints)
@@ -242,12 +258,51 @@ connector_route :: proc(c: Connector, a, b: [4]f32, flat_a, flat_b: bool) -> (r:
 		append(&r.pts, p0, p1)
 	case .Curved:
 		k := max(math.sqrt((p1.x - p0.x) * (p1.x - p0.x) + (p1.y - p0.y) * (p1.y - p0.y)) / 3, 24)
-		append(&r.pts, p0, p0 + d0 * k, p1 + d1 * k, p1)
+		r.ctrl = {p0, p0 + d0 * k, p1 + d1 * k, p1}
 		r.curved = true
+		for i in 0 ..= 24 do append(&r.pts, bezier_at(r.ctrl, f32(i) / 24))
 	case .Orthogonal:
 		orthogonal_route(&r.pts, a, b, p0, p1, d0, d1)
+		if len(obstacles) > 0 && route_hits(r.pts[:], obstacles) {
+			if around, ok := avoid_route(p0, d0, p1, d1, obstacles); ok {
+				clear(&r.pts)
+				append(&r.pts, ..around[:])
+			}
+		}
 	}
 	return
+}
+
+bezier_at :: proc(c: [4][2]f32, t: f32) -> [2]f32 {
+	u := 1 - t
+	return c[0] * (u * u * u) + c[1] * (3 * u * u * t) + c[2] * (3 * u * t * t) + c[3] * (t * t * t)
+}
+
+route_hits :: proc(pts: [][2]f32, obstacles: [][4]f32) -> bool {
+	for o in obstacles do for i in 1 ..< len(pts) do if seg_crosses_box(pts[i - 1], pts[i], o, 1) do return true
+	return false
+}
+
+// Whether a segment runs through a box (inset by `inset`: touching an edge is not crossing).
+seg_crosses_box :: proc(a, b: [2]f32, box: [4]f32, inset: f32) -> bool {
+	lo := [2]f32{box.x + inset, box.y + inset}
+	hi := [2]f32{box.x + box[2] - inset, box.y + box[3] - inset}
+	if hi.x <= lo.x || hi.y <= lo.y do return false
+	t0, t1: f32 = 0, 1
+	d := b - a
+	ps := [4]f32{-d.x, d.x, -d.y, d.y}
+	qs := [4]f32{a.x - lo.x, hi.x - a.x, a.y - lo.y, hi.y - a.y}
+	for i in 0 ..< 4 {
+		if ps[i] == 0 {
+			if qs[i] < 0 do return false
+			continue
+		}
+		t := qs[i] / ps[i]
+		if ps[i] < 0 do t0 = max(t0, t)
+		else do t1 = min(t1, t)
+		if t0 > t1 do return false
+	}
+	return t1 - t0 > 0.001
 }
 
 orthogonal_route :: proc(pts: ^[dynamic][2]f32, a, b: [4]f32, p0, p1, d0, d1: [2]f32) {
@@ -259,8 +314,9 @@ orthogonal_route :: proc(pts: ^[dynamic][2]f32, a, b: [4]f32, p0, p1, d0, d1: [2
 		cx := 1 - ax
 		opposite := d0[ax] == -d1[ax]
 		ahead := (p1[ax] - p0[ax]) * d0[ax] // how far the target is in front of the start
-		if opposite && ahead >= 2 * STUB {
-			// facing each other: out, across at the middle, in
+		if opposite && ahead > 0.5 {
+			// facing each other: out, across at the middle, in (closer than two stubs too:
+			// a shorter stub rather than a loop)
 			m := (p0[ax] + p1[ax]) / 2
 			k0, k1: [2]f32
 			k0[ax], k0[cx] = m, p0[cx]
@@ -292,7 +348,7 @@ orthogonal_route :: proc(pts: ^[dynamic][2]f32, a, b: [4]f32, p0, p1, d0, d1: [2
 		corner := [2]f32{p1.x, p0.y} if h0 else [2]f32{p0.x, p1.y}
 		toward0 := (corner - p0).x * d0.x + (corner - p0).y * d0.y
 		toward1 := (corner - p1).x * d1.x + (corner - p1).y * d1.y
-		if toward0 >= STUB && toward1 >= STUB {
+		if toward0 > 0.5 && toward1 > 0.5 {
 			append(pts, corner)
 		} else {
 			mid := [2]f32{q0.x, q1.y} if !h0 else [2]f32{q1.x, q0.y}
@@ -301,6 +357,142 @@ orthogonal_route :: proc(pts: ^[dynamic][2]f32, a, b: [4]f32, p0, p1, d0, d1: [2
 	}
 	append(pts, p1)
 	simplify_polyline(pts)
+}
+
+// An orthogonal route around boxes: the cheapest path (length, plus BEND per bend) on the
+// grid of lines MARGIN outside the boxes' edges, the stubs and the lines between them.
+avoid_route :: proc(p0, d0, p1, d1: [2]f32, obstacles: [][4]f32) -> (out: [dynamic][2]f32, ok: bool) {
+	q0, q1 := p0 + d0 * STUB, p1 + d1 * STUB
+	xs := make([dynamic]f32, context.temp_allocator)
+	ys := make([dynamic]f32, context.temp_allocator)
+	append(&xs, q0.x, q1.x)
+	append(&ys, q0.y, q1.y)
+	for o in obstacles {
+		append(&xs, o.x - MARGIN, o.x + o[2] + MARGIN)
+		append(&ys, o.y - MARGIN, o.y + o[3] + MARGIN)
+	}
+	uniq :: proc(v: ^[dynamic]f32) {
+		for i in 1 ..< len(v) {
+			for j := i; j > 0 && v[j] < v[j - 1]; j -= 1 do v[j], v[j - 1] = v[j - 1], v[j]
+		}
+		out := make([dynamic]f32, context.temp_allocator)
+		for x, i in v do if i == 0 || x - out[len(out) - 1] > 0.5 do append(&out, x)
+		// and the lines halfway between, for gaps narrower than two margins
+		n := len(out)
+		for i in 1 ..< n do append(&out, (out[i - 1] + out[i]) / 2)
+		for i in 1 ..< len(out) {
+			for j := i; j > 0 && out[j] < out[j - 1]; j -= 1 do out[j], out[j - 1] = out[j - 1], out[j]
+		}
+		v^ = out
+	}
+	uniq(&xs)
+	uniq(&ys)
+	nx, ny := len(xs), len(ys)
+	if nx * ny > 40000 do return
+	index :: proc(v: []f32, x: f32) -> int {
+		best, bd := 0, max(f32)
+		for c, i in v do if abs(c - x) < bd do best, bd = i, abs(c - x)
+		return best
+	}
+	blocked :: proc(p: [2]f32, obstacles: [][4]f32) -> bool {
+		m := f32(MARGIN) - 0.5
+		for o in obstacles do if p.x > o.x - m && p.x < o.x + o[2] + m && p.y > o.y - m && p.y < o.y + o[3] + m do return true
+		return false
+	}
+	DIRS := [4][2]int{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}
+	dir_index :: proc(d: [2]f32) -> int {
+		if d.x > 0 do return 0
+		if d.y > 0 do return 1
+		if d.x < 0 do return 2
+		return 3
+	}
+	sx, sy := index(xs[:], q0.x), index(ys[:], q0.y)
+	gx, gy := index(xs[:], q1.x), index(ys[:], q1.y)
+	start_dir := dir_index(d0)
+	goal_dir := dir_index(-d1)
+	states := nx * ny * 4
+	cost := make([]f32, states, context.temp_allocator)
+	from := make([]i32, states, context.temp_allocator)
+	for &c in cost do c = max(f32)
+	State :: struct {f: f32, s: i32}
+	heap := make([dynamic]State, context.temp_allocator)
+	heap_push :: proc(h: ^[dynamic]State, st: State) {
+		append(h, st)
+		i := len(h) - 1
+		for i > 0 {
+			p := (i - 1) / 2
+			if h[p].f <= h[i].f do break
+			h[p], h[i] = h[i], h[p]
+			i = p
+		}
+	}
+	heap_pop :: proc(h: ^[dynamic]State) -> State {
+		top := h[0]
+		last := pop(h)
+		if len(h) > 0 {
+			h[0] = last
+			i := 0
+			for {
+				l, r := 2 * i + 1, 2 * i + 2
+				m := i
+				if l < len(h) && h[l].f < h[m].f do m = l
+				if r < len(h) && h[r].f < h[m].f do m = r
+				if m == i do break
+				h[m], h[i] = h[i], h[m]
+				i = m
+			}
+		}
+		return top
+	}
+	sid := i32((sy * nx + sx) * 4 + start_dir)
+	cost[sid] = 0
+	from[sid] = -1
+	heur :: proc(xs, ys: []f32, x, y, gx, gy: int) -> f32 {return abs(xs[x] - xs[gx]) + abs(ys[y] - ys[gy])}
+	heap_push(&heap, {heur(xs[:], ys[:], sx, sy, gx, gy), sid})
+	found: i32 = -1
+	for len(heap) > 0 {
+		st := heap_pop(&heap)
+		s := int(st.s)
+		dir := s % 4
+		cell := s / 4
+		x, y := cell % nx, cell / nx
+		g := cost[s]
+		if st.f - heur(xs[:], ys[:], x, y, gx, gy) > g + 0.01 do continue // stale
+		if x == gx && y == gy {
+			found = st.s
+			break
+		}
+		for nd in 0 ..< 4 {
+			if (nd + 2) % 4 == dir do continue // no turning back
+			step := DIRS[nd]
+			x2, y2 := x + step.x, y + step.y
+			if x2 < 0 || y2 < 0 || x2 >= nx || y2 >= ny do continue
+			a, b := [2]f32{xs[x], ys[y]}, [2]f32{xs[x2], ys[y2]}
+			is_goal := x2 == gx && y2 == gy
+			if !is_goal && blocked(b, obstacles) do continue
+			if blocked((a + b) / 2, obstacles) do continue
+			c := g + abs(b.x - a.x) + abs(b.y - a.y) + (BEND if nd != dir else 0)
+			if is_goal && nd != goal_dir do c += BEND
+			s2 := i32((y2 * nx + x2) * 4 + nd)
+			if c < cost[s2] {
+				cost[s2] = c
+				from[s2] = st.s
+				heap_push(&heap, {c + heur(xs[:], ys[:], x2, y2, gx, gy), s2})
+			}
+		}
+	}
+	if found < 0 do return
+	rev := make([dynamic][2]f32, context.temp_allocator)
+	for s := found; s >= 0; s = from[s] {
+		cell := int(s) / 4
+		append(&rev, [2]f32{xs[cell % nx], ys[cell / nx]})
+	}
+	out = make([dynamic][2]f32, context.temp_allocator)
+	append(&out, p0)
+	for i := len(rev) - 1; i >= 0; i -= 1 do append(&out, rev[i])
+	append(&out, p1)
+	simplify_polyline(&out)
+	return out, true
 }
 
 // Drops repeated points and points on a straight run.
@@ -332,10 +524,14 @@ marker_size :: proc(sw: f32) -> (length, half: f32) {
 }
 
 // The geometry of a connector: the route (trimmed under filled markers) and the marker
-// outlines, as SVG path data relative to `origin`, and the page box it spans.
-connector_geometry :: proc(c: Connector, a, b: [4]f32, sw: f32, flat_a := true, flat_b := true) -> (d: string, box: [4]f32, route: [][2]f32) {
-	r := connector_route(c, a, b, flat_a, flat_b)
+// outlines, as SVG path data relative to the page box it spans, and the route as it runs
+// from shape to shape (a curve sampled).
+connector_geometry :: proc(c: Connector, a, b: [4]f32, sw: f32, e: Route_Ends, obstacles: [][4]f32) -> (d: string, box: [4]f32, route: [][2]f32) {
+	r := connector_route(c, a, b, e, obstacles)
 	if len(r.pts) < 2 do return
+	full := make([dynamic][2]f32, len(r.pts), context.temp_allocator)
+	copy(full[:], r.pts[:])
+	route = full[:]
 	length, half := marker_size(sw)
 	marks := make([dynamic][dynamic][2]f32, context.temp_allocator) // outlines
 	closed := make([dynamic]bool, context.temp_allocator)
@@ -373,11 +569,16 @@ connector_geometry :: proc(c: Connector, a, b: [4]f32, sw: f32, flat_a := true, 
 		append(closed, is_closed)
 		return
 	}
-	pts := r.pts
 	dir_of :: proc(from, to: [2]f32) -> [2]f32 {
 		d := to - from
 		l := math.sqrt(d.x * d.x + d.y * d.y)
 		return d / l if l > 0 else [2]f32{1, 0}
+	}
+	// the drawn line: the polyline, or the curve's control points
+	pts := r.pts
+	if r.curved {
+		pts = make([dynamic][2]f32, 4, context.temp_allocator)
+		for p, i in r.ctrl do pts[i] = p
 	}
 	last := len(pts) - 1
 	if c.end != .None do pts[last] = head(c.end, pts[last], dir_of(pts[last - 1], pts[last]), length, half, &marks, &closed)
@@ -389,6 +590,7 @@ connector_geometry :: proc(c: Connector, a, b: [4]f32, sw: f32, flat_a := true, 
 		hi^ = {max(hi.x, p.x), max(hi.y, p.y)}
 	}
 	for p in pts do grow(&lo, &hi, p)
+	for p in route do grow(&lo, &hi, p)
 	for m in marks do for p in m do grow(&lo, &hi, p)
 	pad := max(sw, 1)
 	lo -= pad
@@ -402,7 +604,7 @@ connector_geometry :: proc(c: Connector, a, b: [4]f32, sw: f32, flat_a := true, 
 		strings.write_string(b, num_text(p.y - lo.y))
 	}
 	pt(&sb, "M", pts[0], lo)
-	if r.curved && len(pts) == 4 {
+	if r.curved {
 		pt(&sb, "C", pts[1], lo)
 		pt(&sb, " ", pts[2], lo)
 		pt(&sb, " ", pts[3], lo)
@@ -416,12 +618,6 @@ connector_geometry :: proc(c: Connector, a, b: [4]f32, sw: f32, flat_a := true, 
 		if closed[i] do strings.write_string(&sb, "Z")
 	}
 	d = strings.to_string(sb)
-	route = pts[:]
-	if c.end != .None || c.start != .None {
-		// the route as it reaches the shapes, for labels and lint
-		full := connector_route(c, a, b, flat_a, flat_b)
-		route = full.pts[:]
-	}
 	return
 }
 
@@ -458,15 +654,123 @@ seg_len :: proc(a, b: [2]f32) -> f32 {
 	return math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y))
 }
 
+// ---------------------------------------------------------------- obstacles
+
+// A box a connector goes around (and lint reports it crossing): a drawn layer (a filled
+// or stroked frame or rectangle, an ellipse, a shape, an instance, a filled path) that is
+// not a background, and not inside another such box. A background is a box with another
+// box inside it that is not its own (a lane, a page's panel): routes cross those by design.
+Obstacle :: struct {
+	uid: int,
+	box: [4]f32,
+}
+
+obstacles_by_top: map[int][dynamic]Obstacle
+obstacles_version := -1
+
+is_drawn_box :: proc(n: ^Node) -> bool {
+	if !n.enabled || n.ghost || n.flow == .Connector || n.flow == .Label || is_shape_outline(n) do return false
+	#partial switch n.kind {
+	case .Rectangle, .Ellipse, .Ref: return true
+	case .Path: return n.has_fill
+	case .Frame: return n.flow == .Shape || n.has_fill || n.has_stroke
+	}
+	return false
+}
+
+top_level_of :: proc(doc: ^Document, n: ^Node) -> int {
+	cur := n
+	for cur != nil && cur.ghost do cur, _ = doc_find_uid(doc, cur.ghost_inst)
+	for depth := 0; cur != nil && cur.parent != 0 && depth < MAX_DEPTH; depth += 1 do cur, _ = doc_find_uid(doc, cur.parent)
+	return cur.uid if cur != nil else 0
+}
+
+// The obstacles of every top-level layer, worked out once per document change.
+connector_obstacle_map :: proc(doc: ^Document) -> map[int][dynamic]Obstacle {
+	if obstacles_version == doc.version do return obstacles_by_top
+	for _, &list in obstacles_by_top do delete(list)
+	clear(&obstacles_by_top)
+	obstacles_version = doc.version
+	cands := make(map[int][dynamic]Obstacle, 16, context.temp_allocator)
+	for &n in doc.nodes {
+		if n.parent == 0 || !is_drawn_box(&n) do continue
+		t := top_level_of(doc, &n)
+		list := cands[t] or_else make([dynamic]Obstacle, context.temp_allocator)
+		append(&list, Obstacle{n.uid, node_page_box(&n)})
+		cands[t] = list
+	}
+	inside :: proc(a, b: [4]f32) -> bool { // a inside b, and smaller
+		return a.x >= b.x - 0.5 && a.y >= b.y - 0.5 && a.x + a[2] <= b.x + b[2] + 0.5 && a.y + a[3] <= b.y + b[3] + 0.5 && a[2] * a[3] < b[2] * b[3]
+	}
+	for t, list in cands {
+		kept := make([dynamic]Obstacle)
+		for o in list {
+			background := false
+			for other in list {
+				if other.uid == o.uid || is_descendant(doc, other.uid, o.uid) || is_descendant(doc, o.uid, other.uid) do continue
+				if inside(other.box, o.box) {
+					background = true
+					break
+				}
+			}
+			if background do continue
+			// inside another box that counts: that one stands for it
+			nested := false
+			for other in list {
+				if other.uid != o.uid && is_descendant(doc, o.uid, other.uid) {
+					bg := false
+					for x in list {
+						if x.uid == other.uid || is_descendant(doc, x.uid, other.uid) || is_descendant(doc, other.uid, x.uid) do continue
+						if inside(x.box, other.box) {bg = true; break}
+					}
+					if !bg {nested = true; break}
+				}
+			}
+			if !nested do append(&kept, o)
+		}
+		obstacles_by_top[t] = kept
+	}
+	return obstacles_by_top
+}
+
+// The boxes a connector between `a` and `b` goes around: those on its page, but not its
+// ends, the boxes around them or inside them.
+connector_obstacles :: proc(doc: ^Document, conn, a, b: ^Node) -> []Obstacle {
+	m := connector_obstacle_map(doc)
+	out := make([dynamic]Obstacle, context.temp_allocator)
+	ra, rb := a, b
+	for ra != nil && ra.ghost do ra, _ = doc_find_uid(doc, ra.ghost_inst)
+	for rb != nil && rb.ghost do rb, _ = doc_find_uid(doc, rb.ghost_inst)
+	if ra == nil || rb == nil do return nil
+	for o in m[top_level_of(doc, conn)] {
+		if o.uid == ra.uid || o.uid == rb.uid do continue
+		if is_descendant(doc, ra.uid, o.uid) || is_descendant(doc, rb.uid, o.uid) || is_descendant(doc, o.uid, ra.uid) || is_descendant(doc, o.uid, rb.uid) do continue
+		append(&out, o)
+	}
+	return out[:]
+}
+
+// ---------------------------------------------------------------- the routing pass
+
 // The routes worked out by the last routing pass, by connector uid (page coordinates).
 connector_routes: map[int][dynamic][2]f32
 
 // After layout: routes every connector between its two shapes and writes the result into
-// its geometry, position and size (when it changed), then centres labels on their routes.
-// A connector whose end is missing keeps its last route (lint reports it).
+// its geometry, position and size (when it changed), then places labels on their routes.
+// A connector whose end is missing keeps its last route (lint reports it). Connectors that
+// leave one flat side of a box, each from the side facing the other end, spread along it.
 route_connectors :: proc(doc: ^Document) {
 	for _, &pts in connector_routes do delete(pts)
 	clear(&connector_routes)
+	Job :: struct {
+		n:        ^Node,
+		c:        Connector,
+		a, b:     ^Node,
+		ba, bb:   [4]f32,
+		e:        Route_Ends,
+		fa, fb:   bool,
+	}
+	jobs := make([dynamic]Job, context.temp_allocator)
 	any_label := false
 	for &n in doc.nodes {
 		if n.flow == .Label do any_label = true
@@ -475,16 +779,72 @@ route_connectors :: proc(doc: ^Document) {
 		if !ok do continue
 		a, b := resolve_path(doc, c.source), resolve_path(doc, c.target)
 		if a == nil || b == nil || a == &n || b == &n do continue
-		d, box, route := connector_geometry(c, node_page_box(a), node_page_box(b), n.stroke_width, flat_sided(a), flat_sided(b))
+		j := Job{n = &n, c = c, a = a, b = b, ba = node_page_box(a), bb = node_page_box(b), fa = flat_sided(a), fb = flat_sided(b)}
+		j.e = connector_ends(c, j.ba, j.bb, j.fa, j.fb)
+		append(&jobs, j)
+	}
+	// ports: connectors leaving (or reaching) the same flat side of a box spread along it,
+	// in the order of their other ends, so they do not share a line
+	Port :: struct {job, end: int, along: f32}
+	ports := make(map[[2]int][dynamic]Port, 8, context.temp_allocator)
+	for j, ji in jobs {
+		if j.c.routing != .Orthogonal || len(j.c.waypoints) > 0 do continue
+		for end in 0 ..< 2 {
+			auto := j.c.from == .Center if end == 0 else j.c.to == .Center
+			flat := j.fa if end == 0 else j.fb
+			if !auto || !flat do continue
+			node := j.a if end == 0 else j.b
+			side := j.e.s0 if end == 0 else j.e.s1
+			other := j.bb if end == 0 else j.ba
+			cx := 1 if ANCHOR_DIRS[side].y == 0 else 0
+			key := [2]int{node.uid, int(side)}
+			list := ports[key] or_else make([dynamic]Port, context.temp_allocator)
+			append(&list, Port{ji, end, other[cx] + other[cx + 2] / 2})
+			ports[key] = list
+		}
+	}
+	for key, list in ports {
+		if len(list) < 2 do continue
+		for i in 1 ..< len(list) {
+			for k := i; k > 0 && list[k].along < list[k - 1].along; k -= 1 do list[k], list[k - 1] = list[k - 1], list[k]
+		}
+		j0 := &jobs[list[0].job]
+		box := j0.ba if list[0].end == 0 else j0.bb
+		side := Anchor(key[1])
+		cx := 1 if ANCHOR_DIRS[side].y == 0 else 0
+		length := box[cx + 2]
+		gap := min(length * 0.8 / f32(len(list)), 24)
+		mid := box[cx] + length / 2
+		for p, i in list {
+			pos := mid + (f32(i) - f32(len(list) - 1) / 2) * gap
+			j := &jobs[p.job]
+			if p.end == 0 do j.e.p0[cx] = pos
+			else do j.e.p1[cx] = pos
+		}
+	}
+	for &j in jobs {
+		obs := connector_obstacles(doc, j.n, j.a, j.b)
+		boxes := make([dynamic][4]f32, 0, len(obs), context.temp_allocator)
+		// only those near the two ends matter
+		lo := [2]f32{min(j.ba.x, j.bb.x) - 200, min(j.ba.y, j.bb.y) - 200}
+		hi := [2]f32{max(j.ba.x + j.ba[2], j.bb.x + j.bb[2]) + 200, max(j.ba.y + j.ba[3], j.bb.y + j.bb[3]) + 200}
+		for o in obs do if o.box.x < hi.x && o.box.x + o.box[2] > lo.x && o.box.y < hi.y && o.box.y + o.box[3] > lo.y do append(&boxes, o.box)
+		d, box, route := connector_geometry(j.c, j.ba, j.bb, j.n.stroke_width, j.e, boxes[:])
 		if d == "" do continue
 		kept := make([dynamic][2]f32, len(route))
 		copy(kept[:], route)
-		connector_routes[n.uid] = kept
+		connector_routes[j.n.uid] = kept
 		ox, oy: f32
-		if p, _ := doc_find_uid(doc, n.parent); p != nil do ox, oy = p.x, p.y
-		set_connector_box(doc, &n, d, box, {ox, oy})
+		if p, _ := doc_find_uid(doc, j.n.parent); p != nil do ox, oy = p.x, p.y
+		set_connector_box(doc, j.n, d, box, {ox, oy})
 	}
 	if !any_label do return
+	place_labels(doc)
+}
+
+// Each label centred on its connector at `at` along it, or, when that spot is on another
+// connector's line or on a box, at the nearest free spot along its own line.
+place_labels :: proc(doc: ^Document) {
 	for &n in doc.nodes {
 		if n.flow != .Label do continue
 		v, _ := prop_value(&n, "metadata")
@@ -496,7 +856,31 @@ route_connectors :: proc(doc: ^Document) {
 		at: f32 = 0.5
 		if f, is_f := o["at"].(json.Float); is_f do at = f32(f)
 		if i, is_i := o["at"].(json.Integer); is_i do at = f32(i)
+		obs: []Obstacle
+		if c, ok := connector_of(target); ok {
+			a, b := resolve_path(doc, c.source), resolve_path(doc, c.target)
+			if a != nil && b != nil do obs = connector_obstacles(doc, target, a, b)
+		}
+		free :: proc(box: [4]f32, own: int, obs: []Obstacle) -> bool {
+			for uid, other in connector_routes {
+				if uid == own do continue
+				for i in 1 ..< len(other) do if seg_crosses_box(other[i - 1], other[i], box, 0) do return false
+			}
+			for ob in obs {
+				if box.x < ob.box.x + ob.box[2] && ob.box.x < box.x + box[2] && box.y < ob.box.y + ob.box[3] && ob.box.y < box.y + box[3] do return false
+			}
+			return true
+		}
 		mid := point_along(route[:], at)
+		for delta in ([?]f32{0, -0.12, 0.12, -0.24, 0.24, -0.36, 0.36}) {
+			t := at + delta
+			if t < 0.05 || t > 0.95 do continue
+			p := point_along(route[:], t)
+			if free({p.x - n.w / 2, p.y - n.h / 2, n.w, n.h}, target.uid, obs) {
+				mid = p
+				break
+			}
+		}
 		ox, oy: f32
 		if p, _ := doc_find_uid(doc, n.parent); p != nil do ox, oy = p.x, p.y
 		x, y := round2(mid.x - n.w / 2), round2(mid.y - n.h / 2)
