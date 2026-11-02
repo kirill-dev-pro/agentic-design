@@ -1805,3 +1805,27 @@ differs from the canvas by a mean of 1.5–2.2 per channel at 1× (glyph antiali
 baseline snapping). `tools/pdfexport.py` checks pages, sizes, text, subset fonts, sRGB,
 `export_pages` by page and ids, and both pages against the canvas (17 checks). Canvas,
 saved files and screenshots of files are unchanged.
+
+## 70. Lint for diagrams
+
+**Problem.** In a hand-built diagram an arrow that runs through a box, a label on another
+label or an arrow whose end touches nothing was found by eye on every page (D60).
+
+**Decision.** `lint` has diagram rules:
+
+- `connector-crosses`: a connector's route runs through a box other than its ends (and
+  the boxes around or inside them). A box is a shape, or a rectangle, ellipse or frame
+  that draws something and holds nothing but its text; lanes and pages hold boxes and are
+  crossed by design.
+- `connectors-overlap`: two connectors run along the same line for more than 24 px
+  (leaving the same side together, for up to three stubs, is not counted).
+- `label-overlap`: a connector's label sits on another label or on a box.
+- `connector-end-missing`: an end's layer is gone (the connector keeps its last route).
+- `arrow-unattached` / `arrow-free`: a stroked path named like an arrow, with an end on
+  no box or between two boxes: `connect` them instead.
+
+The messages say what to change (sides, waypoints, the label's `at`). `fractional` no
+longer reports connectors, labels and shape outlines, whose positions the app computes.
+
+**Consequences.** On a product design without connectors lint answers exactly as before.
+`tools/connectors.py` checks each rule and that rerouting clears them.

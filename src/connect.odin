@@ -354,3 +354,172 @@ is_number :: proc(v: json.Value) -> bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------- diagram lint (D60)
+
+Diagram_Issue :: struct {
+	uid:  int,
+	rule: string,
+	msg:  string,
+}
+
+// A box an arrow should go around: a shape, or a frame or rectangle that draws something
+// and holds no layers of its own other than its text (lanes and pages, which hold boxes,
+// are crossed by design).
+is_leaf_box :: proc(n: ^engine.Node) -> bool {
+	if !n.enabled || n.flow == .Connector || n.flow == .Label || engine.is_shape_outline(n) do return false
+	#partial switch n.kind {
+	case .Rectangle, .Ellipse: return true
+	case .Frame:
+		if n.flow == .Shape do return true
+		if !n.has_fill && !n.has_stroke do return false
+		for cu in engine.children_of(&app.doc, n.uid) {
+			c, _ := engine.doc_find_uid(&app.doc, cu)
+			if c != nil && c.kind != .Text && c.kind != .Icon && !engine.is_shape_outline(c) do return false
+		}
+		return true
+	}
+	return false
+}
+
+seg_hits_box :: proc(a, b: [2]f32, box: [4]f32) -> bool {
+	// inside by more than a pixel: touching an edge is not crossing
+	lo := [2]f32{box.x + 1, box.y + 1}
+	hi := [2]f32{box.x + box[2] - 1, box.y + box[3] - 1}
+	if hi.x <= lo.x || hi.y <= lo.y do return false
+	// Liang–Barsky clip of the segment against the box
+	t0, t1: f32 = 0, 1
+	d := b - a
+	ps := [4]f32{-d.x, d.x, -d.y, d.y}
+	qs := [4]f32{a.x - lo.x, hi.x - a.x, a.y - lo.y, hi.y - a.y}
+	for i in 0 ..< 4 {
+		if ps[i] == 0 {
+			if qs[i] < 0 do return false
+			continue
+		}
+		t := qs[i] / ps[i]
+		if ps[i] < 0 do t0 = max(t0, t)
+		else do t1 = min(t1, t)
+		if t0 > t1 do return false
+	}
+	return t1 - t0 > 0.001
+}
+
+boxes_overlap :: proc(a, b: [4]f32) -> bool {
+	return a.x + 1 < b.x + b[2] && b.x + 1 < a.x + a[2] && a.y + 1 < b.y + b[3] && b.y + 1 < a.y + a[3]
+}
+
+// The top-level layer a layer is drawn on.
+top_of :: proc(n: ^engine.Node) -> int {
+	cur := endpoint_layer(n)
+	for cur != nil && cur.parent != 0 do cur, _ = engine.doc_find_uid(&app.doc, cur.parent)
+	return cur.uid if cur != nil else 0
+}
+
+diagram_issues :: proc() -> []Diagram_Issue {
+	out := make([dynamic]Diagram_Issue, context.temp_allocator)
+	doc := &app.doc
+	engine.layout_document(doc)
+	// boxes by the top-level layer they are on
+	boxes := make(map[int][dynamic]int, 16, context.temp_allocator)
+	labels := make([dynamic]int, context.temp_allocator)
+	for &n in doc.nodes {
+		if n.flow == .Label && n.enabled do append(&labels, n.uid)
+		if !is_leaf_box(&n) do continue
+		t := top_of(&n)
+		list := boxes[t] or_else make([dynamic]int, context.temp_allocator)
+		append(&list, n.uid)
+		boxes[t] = list
+	}
+	Seg :: struct {a, b: [2]f32, conn: int}
+	segs := make([dynamic]Seg, context.temp_allocator)
+	for &n in doc.nodes {
+		if n.flow != .Connector || !n.enabled do continue
+		c, ok := engine.connector_of(&n)
+		if !ok do continue
+		ea, eb := engine.resolve_path(doc, c.source), engine.resolve_path(doc, c.target)
+		if ea == nil || eb == nil {
+			missing := c.source if ea == nil else c.target
+			append(&out, Diagram_Issue{n.uid, "connector-end-missing", fmt.tprintf("an end of this connector is gone: '%s' (it keeps its last route)", missing)})
+			continue
+		}
+		route, has := engine.connector_routes[n.uid]
+		if !has || len(route) < 2 do continue
+		ra, rb := endpoint_layer(ea), endpoint_layer(eb)
+		crossed := make([dynamic]string, context.temp_allocator)
+		for uid in boxes[top_of(&n)] {
+			bn, _ := engine.doc_find_uid(doc, uid)
+			if bn == nil || bn == ra || bn == rb do continue
+			// the ends' own boxes, the boxes around them and inside them
+			if engine.is_descendant(doc, ra.uid, uid) || engine.is_descendant(doc, rb.uid, uid) || engine.is_descendant(doc, uid, ra.uid) || engine.is_descendant(doc, uid, rb.uid) do continue
+			box := engine.node_page_box(bn)
+			for i in 1 ..< len(route) {
+				if seg_hits_box(route[i - 1], route[i], box) {
+					append(&crossed, fmt.tprintf("'%s'", engine.node_label(bn)))
+					break
+				}
+			}
+		}
+		if len(crossed) > 0 do append(&out, Diagram_Issue{n.uid, "connector-crosses", fmt.tprintf("runs through %s: move the boxes, pick other sides (fromSide/toSide) or add waypoints", strings.join(crossed[:], ", ", context.temp_allocator))})
+		for i in 1 ..< len(route) do append(&segs, Seg{route[i - 1], route[i], n.uid})
+	}
+	// connectors running along each other (not just leaving the same side together)
+	reported := make(map[[2]int]bool, 8, context.temp_allocator)
+	for s, i in segs {
+		for t in segs[i + 1:] {
+			pair := [2]int{s.conn, t.conn}
+			if s.conn == t.conn || pair in reported do continue
+			length: f32
+			if s.a.y == s.b.y && t.a.y == t.b.y && abs(s.a.y - t.a.y) < 0.5 {
+				length = min(max(s.a.x, s.b.x), max(t.a.x, t.b.x)) - max(min(s.a.x, s.b.x), min(t.a.x, t.b.x))
+			} else if s.a.x == s.b.x && t.a.x == t.b.x && abs(s.a.x - t.a.x) < 0.5 {
+				length = min(max(s.a.y, s.b.y), max(t.a.y, t.b.y)) - max(min(s.a.y, s.b.y), min(t.a.y, t.b.y))
+			}
+			if length <= 24 do continue
+			shared_start := s.a == t.a || s.b == t.b || s.a == t.b || s.b == t.a
+			if shared_start && length <= engine.STUB * 3 do continue
+			reported[pair] = true
+			other, _ := engine.doc_find_uid(doc, t.conn)
+			append(&out, Diagram_Issue{s.conn, "connectors-overlap", fmt.tprintf("runs along connector '%s' for %d px: they read as one line", other.id if other != nil else "?", int(length))})
+		}
+	}
+	// labels on labels or on boxes
+	for lu, i in labels {
+		l, _ := engine.doc_find_uid(doc, lu)
+		lb := engine.node_page_box(l)
+		for ou in labels[i + 1:] {
+			o, _ := engine.doc_find_uid(doc, ou)
+			if o != nil && boxes_overlap(lb, engine.node_page_box(o)) do append(&out, Diagram_Issue{lu, "label-overlap", fmt.tprintf("sits on label '%s': move one along its line (metadata.at)", engine.node_label(o))})
+		}
+		for uid in boxes[top_of(l)] {
+			bn, _ := engine.doc_find_uid(doc, uid)
+			if bn != nil && boxes_overlap(lb, engine.node_page_box(bn)) {
+				append(&out, Diagram_Issue{lu, "label-overlap", fmt.tprintf("sits on '%s'", engine.node_label(bn))})
+				break
+			}
+		}
+	}
+	// free arrows that touch no box: candidates for connect
+	for &n in doc.nodes {
+		if n.kind != .Path || n.flow != .None || !n.enabled || !n.has_stroke || n.has_fill do continue
+		if !strings.contains(strings.to_lower(n.name, context.temp_allocator), "arrow") do continue
+		if len(n.cmds) < 2 do continue
+		sx, sy := n.w / n.view_box[2], n.h / n.view_box[3]
+		pt :: proc(n: ^engine.Node, p: [2]f32, sx, sy: f32) -> [2]f32 {return {n.x + (p.x - n.view_box[0]) * sx, n.y + (p.y - n.view_box[1]) * sy}}
+		first, last := pt(&n, n.cmds[0].p[2], sx, sy), pt(&n, n.cmds[len(n.cmds) - 1].p[2], sx, sy)
+		touches :: proc(p: [2]f32, box: [4]f32) -> bool {
+			return p.x >= box.x - 3 && p.x <= box.x + box[2] + 3 && p.y >= box.y - 3 && p.y <= box.y + box[3] + 3
+		}
+		near_a, near_b := false, false
+		for uid in boxes[top_of(&n)] {
+			bn, _ := engine.doc_find_uid(doc, uid)
+			if bn == nil do continue
+			box := engine.node_page_box(bn)
+			if touches(first, box) do near_a = true
+			if touches(last, box) do near_b = true
+		}
+		if !near_a || !near_b do append(&out, Diagram_Issue{n.uid, "arrow-unattached", "an arrow drawn as a free path, with an end on no box: connect the two boxes instead (it then follows them)"})
+		else do append(&out, Diagram_Issue{n.uid, "arrow-free", "an arrow drawn as a free path: `connect` the two boxes instead, so it follows them when they move"})
+	}
+	return out[:]
+}

@@ -515,12 +515,14 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		// off whole pixels (set values, not the result of a layout)
 		frac :: proc(v: f32) -> bool {return abs(v - math.round(v)) >= 0.01}
 		off := make([dynamic]string, context.temp_allocator)
-		// x and y mean nothing inside a flex layout
-		placed := !engine.in_flow(doc, &n)
+		// x and y mean nothing inside a flex layout; connectors, their labels and shape
+		// outlines are placed and sized by the app
+		computed := n.flow == .Connector || n.flow == .Label || engine.is_shape_outline(&n)
+		placed := !engine.in_flow(doc, &n) && !computed
 		if placed && engine.prop_index(&n, "x") >= 0 && frac(n.pos.x) do append(&off, fmt.tprintf("x %s", engine.num_text(n.pos.x)))
 		if placed && engine.prop_index(&n, "y") >= 0 && frac(n.pos.y) do append(&off, fmt.tprintf("y %s", engine.num_text(n.pos.y)))
-		if n.width.mode == .Fixed && n.width.has_value && frac(n.width.value) && n.kind != .Path do append(&off, fmt.tprintf("width %s", engine.num_text(n.width.value)))
-		if n.height.mode == .Fixed && n.height.has_value && frac(n.height.value) && n.kind != .Path do append(&off, fmt.tprintf("height %s", engine.num_text(n.height.value)))
+		if !computed && n.width.mode == .Fixed && n.width.has_value && frac(n.width.value) && n.kind != .Path do append(&off, fmt.tprintf("width %s", engine.num_text(n.width.value)))
+		if !computed && n.height.mode == .Fixed && n.height.has_value && frac(n.height.value) && n.kind != .Path do append(&off, fmt.tprintf("height %s", engine.num_text(n.height.value)))
 		if len(off) > 0 do issue(b, &count, limit, &n, "fractional", fmt.tprintf("not on whole pixels: %s", strings.join(off[:], ", ", context.temp_allocator)))
 	}
 	// text drawn inside instances (a component's or a library's text, or an override) uses
@@ -543,6 +545,11 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	for fam in missing_order {
 		m := missing[fam]
 		issue(b, &count, limit, m.first, "missing-font", fmt.tprintf("font \"%s\" (used by %d text layers, those inside instances included) %s", fam, m.count, engine.font_state(fam)))
+	}
+	// diagrams: connectors through boxes, overlapping connectors and labels, free arrows
+	for d in diagram_issues() {
+		n, _ := engine.doc_find_uid(doc, d.uid)
+		if n != nil && in_scope(doc, n, scope) do issue(b, &count, limit, n, d.rule, d.msg)
 	}
 	fmt.sbprintf(b, `],"count":%d}}`, count)
 	return ""

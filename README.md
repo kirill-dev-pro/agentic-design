@@ -200,7 +200,7 @@ where they say, without a panel.
 `get_guide` (what the document holds and how its parts are named; the place to start),
 `batch` (several edits as one undo step, all or nothing), `find_nodes`, `rename_references`
 (repoint variables and refs; with `library`, move a file onto an imported library), `lint` (`metadata.lintIgnore` on a layer or `ignore` per call skips rules; hard-coded
-colours, missing fonts, text that does not fit, layers cut off, broken refs, off-pixel values),
+colours, missing fonts, text that does not fit, layers cut off, broken refs, off-pixel values; connectors through boxes or along each other, labels on labels, free arrows),
 `get_document` (with `ids` for subtrees and `depth` for big files), `get_selection`,
 `get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
 (`.pen` nodes, nested `children`; answers each layer's bounds after layout, as `update_nodes` does; an instance as `parent_id` takes slot content; an image paint's `url` may be any local file, copied into `images/`), `update_nodes`, `delete_nodes` (with the connectors attached), `connect` (a connector between two layers that re-routes when they move: sides, orthogonal, straight or curved routing, arrow, open arrow, circle, diamond or bar markers, a label; `create_nodes` also takes `{"type": "frame", "shape": "diamond" | "ellipse" | "capsule", "content"}` for a shape whose text wraps inside it), `reorder`, `select`,
