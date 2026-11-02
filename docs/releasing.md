@@ -87,9 +87,10 @@ ODIN=/path/to/odin tools/release/build.sh        # -> dist/
 `tools/release/build.sh` builds `-o:speed` for macOS 14 (`-minimum-os-version:14.0`), checks
 the MCP tool list, and runs `tools/release/bundle.sh`, which writes the bundle, signs it
 (ad hoc, or `DEVELOPER_ID="Developer ID Application: …"` from the keychain) and packs the
-zip and dmg (`NO_DMG=1` skips the dmg). The icon is `assets/icon/AppIcon.icns`, rendered from
-`assets/icon/icon.svg` by `tools/release/make_icon.sh` (needs Chrome; the `.icns` is
-committed).
+zip and dmg (`NO_DMG=1` skips the dmg). The icon is `assets/icon/AppIcon.icns` (committed),
+built by `tools/release/make_icon.sh` from two transparent 1024 px masters: `icon-1024.png`
+for 64 px and up, and `icon-small-1024.png`, simplified for 16 and 32 px. `icon.svg` is the
+same mark as vector, for the site and docs.
 
 The signing tool:
 
