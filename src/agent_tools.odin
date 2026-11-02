@@ -102,7 +102,9 @@ batch_move :: proc(b: ^strings.Builder, o: json.Object) -> string {
 	n, _ := engine.doc_find(&app.doc, string(o["id"].(json.String) or_else ""))
 	if n == nil do return "move needs an existing id"
 	uid := n.uid
+	moved := false // by parent_id, before or after: then position is not the only move
 	if pv, has := o["parent_id"]; has {
+		moved = true
 		np := 0
 		if pid, is_str := pv.(json.String); is_str && pid != "" {
 			p, _ := engine.doc_find(&app.doc, string(pid))
@@ -118,16 +120,20 @@ batch_move :: proc(b: ^strings.Builder, o: json.Object) -> string {
 		if s == nil do return fmt.tprintf("%s: '%s' not found", key, sid)
 		// in paint order: before = under the sibling, after = over it
 		layer_move(uid, s.uid, 1 if place == 0 else -1)
+		moved = true
 	}
 	if pos, has := o["position"].(json.String); has {
-		if note := arrange_hint({uid}, pos != "back", true); note != "" {
+		note := arrange_hint({uid}, pos != "back", true)
+		if note != "" && !moved {
 			strings.write_string(b, `{"moved":false,"note":`)
 			engine.json_write_string(b, note)
 			strings.write_byte(b, '}')
 			return ""
 		}
-		if pos == "back" do send_to_back(uid)
-		else do engine.doc_bring_to_front(&app.doc, uid)
+		if note == "" {
+			if pos == "back" do send_to_back(uid)
+			else do engine.doc_bring_to_front(&app.doc, uid)
+		}
 	}
 	strings.write_string(b, `{"moved":true}`)
 	return ""
