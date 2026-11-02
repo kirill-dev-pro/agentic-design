@@ -3,7 +3,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"build": "sh scripts/viewer.sh && workerstack build && node build.mjs",
+		"build": "sh scripts/viewer.sh && workerstack wrangler && vite build && node build.mjs",
 		"pages": "node build.mjs",
 		"dev": "workerstack dev",
 		"blueprint": "workerstack blueprint",

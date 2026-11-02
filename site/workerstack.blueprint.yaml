@@ -7,8 +7,8 @@ application:
   scripts:
     build: build
   worker:
-    render: spa
-    main: workerstack/workers/entry
+    render: ssr
+    main: src/server.ts
     compatibilityDate: 2026-11-02
     assets: dist/client
 workerstack:

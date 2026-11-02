@@ -15,6 +15,7 @@ answers `/api/*`.
 | `build.mjs` | `node build.mjs` → `dist/client`: the pages with hashed asset names and the stylesheet inlined, the viewer from `../build/web` under `/view` with the sample design, and `_headers` (hashed names are immutable). Plain files that any static host can serve |
 | `scripts/viewer.sh` | builds the viewer (`../tools/build_web.sh`); where Odin or `wasm-ld` are missing (Bunderhost's build image) it fetches the pinned Odin release and installs `lld` |
 | `src/workerstack.ts`, `src/schema.ts` | the backend: no tables of its own yet, one route (`GET /api/version`) |
+| `src/server.ts`, `vite.config.ts` | the Worker: Cloudflare serves every file of `dist/client` itself; a request no file matches reaches the Worker, which sends `/api/*` to the backend and answers anything else with `404.html` and status 404. The blueprint says `render: ssr` for that (no SPA fallback to the landing page), so Vite builds the Worker with the Cloudflare plugin directly |
 | `migrations/`, `workerstack.blueprint.yaml` | Workerstack's tables and the deployment contract Bunderhost reads (`bun run db:generate`, `bun run blueprint`) |
 
 The repository root has a `package.json` naming `site` as its only workspace, and the
