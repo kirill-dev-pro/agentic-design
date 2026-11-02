@@ -48,6 +48,7 @@ UI :: struct {
 	hover_since:   time.Time,
 	// generic
 	overlay_pass:  bool, // drawing menus/pickers/dialogs: their widgets may take input
+	status_rect:   Rect, // the toast with a "Show in Finder" button, while shown
 	clip:          Rect, // clicks only count inside this area while it is set
 	slider:        string, // key of the slider being dragged
 	scrollbar:     string, // key of the scrollbar being dragged

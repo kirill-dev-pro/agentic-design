@@ -15,7 +15,7 @@ in_rect :: proc(r: Rect, p: [2]f32) -> bool {
 
 handle_input :: proc() {
 	m := app.mouse
-	over_canvas := in_rect(app.canvas, m) && app.tab >= 0
+	over_canvas := in_rect(app.canvas, m) && app.tab >= 0 && !in_rect(ui.status_rect, m) // not on the export toast
 	page := to_page(m)
 
 	// A click anywhere outside a focused field commits it first.

@@ -650,12 +650,9 @@ draw_export_section :: proc(vg: ^nvg.Context, n: ^engine.Node, x, w: f32, y: ^f3
 	divider(vg, x, w, y)
 }
 
-// Writes the node at the given scale and format into ~/Downloads.
+// The selected layer at the given scale and format, where the user saves it.
 export_layer :: proc(n: ^engine.Node, scale: f32, format: engine.Export_Format) {
-	name := engine.css_name(engine.node_label(n))
-	suffix := "" if scale == 1 else fmt.tprintf("@%vx", scale)
-	path := fmt.tprintf("%s/%s%s.%s", downloads_dir(), name, suffix, engine.EXPORT_EXTENSIONS[format])
-	export_request(scale, path, format)
+	export_request(scale, format)
 }
 
 // ---------------------------------------------------------------- field keys

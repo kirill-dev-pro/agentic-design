@@ -145,7 +145,7 @@ use the image tool to place them; they are copied into `images/` next to the doc
 | Cmd R | rename |
 | Cmd ] / Cmd [, ] / [ | one step forward / back, to the front / back (arrows reorder inside flex) |
 | Cmd Z / Shift Cmd Z | undo / redo |
-| Cmd N, Cmd W, Shift Cmd E | new file, close tab, export PNG |
+| Cmd N, Cmd W, Shift Cmd E | new file, close tab, export PNG (asks where to save it) |
 | Right click | context menu |
 
 Dragging snaps to the edges and centres of neighbours (hold Ctrl to disable).
@@ -179,7 +179,11 @@ Export (inspector, top right, or the `export_code` tool): PNG, HTML + CSS (one e
 node, variables as custom properties, `[data-theme-mode="dark"]` blocks; every fill and
 gradient, shadow, blur, rotation and flip, written as pen.dev writes them) or React +
 Tailwind (a function per component with props from the overrides, shadcn/ui primitives for
-components named Button, Card, Input, …, `Page.tsx` for the current page).
+components named Button, Card, Input, …, `Page.tsx` for the current page). Exports from the
+window ask where to save: the system save panel with the layer's name, in the folder of the
+last export (at first the document's); several selected layers go into a chosen folder as
+one file each. Agents' exports (`screenshot` with `path`, `export_code` with `dir`) write
+where they say, without a panel.
 
 ## MCP tools
 

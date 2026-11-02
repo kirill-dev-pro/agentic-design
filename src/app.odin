@@ -92,6 +92,7 @@ App :: struct {
 	layers_scroll: f32,
 	status:        string,
 	status_time:   time.Time,
+	status_reveal: string, // the toast's "Show in Finder" target (an export), or ""
 	canvas_bg:     nvg.Color,
 	guides:        [dynamic]Guide, // alignment lines shown while dragging
 	move_roots:    [dynamic]int, // nodes being moved and where they started
@@ -369,6 +370,8 @@ set_status :: proc(format: string, args: ..any) {
 	delete(app.status)
 	app.status = fmt.aprintf(format, ..args)
 	app.status_time = time.now()
+	delete(app.status_reveal)
+	app.status_reveal = ""
 }
 
 update_title :: proc() {

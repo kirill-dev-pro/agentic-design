@@ -322,7 +322,8 @@ everything already resolved: layout modes, sizes, variables, instances.
   - shadcn/ui primitives for components named Button, Card, Input, Badge, …;
   - Tailwind arbitrary values for styles;
   - `Page.tsx` composes the page from instances.
-- **Delivery.** The Export menu writes the files to `~/Downloads/<title>-html|react`. The
+- **Delivery.** The Export menu writes the files to `~/Downloads/<title>-html|react` (since
+  #64 to a folder named in the save panel). The
   `export_code` tool returns their contents and can also write them to a folder.
 
 **Consequences.**
@@ -1498,3 +1499,40 @@ or thicken the coverage. On the live site's captures each was worse than raw cov
 - Remaining: Blink rounds a font's ascent and descent to whole pixels before centring a
   line, so some sizes (13 px) sit a pixel row away from Chrome's; and the app's instances
   of a variable font at in-between weights (500, 600) are a little thinner than Chrome's.
+
+## 64. Exports from the window ask where to save; agents' and test windows' do not
+
+**Problem.** Every export from the window went to `~/Downloads` under a made-up name
+("<file> - <layer>.png"), with only a toast saying so. Users expect the Mac's save panel,
+to choose the name and folder; several layers came out as one image of their bounds.
+
+**Decision.** User-initiated exports (Shift Cmd E, the Export menu, the context menu, the
+inspector's Export section) open the system panel, between frames so no frame is half
+drawn:
+
+- One layer, or the page with nothing selected: `NSSavePanel` with the layer's name (the
+  file's title for the page) plus `@2x` at another scale than 1, and the format's
+  extension. The panel allows the four image extensions with the chosen one first: typing
+  another of them (`.jpg`, `.pdf`) exports in that format, so no format popup is needed.
+- Several selected layers: an open panel choosing a folder (it can create one); each layer
+  is written as `<name>.<ext>`, a repeated name as `<name> 2.<ext>`.
+- HTML + CSS and React + Tailwind: the save panel names the folder the files go into
+  (`<title>-html`).
+- The panel opens in the folder of the last export (`exportFolder` in settings.json), at
+  first the document's folder. Cancel does nothing. After writing, the toast says what was
+  exported and has "Show in Finder" (6 s, kept while the pointer is on it; the canvas does
+  not take its clicks).
+
+Agents' exports (`screenshot` with `path`, `export_code` with `dir`) do not go through
+this and write where they are told. A quiet window never opens a panel: it writes to its
+default folder in `$TMPDIR` (#49), so tests and the fuzzer cannot wait on a modal.
+Copy as PNG and as HTML (Shift Cmd C, Option Cmd C) stay on the clipboard.
+
+**Consequences.**
+
+- In a quiet window, Shift Cmd E with one, several or no layers selected and the Export
+  menu's HTML write their files to `$TMPDIR/agentic-design-downloads` (`<layer>@2x.png`, a
+  file per layer, `agentic-design-html/`) and the socket keeps answering. In a normal
+  window the panel opens and the window waits for it, like the open panels before.
+- While the panel is open the main loop is inside `runModal`: agent requests wait until
+  the user answers it, as with the other system panels, and a quit signal is handled after.

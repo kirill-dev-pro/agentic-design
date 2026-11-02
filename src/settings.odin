@@ -23,6 +23,7 @@ Settings :: struct {
 	smart_guides: bool,
 	agent_cursors: bool, // agents' cursors, flashes and placeholder glow (presence.odin)
 	auto_update:  bool, // check for updates at launch and daily (update.odin)
+	export_dir:   string, // the folder of the last export (export_ui.odin)
 }
 
 settings := Settings {
@@ -55,6 +56,7 @@ settings_load :: proc() {
 	if b, ok := obj["smartGuides"].(json.Boolean); ok do settings.smart_guides = bool(b)
 	if b, ok := obj["agentCursors"].(json.Boolean); ok do settings.agent_cursors = bool(b)
 	if b, ok := obj["autoUpdate"].(json.Boolean); ok do settings.auto_update = bool(b)
+	if s, ok := obj["exportFolder"].(json.String); ok do settings.export_dir = strings.clone(string(s))
 }
 
 // Test windows keep the user's settings as they are.
@@ -63,10 +65,16 @@ settings_save :: proc() {
 	_ = os.make_directory_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update,
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir),
 	)
 	_ = os.write_entire_file(settings_path(), text)
+}
+
+json_quote :: proc(s: string) -> string {
+	b := strings.builder_make(context.temp_allocator)
+	engine.json_write_string(&b, s)
+	return strings.to_string(b)
 }
 
 settings_onboarded :: proc() -> bool {

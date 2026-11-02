@@ -586,9 +586,7 @@ draw_inspector :: proc(vg: ^nvg.Context) {
 	if pick, ok := menu_take("export"); ok {
 		switch pick {
 		case 0: export_request()
-		case 1, 2:
-			if dir, wok := export_code_to_dir(.HTML if pick == 1 else .React); wok do set_status("Exported to %s", dir)
-			else do set_status("Export failed")
+		case 1, 2: export_code_ui(.HTML if pick == 1 else .React)
 		}
 	}
 	y += 46
@@ -1128,13 +1126,34 @@ from_nvg :: proc(c: nvg.Color) -> engine.Color {
 
 // ---------------------------------------------------------------- status
 
+// The toast at the bottom of the canvas: 3 s, or 6 s with "Show in Finder" after an export
+// (kept while the pointer is on it). ui.status_rect tells the canvas not to take its clicks.
 draw_status :: proc(vg: ^nvg.Context) {
-	if app.status == "" || time.duration_seconds(time.since(app.status_time)) >= 3 do return
+	ui.status_rect = {}
+	if app.status == "" do return
+	reveal := app.status_reveal != ""
+	if time.duration_seconds(time.since(app.status_time)) >= (6 if reveal else 3) do return
 	w := text_width(vg, app.status) + 28
+	link := "Show in Finder"
+	lw := text_width(vg, link) + 20
+	if reveal do w += lw + 4
 	r := Rect{app.canvas.x + (app.canvas.w - w) / 2, app.screen.y - 44, w, 28}
 	fill_rect(vg, r, {0.1, 0.1, 0.1, 0.95}, 8)
 	stroke_rect(vg, r, PANEL_LINE, 8)
-	label(vg, r.x + r.w / 2, r.y + r.h / 2, app.status, TEXT_FG, 12, false, .CENTER)
+	if !reveal {
+		label(vg, r.x + r.w / 2, r.y + r.h / 2, app.status, TEXT_FG, 12, false, .CENTER)
+		return
+	}
+	ui.status_rect = r
+	if hovered(r) do app.status_time = time.now() // stays while the pointer is on it
+	label(vg, r.x + 14, r.y + r.h / 2, app.status, TEXT_FG, 12)
+	b := Rect{r.x + r.w - lw - 4, r.y + 4, lw, r.h - 8}
+	if hovered(b) do fill_rect(vg, b, HOVER_BG, 5)
+	label(vg, b.x + b.w / 2, b.y + b.h / 2, link, ACCENT, 12, false, .CENTER)
+	if clicked(b) {
+		reveal_in_finder(app.status_reveal)
+		app.status_time = {}
+	}
 }
 
 // ---------------------------------------------------------------- text fields
@@ -1253,18 +1272,15 @@ field_apply :: proc() {
 export_pending: bool
 
 export_scale: f32 = 2
-export_path: string
 export_format: engine.Export_Format
 copy_png_pending: bool
 
-// Exports the selection (or everything) on the next frame: at `scale`, as `format`, into
-// `path` (default ~/Downloads/<file> - <layer>.<ext>).
-export_request :: proc(scale: f32 = 2, path := "", format := engine.Export_Format.PNG) {
+// Exports the selection (or the whole page) on the next frame, at `scale` as `format`. The
+// user picks where: the save panel for one image, a folder for several layers (decision 64).
+export_request :: proc(scale: f32 = 2, format := engine.Export_Format.PNG) {
 	export_pending = true
 	export_scale = scale
 	export_format = format
-	delete(export_path)
-	export_path = strings.clone(path)
 }
 
 // ⇧⌘C: the selection as a PNG (2×) on the clipboard. Runs between frames.
@@ -1283,39 +1299,95 @@ copy_png_render :: proc() {
 	set_status("Copied as PNG (%d × %d)", w, h)
 }
 
-// Writes the selection (or everything) as a PNG into ~/Downloads. Runs between frames.
-export_render :: proc() {
-	if !export_pending do return
-	export_pending = false
-	uids := app.sel[:] if len(app.sel) > 0 else all_uids(true)
+// The layers `uids` as one image: a single layer by its own bounds, several (the whole
+// page) by their union with a 20-unit margin.
+export_encode :: proc(uids: []int, scale: f32, format: engine.Export_Format) -> ([]u8, bool) {
 	r, ok := bounds_of(uids)
-	if !ok {
-		set_status("Nothing to export")
-		return
-	}
+	if !ok do return nil, false
 	target: ^engine.Node
 	if len(uids) == 1 do target, _ = engine.doc_find_uid(&app.doc, uids[0])
 	pad: f32 = 0 if target != nil else 20
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
-	pixels, w, h, rok := render_region(r, export_scale, target, {1, 1, 1, 1})
-	if !rok {
+	pixels, w, h, rok := render_region(r, scale, target, {1, 1, 1, 1})
+	if !rok do return nil, false
+	return engine.encode_image(pixels, w, h, format, scale)
+}
+
+// "Hero@2x" for a layer named Hero at 2×.
+export_file_stem :: proc(label: string, scale: f32) -> string {
+	suffix := "" if scale == 1 else fmt.tprintf("@%vx", scale)
+	return fmt.tprintf("%s%s", file_safe_name(label), suffix)
+}
+
+// Writes the export asked for with export_request. Runs between frames, so the modal panel
+// does not stop a frame half drawn.
+export_render :: proc() {
+	if !export_pending do return
+	export_pending = false
+	ext := engine.EXPORT_EXTENSIONS[export_format]
+	if len(app.sel) > 1 {
+		// several layers: a folder, one file per layer named after it
+		dir, ok := ask_folder()
+		if !ok do return
+		uids := slice.clone(app.sel[:], context.temp_allocator)
+		used := make(map[string]bool, allocator = context.temp_allocator)
+		written := 0
+		for uid in uids {
+			n, _ := engine.doc_find_uid(&app.doc, uid)
+			if n == nil do continue
+			stem := export_file_stem(engine.node_label(n), export_scale)
+			name := fmt.tprintf("%s.%s", stem, ext)
+			for i := 2; used[strings.to_lower(name, context.temp_allocator)]; i += 1 do name = fmt.tprintf("%s %d.%s", stem, i, ext)
+			used[strings.to_lower(name, context.temp_allocator)] = true
+			data, eok := export_encode({uid}, export_scale, export_format)
+			if !eok do continue
+			if os.write_entire_file(fmt.tprintf("%s/%s", dir, name), data) == nil do written += 1
+		}
+		if written == 0 {
+			set_status("Export failed")
+			return
+		}
+		remember_export_dir(dir)
+		export_done(fmt.tprintf("Exported %d of %d layers to %s", written, len(uids), os.base(dir)), dir)
+		return
+	}
+	uids := app.sel[:] if len(app.sel) > 0 else all_uids(true)
+	if len(uids) == 0 {
+		set_status("Nothing to export")
+		return
+	}
+	label := engine.file_title(app.file_path)
+	if len(uids) == 1 {
+		if n, _ := engine.doc_find_uid(&app.doc, uids[0]); n != nil do label = engine.node_label(n)
+	}
+	// the chosen format first: the panel adds its extension; typing another one of these
+	// exports in that format
+	types := make([dynamic]string, context.temp_allocator)
+	append(&types, ext)
+	for f in engine.Export_Format do if f != export_format do append(&types, engine.EXPORT_EXTENSIONS[f])
+	if export_format == .JPEG do append(&types, "jpeg")
+	path, ok := ask_save_path(export_file_stem(label, export_scale), types[:])
+	if !ok do return
+	format := export_format
+	if f, fok := engine.export_format_from(strings.trim_prefix(filepath_ext(path), ".")); fok do format = f
+	data, eok := export_encode(uids, export_scale, format)
+	if !eok {
 		set_status("Export failed")
 		return
 	}
-	png, pok := engine.encode_image(pixels, w, h, export_format, export_scale)
-	if !pok {
-		set_status("Export failed")
-		return
-	}
-	name := engine.file_title(app.file_path)
-	if target != nil do name = fmt.tprintf("%s - %s", name, engine.node_label(target))
-	path := fmt.tprintf("%s/%s.%s", downloads_dir(), name, engine.EXPORT_EXTENSIONS[export_format])
-	if export_path != "" do path = export_path
-	if err := os.write_entire_file(path, png); err != nil {
+	if err := os.write_entire_file(path, data); err != nil {
 		set_status("Export failed: %v", err)
 		return
 	}
-	set_status("Exported %s", os.base(path))
+	remember_export_dir(os.dir(path))
+	export_done(fmt.tprintf("Exported %s", os.base(path)), path)
+}
+
+// ".png" of "a/b.png", "" without one.
+filepath_ext :: proc(path: string) -> string {
+	base := os.base(path)
+	if i := strings.last_index_byte(base, '.'); i > 0 do return base[i:]
+	return ""
 }
 
 // Dragging a layer in the tree: above or below a row moves it next to that layer, the
