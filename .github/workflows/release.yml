@@ -108,8 +108,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # "Latest" (what installed copies read) only for the highest version: a release
+          # whose runner came late must not take it from a newer one
+          LATEST=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || echo v0.0.0)
+          HIGHEST=$(printf '%s\n%s\n' "${LATEST#v}" "$VERSION" | sort -V | tail -n 1)
+          if [ "$HIGHEST" = "$VERSION" ]; then MARK=--latest; else MARK=--latest=false; echo "$LATEST stays Latest"; fi
           gh release create "$GITHUB_REF_NAME" \
             "dist/Agentic-Design-$VERSION-arm64.dmg" \
             "dist/Agentic-Design-$VERSION-arm64.zip" \
             dist/latest.json dist/latest.json.sig dist/SHA256SUMS \
-            --title "Agentic Design $VERSION" --notes-file "$NOTES"
+            --title "Agentic Design $VERSION" --notes-file "$NOTES" $MARK
