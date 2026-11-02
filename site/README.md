@@ -1,7 +1,7 @@
 # agentic-design.kcrz.dev
 
-The website: the landing page, the browser viewer at `/view`, and an API under `/api` that
-is empty for now (sharing, accounts and the web editor will use it). It is a
+The website: the landing page, the browser viewer at `/view`, and an API under `/api`
+(accounts, shared files and share links; later cloud documents). It is a
 [Workerstack](https://github.com/kirill-dev-pro/workerstack) app on Cloudflare Workers,
 hosted by Bunderhost: the pages and the viewer are the Worker's static assets, the Worker
 answers `/api/*`.
@@ -14,7 +14,9 @@ answers `/api/*`.
 | `pages/img/og.png` | the Open Graph card: the app icon on cream, 1200 × 630, from the icon set |
 | `build.mjs` | `node build.mjs` → `dist/client`: the pages with hashed asset names and the stylesheet inlined, the viewer from `../build/web` under `/view` with the sample design, and `_headers` (hashed names are immutable). Plain files that any static host can serve |
 | `scripts/viewer.sh` | builds the viewer (`../tools/build_web.sh`); where Odin or `wasm-ld` are missing (Bunderhost's build image) it fetches the pinned Odin release and installs `lld` |
-| `src/workerstack.ts`, `src/schema.ts` | the backend: no tables of its own yet, one route (`GET /api/version`) |
+| `src/workerstack.ts`, `src/schema.ts` | the backend: accounts (Better Auth, personal workspaces with a plan), shared files and links under `/api` ([docs/cloud-design.md](../docs/cloud-design.md)) |
+| `src/server.ts` | the Worker entry: share pages (`/s/:token`, `/embed/:token`), a shared version's files (`/c/…`), uploads through the Worker (`/api/blobs/…`), then the backend, else 404 |
+| `src/files.ts`, `src/share.ts`, `src/blobs.ts`, `src/plans.ts`, `src/workspaces.ts`, `src/crypto.ts`, `src/zip.ts` | uploads and links; what a link opens; content-addressed blobs; plans and entitlements; workspaces; tokens and tickets; the download zip |
 | `src/server.ts`, `vite.config.ts` | the Worker: Cloudflare serves every file of `dist/client` itself; a request no file matches reaches the Worker, which sends `/api/*` to the backend and answers anything else with `404.html` and status 404. The blueprint says `render: ssr` for that (no SPA fallback to the landing page), so Vite builds the Worker with the Cloudflare plugin directly |
 | `migrations/`, `workerstack.blueprint.yaml` | Workerstack's tables and the deployment contract Bunderhost reads (`bun run db:generate`, `bun run blueprint`) |
 
