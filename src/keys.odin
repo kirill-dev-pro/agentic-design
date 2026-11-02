@@ -58,3 +58,12 @@ KEY_Z :: 90
 MOUSE_BUTTON_LEFT :: 0
 MOUSE_BUTTON_MIDDLE :: 2
 MOUSE_BUTTON_RIGHT :: 1
+
+// the highest key number GLFW gives (platform.odin's per-key arrays are larger)
+KEY_LAST :: 348
+
+// modifier bits, as GLFW passes them with a key
+MOD_SHIFT :: 0x0001
+MOD_CONTROL :: 0x0002
+MOD_ALT :: 0x0004
+MOD_SUPER :: 0x0008

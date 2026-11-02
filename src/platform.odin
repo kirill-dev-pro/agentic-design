@@ -20,6 +20,7 @@ Cursor :: enum {
 }
 
 MAX_KEYS :: 400
+#assert(MAX_KEYS > KEY_LAST)
 MAX_BUTTONS :: 8
 
 Platform :: struct {
