@@ -555,34 +555,6 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	return ""
 }
 
-lint_skip_rules: []string // rules a lint call was told to ignore
-
-// Whether a rule is switched off for a layer: by the call's `ignore`, or by
-// `"metadata": {"lintIgnore": true | ["rule", ...]}` on the layer or an ancestor
-// (artwork, a PDF preview, a brand colour). metadata is a .pen field, kept by pen.dev.
-lint_ignored :: proc(n: ^engine.Node, rule: string) -> bool {
-	if slice.contains(lint_skip_rules, rule) do return true
-	cur := n
-	for depth := 0; cur != nil && depth < engine.MAX_DEPTH; depth += 1 {
-		if i := engine.prop_index(cur, "metadata"); i >= 0 && strings.contains(cur.props[i].raw, "lintIgnore") {
-			if v, err := json.parse_string(cur.props[i].raw, .JSON5, false, context.temp_allocator); err == nil {
-				if obj, ok := v.(json.Object); ok {
-					#partial switch x in obj["lintIgnore"] {
-					case json.Boolean:
-						if x do return true
-					case json.String:
-						if string(x) == rule do return true
-					case json.Array:
-						for r in x do if string(r.(json.String) or_else "") == rule do return true
-					}
-				}
-			}
-		}
-		cur, _ = engine.doc_find_uid(&app.doc, cur.parent)
-	}
-	return false
-}
-
 // ---------------------------------------------------------------- rename_references
 
 // Points references at other names in every layer and variable: variables ("$old" →
@@ -681,7 +653,6 @@ api_rename_references :: proc(b: ^strings.Builder, params: json.Object) -> strin
 	fmt.sbprintf(b, `{{"layers":%d,"variables":%d}}`, layers, r.changes - before if r.changes > before else 0)
 	return ""
 }
-
 
 // Whether a variable has the same value under every theme (no themed entries that
 // differ, references followed).
