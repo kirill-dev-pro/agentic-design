@@ -2002,3 +2002,22 @@ static: sharing, accounts and an API for the web editor are coming.
 - `Dockerfile.bunderhost`, the Caddyfile and the Bunderstack blueprint are gone. The build
   output stays a plain folder, so moving to another static host is a copy.
 
+## 79. The website answers unknown paths with a 404 (updates #78)
+
+**Problem.** In Workerstack's `spa` mode every path without a file got the landing page
+with status 200. Search engines treat that as a soft 404, and the site's search ranking
+matters.
+
+**Decision.** The blueprint says `render: ssr`, whose asset handling is `none`: Cloudflare
+serves every file of `site/dist/client` itself, and a path no file matches reaches the
+Worker. `site/src/server.ts` is the Worker's entry: `/api/*` goes to the Workerstack
+backend (created with `createWorker`, whose Durable Object classes it re-exports), and
+anything else is answered with `404.html` and status 404. `site/vite.config.ts` builds it
+with the Cloudflare Vite plugin directly, because `workerstack()`'s plugin expects TanStack
+Start in `ssr` mode. `/view` and, later, `/edit` are folders of their own with an
+`index.html`, so they stay entry points.
+
+**Consequences.** `/nope` answers 404 with the site's 404 page; `/`, `/view/`, its
+files and `/api/version` are unchanged. A future TanStack Start or Workerstack upgrade has
+to keep this entry (or a 404-page mode, if Workerstack gains one).
+
