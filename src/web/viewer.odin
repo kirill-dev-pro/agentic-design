@@ -25,8 +25,10 @@ foreign page {
 	// fetches the files (one path per line), hands each to viewer_file (one that is
 	// missing as empty) and then calls viewer_files_done
 	page_fetch :: proc(paths: string) ---
-	// what the page's bar shows: {"title", "pages": [names], "page", "themes": [{"name",
-	// "values", "value"}], "zoom", "draw_ms", "missing": [paths]}
+	// what the page shows: {"title", "pages": [names], "page", "themes": [{"name",
+	// "values", "value"}], "zoom", "draw_ms", "missing": [paths], "frames": [{"uid",
+	// "name"}] (the page's top-level layers), "sel": {"uid", "id", "name", "type", "x",
+	// "y", "w", "h", "component"} or null, "fonts": [{"family", "missing"}]}
 	page_info :: proc(json: string) ---
 	page_error :: proc(message: string) ---
 }
@@ -51,7 +53,10 @@ V: struct {
 	size:        [2]f32, // the canvas in CSS pixels
 	dpr:         f32,
 	draw_ms:     f64, // the last frame's layout and drawing (CPU; the GPU runs after)
+	sel:         int, // the selected layer's uid, 0 for none
 }
+
+SEL_COLOR :: nvg.Color{0.05, 0.60, 1.00, 1} // the app's ACCENT
 
 main :: proc() {
 	V.zoom = 1
@@ -132,6 +137,7 @@ load :: proc() {
 	engine.layout_invalidate()
 	V.loaded = true
 	V.page = 0
+	V.sel = 0
 	V.fit_pending = true
 	V.auto_fit = true
 	V.redraw = true
@@ -182,39 +188,98 @@ fit :: proc() {
 
 draw :: proc(fb: [2]i32) {
 	vg := V.vg
-	z := V.zoom
-	if V.loaded {
-		engine.blur_prepare({xf = {z, 0, 0, z, -V.cam.x * z, -V.cam.y * z}, dpr = V.dpr, clip = {0, 0, V.size.x, V.size.y}, fb = {fb.x, fb.y}, bg = CANVAS_BG, order = V.order[:]})
-	}
 	engine.gpu_window_begin(fb.x, fb.y, CANVAS_BG)
 	nvg.BeginFrame(vg, V.size.x, V.size.y, V.dpr)
 	if V.loaded {
-		nvg.Save(vg)
-		nvg.Scale(vg, z, z)
-		nvg.Translate(vg, -V.cam.x, -V.cam.y)
-		engine.cull_rect = {V.cam.x, V.cam.y, V.size.x / z, V.size.y / z}
-		engine.blur_active = true
-		engine.lod_scale = z
-		for cu in engine.children_of(&V.doc, 0) {
-			if V.hidden[cu] do continue
-			if n, _ := engine.doc_find_uid(&V.doc, cu); n != nil do engine.draw_node_tree(vg, n, 1, 0)
-		}
-		engine.lod_scale = 0
-		engine.blur_active = false
-		engine.cull_rect = {}
-		nvg.Restore(vg)
+		draw_scene(V.cam, V.zoom, V.size, V.dpr, fb, CANVAS_BG, true)
 		// the names of the top-level frames, as on the app's canvas
+		z := V.zoom
 		nvg.FontFace(vg, "sans")
 		nvg.FontSize(vg, 12)
 		nvg.TextAlign(vg, .LEFT, .BOTTOM)
 		nvg.FillColor(vg, {1, 1, 1, 0.45})
 		for &n in V.doc.nodes {
 			if n.parent != 0 || !n.enabled || V.hidden[n.uid] || !(n.kind == .Frame || n.kind == .Group) do continue
+			nvg.FillColor(vg, SEL_COLOR if n.uid == V.sel else nvg.Color{1, 1, 1, 0.45})
 			nvg.Text(vg, (n.x - V.cam.x) * z, (n.y - V.cam.y) * z - 7, engine.node_label(&n))
 		}
+		draw_selection()
 	}
 	nvg.EndFrame(vg)
 	engine.gpu_present()
+}
+
+// The page's layers seen from `cam` at `zoom` in a `size` (CSS pixels) area. Call inside
+// a NanoVG frame; `visible` culls what is outside the area (off for exports).
+draw_scene :: proc(cam: [2]f32, z: f32, size: [2]f32, dpr: f32, fb: [2]i32, bg: nvg.Color, visible: bool) {
+	vg := V.vg
+	engine.blur_prepare({xf = {z, 0, 0, z, -cam.x * z, -cam.y * z}, dpr = dpr, clip = {0, 0, size.x, size.y}, fb = {fb.x, fb.y}, bg = bg, order = V.order[:]})
+	nvg.Save(vg)
+	nvg.Scale(vg, z, z)
+	nvg.Translate(vg, -cam.x, -cam.y)
+	engine.cull_rect = {cam.x, cam.y, size.x / z, size.y / z} if visible else {}
+	engine.blur_active = true
+	engine.lod_scale = z
+	for cu in engine.children_of(&V.doc, 0) {
+		if V.hidden[cu] do continue
+		if n, _ := engine.doc_find_uid(&V.doc, cu); n != nil do engine.draw_node_tree(vg, n, 1, 0)
+	}
+	engine.lod_scale = 0
+	engine.blur_active = false
+	engine.cull_rect = {}
+	nvg.Restore(vg)
+}
+
+// The selected layer's outline, as drawn (turned layers too), and its size below it.
+draw_selection :: proc() {
+	if V.sel == 0 do return
+	n, _ := engine.doc_find_uid(&V.doc, V.sel)
+	if n == nil {
+		V.sel = 0
+		return
+	}
+	vg := V.vg
+	c, _ := engine.node_corners(n)
+	screen :: proc(p: [2]f32) -> [2]f32 {return (p - V.cam) * V.zoom}
+	nvg.BeginPath(vg)
+	p0 := screen(c[0])
+	nvg.MoveTo(vg, p0.x, p0.y)
+	for p in c[1:] {
+		q := screen(p)
+		nvg.LineTo(vg, q.x, q.y)
+	}
+	nvg.ClosePath(vg)
+	nvg.StrokeColor(vg, SEL_COLOR)
+	nvg.StrokeWidth(vg, 1.5)
+	nvg.Stroke(vg)
+	// "W × H" in a pill under the layer
+	lo := [2]f32{math.F32_MAX, math.F32_MAX}
+	hi := [2]f32{-math.F32_MAX, -math.F32_MAX}
+	for p in c {
+		q := screen(p)
+		lo = {min(lo.x, q.x), min(lo.y, q.y)}
+		hi = {max(hi.x, q.x), max(hi.y, q.y)}
+	}
+	label := fmt.tprintf("%s × %s", num(n.w), num(n.h))
+	nvg.FontFace(vg, "sans")
+	nvg.FontSize(vg, 11)
+	tw := nvg.TextBounds(vg, 0, 0, label, nil)
+	w := tw + 12
+	x := (lo.x + hi.x) / 2 - w / 2
+	y := hi.y + 6
+	nvg.BeginPath(vg)
+	nvg.RoundedRect(vg, x, y, w, 18, 4)
+	nvg.FillColor(vg, SEL_COLOR)
+	nvg.Fill(vg)
+	nvg.FillColor(vg, {1, 1, 1, 1})
+	nvg.TextAlign(vg, .CENTER, .MIDDLE)
+	nvg.Text(vg, x + w / 2, y + 9.5, label)
+}
+
+// A size as the app's inspector shows it: whole numbers plain, others to two decimals.
+num :: proc(v: f32) -> string {
+	if abs(v - math.round(v)) < 0.005 do return fmt.tprintf("%d", int(math.round(v)))
+	return fmt.tprintf("%.2f", v)
 }
 
 // Tells the page what its bar shows.
@@ -247,8 +312,88 @@ report :: proc() {
 		if i > 0 do strings.write_byte(&b, ',')
 		engine.json_write_string(&b, p)
 	}
+	strings.write_string(&b, `],"frames":[`)
+	k := 0
+	if V.loaded do for cu in engine.children_of(&V.doc, 0) {
+		if V.hidden[cu] do continue
+		n, _ := engine.doc_find_uid(&V.doc, cu)
+		if n == nil || !n.enabled do continue
+		if k > 0 do strings.write_byte(&b, ',')
+		k += 1
+		fmt.sbprintf(&b, `{{"uid":%d,"name":`, n.uid)
+		engine.json_write_string(&b, engine.node_label(n))
+		strings.write_byte(&b, '}')
+	}
+	strings.write_string(&b, `],"sel":`)
+	n: ^engine.Node
+	if V.loaded && V.sel != 0 do n, _ = engine.doc_find_uid(&V.doc, V.sel)
+	if n == nil {
+		strings.write_string(&b, "null")
+	} else {
+		fmt.sbprintf(&b, `{{"uid":%d,"id":`, n.uid)
+		engine.json_write_string(&b, n.id)
+		strings.write_string(&b, `,"name":`)
+		engine.json_write_string(&b, engine.node_label(n))
+		strings.write_string(&b, `,"type":`)
+		engine.json_write_string(&b, engine.KIND_LABELS[n.kind] if n.kind != .Other else n.type_name)
+		fmt.sbprintf(&b, `,"x":%s,"y":%s,"w":%s,"h":%s,"component":`, num(n.x), num(n.y), num(n.w), num(n.h))
+		comp: ^engine.Node
+		if n.kind == .Ref do comp, _ = engine.doc_find(&V.doc, n.ref)
+		if comp != nil do engine.json_write_string(&b, engine.node_label(comp))
+		else do strings.write_string(&b, "null")
+		strings.write_byte(&b, '}')
+	}
+	// the families text is set in, and whether each is drawn with a stand-in
+	strings.write_string(&b, `,"fonts":[`)
+	if V.loaded {
+		seen := make(map[string]bool, 16, context.temp_allocator)
+		for &t in V.doc.nodes {
+			if t.kind != .Text || t.font_family == "" || V.hidden[top_of(t.uid)] do continue
+			key := strings.to_lower(t.font_family, context.temp_allocator)
+			if key in seen do continue
+			seen[key] = true
+			if len(seen) > 1 do strings.write_byte(&b, ',')
+			strings.write_string(&b, `{"family":`)
+			engine.json_write_string(&b, t.font_family)
+			fmt.sbprintf(&b, `,"missing":%v}}`, engine.font_source(t.font_family) == .Missing)
+		}
+	}
 	strings.write_string(&b, "]}")
 	page_info(strings.to_string(b))
+}
+
+// The top-level layer a layer is in.
+top_of :: proc(uid: int) -> int {
+	cur := uid
+	for _ in 0 ..< engine.MAX_DEPTH {
+		n, _ := engine.doc_find_uid(&V.doc, cur)
+		if n == nil || n.parent == 0 do return cur
+		cur = n.parent
+	}
+	return cur
+}
+
+// The deepest layer under the page point, children before their container.
+hit_test :: proc(p: [2]f32) -> int {
+	// the names above top-level frames pick the frame
+	for &n in V.doc.nodes {
+		if n.parent != 0 || !n.enabled || V.hidden[n.uid] || !(n.kind == .Frame || n.kind == .Group) do continue
+		if p.x >= n.x && p.x <= n.x + 160 / V.zoom && p.y >= n.y - 18 / V.zoom && p.y < n.y do return n.uid
+	}
+	slop := 2 / V.zoom
+	#reverse for uid in V.order {
+		n, _ := engine.doc_find_uid(&V.doc, uid)
+		if n == nil do continue
+		q := p
+		if m, tr := engine.node_transform(n); tr do q = engine.xform_point(engine.xform_inverse(m), q)
+		if q.x < n.x - slop || q.y < n.y - slop || q.x > n.x + n.w + slop || q.y > n.y + n.h + slop do continue
+		if n.kind == .Ellipse {
+			d := (q - [2]f32{n.x + n.w / 2, n.y + n.h / 2}) / [2]f32{n.w / 2 + slop, n.h / 2 + slop}
+			if d.x * d.x + d.y * d.y > 1 do continue
+		}
+		return uid
+	}
+	return 0
 }
 
 // ---------------------------------------------------------------- called by the page
@@ -298,6 +443,8 @@ viewer_open :: proc "contextless" (path: [^]u8, path_len: int) {
 	delete(V.path)
 	V.path = strings.clone(string(path[:path_len]))
 	free(path)
+	for m in V.missing do delete(m)
+	clear(&V.missing)
 	V.loaded = false
 	load()
 	V.redraw = true
@@ -360,4 +507,130 @@ viewer_set_page :: proc "contextless" (i: int) {
 	V.fit_pending = true
 	V.auto_fit = true
 	V.redraw = true
+}
+
+// Selects the layer under the canvas point (x, y), in CSS pixels. mode 0: a click, as in the
+// app (the layer next to the selected one, or a top-level frame's child); 1: a double
+// click, one level into the selection; 2: the deepest layer (⌘ or Ctrl).
+@(export)
+viewer_pick :: proc "contextless" (x, y: f32, mode: int) {
+	context = ctx()
+	V.redraw = true
+	if !V.loaded do return
+	hit := hit_test(V.cam + [2]f32{x, y} / V.zoom)
+	if hit == 0 || mode == 2 {
+		V.sel = hit
+		return
+	}
+	chain := make([dynamic]int, context.temp_allocator) // the hit, its parent, ... the top
+	for cur := hit; cur != 0 && len(chain) < engine.MAX_DEPTH; {
+		append(&chain, cur)
+		n, _ := engine.doc_find_uid(&V.doc, cur)
+		if n == nil do break
+		cur = n.parent
+	}
+	for uid, i in chain {
+		if uid != V.sel do continue
+		// a double click goes one level in; a click keeps what is selected
+		V.sel = chain[i - 1] if mode == 1 && i > 0 else uid
+		return
+	}
+	if V.sel != 0 {
+		if sn, _ := engine.doc_find_uid(&V.doc, V.sel); sn != nil && sn.parent != 0 {
+			for uid in chain {
+				if n, _ := engine.doc_find_uid(&V.doc, uid); n != nil && n.parent == sn.parent {
+					V.sel = uid
+					return
+				}
+			}
+		}
+	}
+	if len(chain) >= 2 {
+		if top, _ := engine.doc_find_uid(&V.doc, chain[len(chain) - 1]); top != nil && top.kind == .Frame && mode == 0 {
+			V.sel = chain[len(chain) - 2]
+			return
+		}
+	}
+	V.sel = chain[len(chain) - 1]
+}
+
+// Selects a layer by uid (0: none).
+@(export)
+viewer_select :: proc "contextless" (uid: int) {
+	V.sel = uid
+	V.redraw = true
+}
+
+// Selects the parent of the selection (Shift Enter in the app).
+@(export)
+viewer_select_parent :: proc "contextless" () {
+	context = ctx()
+	if n, _ := engine.doc_find_uid(&V.doc, V.sel); n != nil do V.sel = n.parent
+	V.redraw = true
+}
+
+// Zooms to a layer (0: the selection; nothing selected: fits the page).
+@(export)
+viewer_zoom_to :: proc "contextless" (uid: int) {
+	context = ctx()
+	id := uid if uid != 0 else V.sel
+	n, _ := engine.doc_find_uid(&V.doc, id)
+	if n == nil || V.size.x <= 0 {
+		V.fit_pending = true
+		V.auto_fit = true
+		V.redraw = true
+		return
+	}
+	b := engine.node_page_box(n)
+	pad: f32 = 48
+	V.zoom = clamp(min((V.size.x - pad * 2) / max(b[2], 1), (V.size.y - pad * 2) / max(b[3], 1)), 0.02, 8)
+	V.cam = [2]f32{b[0] + b[2] / 2, b[1] + b[3] / 2} - V.size / (2 * V.zoom)
+	V.auto_fit = false
+	V.redraw = true
+}
+
+// Draws a layer (uid; 0: every layer of the page) at `scale` into the canvas, sized to
+// it, for the page to copy before this task ends; the next frame draws the view again.
+// Returns the picture's size, width << 16 | height, or 0 if there is nothing to draw.
+@(export)
+viewer_export :: proc "contextless" (uid: int, scale: f32) -> i32 {
+	context = ctx()
+	if !V.loaded || V.vg == nil do return 0
+	box: [4]f32
+	if uid != 0 {
+		n, _ := engine.doc_find_uid(&V.doc, uid)
+		if n == nil do return 0
+		box = engine.node_page_box(n)
+	} else {
+		lo := [2]f32{math.F32_MAX, math.F32_MAX}
+		hi := [2]f32{-math.F32_MAX, -math.F32_MAX}
+		found := false
+		for &n in V.doc.nodes {
+			if n.parent != 0 || V.hidden[n.uid] || !n.enabled do continue
+			b := engine.node_page_box(&n)
+			lo = {min(lo.x, b[0]), min(lo.y, b[1])}
+			hi = {max(hi.x, b[0] + b[2]), max(hi.y, b[1] + b[3])}
+			found = true
+		}
+		if !found do return 0
+		pad: f32 = 40 // the page around its layers, as the app's canvas export
+		box = {lo.x - pad, lo.y - pad, hi.x - lo.x + 2 * pad, hi.y - lo.y + 2 * pad}
+	}
+	// whole pixels, at most the GPU's texture size
+	z := scale
+	limit := f32(engine.gpu_max_side())
+	if box[2] * z > limit do z = limit / box[2]
+	if box[3] * z > limit do z = min(z, limit / box[3])
+	fb := [2]i32{max(i32(math.ceil(box[2] * z)), 1), max(i32(math.ceil(box[3] * z)), 1)}
+	size := [2]f32{f32(fb.x), f32(fb.y)}
+	vg := V.vg
+	bg := CANVAS_BG if uid == 0 else nvg.Color{1, 1, 1, 1}
+	engine.gpu_window_begin(fb.x, fb.y, bg)
+	nvg.BeginFrame(vg, size.x, size.y, 1)
+	draw_scene({box[0], box[1]}, z, size, 1, fb, bg, false)
+	nvg.EndFrame(vg)
+	engine.gpu_present()
+	V.size = {} // the next step sizes the canvas back and draws the view
+	V.redraw = true
+	return fb.x << 16 | fb.y
 }

@@ -1,28 +1,64 @@
 "use strict";
 
-// The page around the .pen viewer (src/web/viewer.odin): it runs the WebAssembly, fetches
-// the files the engine asks for (by URL path on this server, or from files the user
-// dropped or opened), and turns pointer, wheel and keys into pan and zoom.
+// The page around the .pen viewer (src/web/viewer.odin): it runs the WebAssembly, hands
+// the engine the files it asks for and turns pointer, wheel and keys into pan, zoom and
+// selection.
+//
+// Where files come from:
+// - files the user dropped or picked: kept in this page (nothing is uploaded), under
+//   /local/<n>/ with their folders, so a document finds its images, fonts and libraries
+//   next to it as on disk; a file that is not where the document says is matched by name;
+// - ?file=/path: a document on this server;
+// - ?url=https://...: a public document elsewhere, fetched by the browser (its server must
+//   allow it: CORS); the engine sees it as /~url/https/host/path, so relative paths in it
+//   resolve as they would on that server.
 
 (async function () {
-	const canvas = document.getElementById("canvas");
-	const message = document.getElementById("message");
-	const title = document.getElementById("title");
-	const pages = document.getElementById("pages");
-	const zoom = document.getElementById("zoom");
-	const missing = document.getElementById("missing");
-	const themes = document.getElementById("themes");
+	const $ = (id) => document.getElementById(id);
+	const canvas = $("canvas");
+	const body = document.body;
+	const SAMPLE = "samples/agentic-design/agentic-design.pen";
 
-	const mem = new odin.WasmMemoryInterface();
 	const encoder = new TextEncoder();
-	const local = new Map(); // "/local/..." -> bytes of a file the user dropped or opened
-	let ex = null;
+	const local = new Map(); // "/local/<n>/a/b.pen" -> bytes of a file the user gave
+	let session = 0; // <n> above: a new one for every drop (the engine keeps a file once)
+	let ex = null; // the module's exports
+	let mem = null;
+	let docPath = ""; // the open document's path, as the engine knows it
+	let info = null; // the last page_info
+	const failed = new Map(); // path -> why it could not be fetched
+	const dismissed = new Set();
 
-	function showMessage(text, error) {
-		message.textContent = text;
-		message.classList.toggle("error", !!error);
-		message.hidden = !text;
+	// ---------------------------------------------------------------- messages
+
+	function showMessage(title, text, opts = {}) {
+		$("message-title").textContent = title;
+		$("message-text").textContent = text;
+		$("message").classList.toggle("error", !!opts.error);
+		const actions = $("message-actions");
+		actions.replaceChildren(...(opts.actions || []).map(([label, href, primary]) => {
+			const a = document.createElement(typeof href === "function" ? "button" : "a");
+			a.className = "btn" + (primary ? " primary" : "");
+			a.textContent = label;
+			if (typeof href === "function") { a.type = "button"; a.addEventListener("click", href); } else a.href = href;
+			return a;
+		}));
+		$("message").hidden = false;
+		$("welcome").hidden = true;
 	}
+	function hideMessage() { $("message").hidden = true; }
+
+	function showWelcome() {
+		hideMessage();
+		$("welcome").hidden = false;
+		setTimeout(() => $("welcome-files").closest("label").focus?.(), 0);
+	}
+
+	const noGpu = () => showMessage("This browser cannot draw the viewer",
+		"The viewer runs the Agentic Design engine on WebGPU, which this browser does not offer (or has turned off). It works in Chrome and Edge 113 or later, Safari 26 or later, and Firefox 141 or later on Windows. On a Mac, the app itself opens every .pen file.",
+		{ error: true, actions: [["Download the app", "https://github.com/kirill-dev-pro/agentic-design/releases/latest", true], ["Agentic Design", "/"]] });
+
+	// ---------------------------------------------------------------- files
 
 	// Copies bytes into the module's memory (viewer_alloc): [pointer, length].
 	function put(bytes) {
@@ -31,22 +67,114 @@
 		return [ptr, bytes.length];
 	}
 
+	const base = (p) => p.slice(p.lastIndexOf("/") + 1).toLowerCase();
+
+	function toVirtual(url) {
+		const u = new URL(url);
+		return "/~url/" + u.protocol.replace(":", "") + "/" + u.host + decodeURIComponent(u.pathname);
+	}
+	function fromVirtual(path) {
+		const m = /^\/~url\/(https?)\/([^/]+)(\/.*)$/.exec(path);
+		return m ? `${m[1]}://${m[2]}${encodeURI(m[3])}` : null;
+	}
+
+	async function getFile(path) {
+		if (local.has(path)) return local.get(path);
+		if (path.startsWith("/local/")) {
+			// dropped together but not where the document says: the same name in this drop
+			const prefix = `/local/${session}/`;
+			const name = base(path);
+			for (const [p, bytes] of local) if (p.startsWith(prefix) && base(p) === name) return bytes;
+			return null;
+		}
+		const remote = fromVirtual(path);
+		try {
+			const response = await fetch(remote || path, remote ? { mode: "cors", credentials: "omit" } : {});
+			if (response.ok) return new Uint8Array(await response.arrayBuffer());
+			failed.set(path, `${response.status} ${response.statusText}`.trim());
+		} catch (e) {
+			// a cross-origin fetch the server does not allow fails without a status
+			failed.set(path, remote ? "cors" : "network");
+		}
+		return null;
+	}
+
 	async function fetchFiles(paths) {
-		const got = await Promise.all(paths.map(async (path) => {
-			if (local.has(path)) return local.get(path);
-			try {
-				const response = await fetch(path);
-				if (response.ok) return new Uint8Array(await response.arrayBuffer());
-			} catch (e) {}
-			return new Uint8Array(0); // the engine draws without it
-		}));
+		const got = await Promise.all(paths.map(getFile));
+		if (got[paths.indexOf(docPath)] === null) return docFailed(docPath);
 		paths.forEach((path, i) => {
 			const [p, pl] = put(encoder.encode(path));
-			const [d, dl] = put(got[i]);
+			const [d, dl] = put(got[i] || new Uint8Array(0)); // a missing file: the engine draws without it
 			ex.viewer_file(p, pl, d, dl);
 		});
 		ex.viewer_files_done();
 	}
+
+	function docFailed(path) {
+		const remote = fromVirtual(path);
+		const why = failed.get(path);
+		if (remote && why === "cors") {
+			showMessage("The file could not be read",
+				`${new URL(remote).host} does not let other sites read its files (no CORS header), or it cannot be reached. Download the file and drop it here instead: it stays in your browser.`,
+				{ error: true, actions: [["Download it", remote, true], ["Open a file", () => showWelcome()]] });
+		} else {
+			showMessage("The file could not be read", `${remote || path}: ${why || "not found"}.`,
+				{ error: true, actions: [["Open a file", () => showWelcome(), true]] });
+		}
+	}
+
+	function open(path) {
+		hideMessage();
+		$("welcome").hidden = true;
+		docPath = path;
+		failed.clear();
+		dismissed.clear();
+		const [p, pl] = put(encoder.encode(path));
+		ex.viewer_open(p, pl);
+	}
+
+	function openUrl(raw) {
+		let url;
+		try { url = new URL(raw.trim(), location.href); } catch (e) { return showMessage("That is not a URL", raw, { error: true, actions: [["Back", () => showWelcome(), true]] }); }
+		// a file page on GitHub: its raw file (served with CORS)
+		const gh = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/.exec(url.href);
+		if (gh) url = new URL(`https://raw.githubusercontent.com/${gh[1]}/${gh[2]}/${gh[3]}`);
+		if (url.origin === location.origin) open(decodeURIComponent(url.pathname));
+		else open(toVirtual(url.href));
+	}
+
+	function openSample() {
+		openUrl(new URL(SAMPLE, location.href).href);
+		history.replaceState(null, "", "?sample");
+	}
+
+	// Files the user dropped or picked: a design over a library (.lib.pen), the shallowest
+	// first. With a document open and no other document among them, they are added to it
+	// (its fonts folder, a library) and the document is read again.
+	async function addLocal(entries) {
+		const docs = [];
+		const prev = docPath.startsWith(`/local/${session}/`) ? docPath.slice(`/local/${session}/`.length) : null;
+		const carried = prev ? [...local].filter(([p]) => p.startsWith(`/local/${session}/`)) : [];
+		session += 1;
+		const prefix = `/local/${session}/`;
+		for (const [p, bytes] of carried) local.set(prefix + p.slice(`/local/${session - 1}/`.length), bytes);
+		for (const [path, file] of entries) {
+			const p = prefix + path.replace(/^\/+/, "");
+			local.set(p, new Uint8Array(await file.arrayBuffer()));
+			if (/\.pen$/i.test(p)) docs.push(p);
+		}
+		const designs = docs.filter((d) => !/\.lib\.pen$/i.test(d));
+		if (prev && !designs.length) return open(prefix + prev);
+		docs.sort((a, b) => (/\.lib\.pen$/i.test(a) - /\.lib\.pen$/i.test(b)) || (a.split("/").length - b.split("/").length) || a.localeCompare(b));
+		if (docs.length) {
+			history.replaceState(null, "", location.pathname);
+			open(docs[0]);
+		} else {
+			showMessage("There is no .pen file among these", "Drop a .pen file, or the folder it is in.", { error: true, actions: [["Open a file", () => showWelcome(), true]] });
+		}
+	}
+
+	// ---------------------------------------------------------------- what the page shows
 
 	function setTheme(axis, value) {
 		const [a, al] = put(encoder.encode(axis));
@@ -54,30 +182,55 @@
 		ex.viewer_set_theme(a, al, v, vl);
 	}
 
-	function open(path) {
-		showMessage("");
-		const [p, pl] = put(encoder.encode(path));
-		ex.viewer_open(p, pl);
-	}
+	const listButton = (label, current, onClick) => {
+		const li = document.createElement("li");
+		const b = document.createElement("button");
+		b.type = "button";
+		b.textContent = label;
+		b.title = label;
+		b.setAttribute("aria-current", current ? "true" : "false");
+		b.addEventListener("click", onClick);
+		li.append(b);
+		return li;
+	};
 
-	function showInfo(info) {
+	let shownShape = "";
+	function showInfo(next) {
+		info = next;
 		window.viewerInfo = info; // (for the console and tests)
-		title.textContent = info.title || "Agentic Design viewer";
-		document.title = info.title ? info.title + " — Agentic Design viewer" : "Agentic Design viewer";
-		const names = info.pages || [];
-		pages.hidden = names.length < 2;
-		if (pages.options.length !== names.length || [...pages.options].some((o, i) => o.text !== names[i])) {
-			pages.replaceChildren(...names.map((name, i) => new Option(name, i)));
+		const loaded = !!(info.frames && (info.frames.length || (info.pages || []).length));
+		$("title").textContent = info.title || ".pen viewer";
+		document.title = info.title ? info.title + " — .pen viewer" : ".pen viewer — Agentic Design";
+		$("export").disabled = !loaded;
+		$("toggle-side").hidden = !loaded;
+		if (loaded && !body.dataset.sideSet) {
+			body.dataset.sideSet = "1";
+			setSide(innerWidth > 720);
 		}
-		pages.value = String(info.page);
+
+		// pages and frames
+		const names = info.pages || [];
+		$("pages-section").hidden = names.length < 2;
+		const shape = JSON.stringify([names, info.page, (info.frames || []).map((f) => [f.uid, f.name]), info.sel && info.sel.uid]);
+		if (shape !== shownShape) {
+			shownShape = shape;
+			$("pages").replaceChildren(...names.map((name, i) => listButton(name, i === info.page, () => ex.viewer_set_page(i))));
+			$("frames").replaceChildren(...(info.frames || []).map((f) => listButton(f.name, info.sel && info.sel.uid === f.uid, () => {
+				ex.viewer_select(f.uid);
+				ex.viewer_zoom_to(f.uid);
+			})));
+		}
+
 		// one picker per theme axis ("mode: light | dark"), rebuilt when the axes change
+		const themes = $("themes");
 		const axes = info.themes || [];
-		const shape = JSON.stringify(axes.map((a) => [a.name, a.values]));
-		if (themes.dataset.shape !== shape) {
-			themes.dataset.shape = shape;
+		const tshape = JSON.stringify(axes.map((a) => [a.name, a.values]));
+		if (themes.dataset.shape !== tshape) {
+			themes.dataset.shape = tshape;
 			themes.replaceChildren(...axes.map((a) => {
 				const select = document.createElement("select");
-				select.title = a.name;
+				select.title = "Theme: " + a.name;
+				select.setAttribute("aria-label", "Theme: " + a.name);
 				select.dataset.axis = a.name;
 				select.append(...a.values.map((v) => new Option(a.name + ": " + v, v)));
 				select.addEventListener("change", () => setTheme(a.name, select.value));
@@ -88,13 +241,141 @@
 			const select = themes.querySelector(`select[data-axis="${CSS.escape(a.name)}"]`);
 			if (select) select.value = a.value;
 		}
-		zoom.textContent = Math.round(info.zoom * 100) + "%";
-		const lost = info.missing || [];
-		missing.style.display = lost.length ? "" : "none";
-		missing.textContent = lost.length + (lost.length === 1 ? " file missing" : " files missing");
-		missing.title = lost.join("\n");
+
+		$("zoom").textContent = Math.round(info.zoom * 100) + "%";
+
+		// the selected layer
+		const sel = info.sel;
+		$("info").hidden = !sel;
+		if (sel) {
+			$("info-name").textContent = sel.name;
+			$("info-name").title = sel.name + (sel.id ? ` (id ${sel.id})` : "");
+			$("info-type").textContent = sel.component ? `${sel.type} of ${sel.component}` : sel.type;
+			$("info-x").textContent = sel.x;
+			$("info-y").textContent = sel.y;
+			$("info-w").textContent = sel.w;
+			$("info-h").textContent = sel.h;
+		}
+		showNotices();
 	}
 
+	function showNotices() {
+		if (!info) return;
+		const lost = info.missing || [];
+		const notes = [];
+		const libs = lost.filter((p) => /\.pen$/i.test(p));
+		const fontFiles = lost.filter((p) => /\.(ttf|otf|woff2?|ttc)$/i.test(p));
+		const images = lost.filter((p) => !libs.includes(p) && !fontFiles.includes(p));
+		const isLocal = docPath.startsWith("/local/");
+		const shortName = (p) => (fromVirtual(p) || p).replace(/^\/local\/\d+\//, "");
+		if (libs.length) {
+			notes.push(["libs", `${libs.length === 1 ? "A library this document imports was" : libs.length + " libraries this document imports were"} not found: ${libs.map(shortName).join(", ")}.`,
+				isLocal ? "Drop the library files here too (or the whole folder); its components are missing until then." : "Its components are missing."]);
+		}
+		const families = (info.fonts || []).filter((f) => f.missing).map((f) => f.family);
+		if (families.length) {
+			notes.push(["fonts", `${families.join(", ")} ${families.length === 1 ? "is" : "are"} drawn with Noto Sans, as in pen.dev.`,
+				fontFiles.length && isLocal ? `The document lists font files that are not here (${fontFiles.slice(0, 3).map(shortName).join(", ")}${fontFiles.length > 3 ? ` and ${fontFiles.length - 3} more` : ""}): drop its folder with the fonts folder.`
+					: `The document does not include ${families.length === 1 ? "this font's files" : "these fonts' files"}.`]);
+		}
+		if (images.length) {
+			notes.push(["images", `${images.length} ${images.length === 1 ? "image was" : "images were"} not found.`,
+				isLocal ? "Drop the document's folder so its images come along." : images.slice(0, 3).map(shortName).join(", ")]);
+		}
+		const cors = [...failed].filter(([p, why]) => why === "cors" && p !== docPath).map(([p]) => p);
+		if (cors.length) notes.push(["cors", `The server does not let this page read ${cors.length} of the document's files (CORS).`, "Download the folder and drop it here instead."]);
+		const box = $("notices");
+		box.replaceChildren(...notes.filter(([key, text]) => !dismissed.has(key + text)).map(([key, text, more]) => {
+			const div = document.createElement("div");
+			div.className = "notice";
+			const p = document.createElement("p");
+			p.textContent = text + " ";
+			const small = document.createElement("small");
+			small.textContent = more;
+			p.append(small);
+			const close = document.createElement("button");
+			close.type = "button";
+			close.setAttribute("aria-label", "Dismiss");
+			close.textContent = "×";
+			close.addEventListener("click", () => { dismissed.add(key + text); showNotices(); });
+			div.append(p, close);
+			return div;
+		}));
+	}
+
+	function setSide(on) {
+		$("side").hidden = !on;
+		body.classList.toggle("with-side", on);
+		$("toggle-side").setAttribute("aria-expanded", on ? "true" : "false");
+	}
+
+	// ---------------------------------------------------------------- export
+
+	function download(blob, name) {
+		const a = document.createElement("a");
+		a.href = URL.createObjectURL(blob);
+		a.download = name;
+		document.body.append(a);
+		a.click();
+		a.remove();
+		setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+	}
+
+	// The canvas is drawn at the picture's size, copied in the same task (a WebGPU canvas
+	// keeps its picture until the task ends) and drawn back at the next frame.
+	function exportCanvas(uid, scale) {
+		// drawn twice: the first pass puts glyphs of a new size into the atlas (Safari can
+		// draw the first pass without them)
+		if (!ex.viewer_export(uid, scale)) return null;
+		const packed = ex.viewer_export(uid, scale);
+		if (!packed) return null;
+		const w = packed >>> 16, h = packed & 0xffff;
+		const copy = document.createElement("canvas");
+		copy.width = w;
+		copy.height = h;
+		copy.getContext("2d").drawImage(canvas, 0, 0, w, h, 0, 0, w, h);
+		return copy;
+	}
+
+	function exportPng(uid, scale) {
+		const copy = exportCanvas(uid, scale);
+		if (!copy) return;
+		const stem = (info.title || "design").replace(/\.pen$/i, "");
+		const what = uid ? (info.sel && info.sel.uid === uid ? info.sel.name : "layer") : (info.pages && info.pages[info.page]) || "page";
+		const name = `${stem} - ${what}${scale !== 1 ? "@" + scale + "x" : ""}.png`.replace(/[\\/:*?"<>|]+/g, "-");
+		copy.toBlob((blob) => blob && download(blob, name), "image/png");
+	}
+
+	function openExport() {
+		const dialog = $("export-dialog");
+		const sel = info && info.sel;
+		const selRadio = dialog.querySelector('input[value="sel"]');
+		selRadio.disabled = !sel;
+		$("export-sel-label").textContent = sel ? `The selection: ${sel.name}` : "The selection (none)";
+		if (!sel) dialog.querySelector('input[value="page"]').checked = true;
+		else selRadio.checked = true;
+		dialog.hidden = false;
+		$("export-go").focus();
+	}
+	$("export").addEventListener("click", () => ($("export-dialog").hidden ? openExport() : ($("export-dialog").hidden = true)));
+	$("export-cancel").addEventListener("click", () => ($("export-dialog").hidden = true));
+	$("export-go").addEventListener("click", () => {
+		const d = $("export-dialog");
+		const what = d.querySelector('input[name="what"]:checked').value;
+		const scale = Number(d.querySelector('input[name="scale"]:checked').value);
+		d.hidden = true;
+		exportPng(what === "sel" && info.sel ? info.sel.uid : 0, scale);
+	});
+	$("info-export").addEventListener("click", () => info.sel && exportPng(info.sel.uid, 2));
+	$("info-zoom").addEventListener("click", () => ex.viewer_zoom_to(0));
+	$("info-parent").addEventListener("click", () => ex.viewer_select_parent());
+
+	// ---------------------------------------------------------------- start
+
+	if (!navigator.gpu) return noGpu();
+	showMessage("Loading the viewer…", "");
+	mem = new odin.WasmMemoryInterface();
+	let gpuFailed = false;
 	const imports = {
 		wgpu: new odin.WebGPUInterface(mem).getInterface(),
 		viewer: {
@@ -104,19 +385,28 @@
 				setTimeout(() => fetchFiles(paths), 0);
 			},
 			page_info: (ptr, len) => showInfo(JSON.parse(mem.loadString(ptr, len))),
-			page_error: (ptr, len) => showMessage(mem.loadString(ptr, len), true),
+			page_error: (ptr, len) => {
+				const text = mem.loadString(ptr, len);
+				if (/WebGPU/.test(text)) { gpuFailed = true; return noGpu(); }
+				showMessage("This file could not be opened", text, { error: true, actions: [["Open another file", () => showWelcome(), true]] });
+			},
 		},
 	};
-
-	if (!navigator.gpu) {
-		showMessage("This browser has no WebGPU (Chrome, Edge and Safari 26 have it).", true);
-		return;
+	try {
+		await odin.runWasm("viewer.wasm", null, imports, mem);
+	} catch (e) {
+		console.error(e);
+		return showMessage("The viewer could not start", String(e && e.message || e), { error: true, actions: [["Reload", () => location.reload(), true]] });
 	}
-	await odin.runWasm("viewer.wasm", null, imports, mem);
 	ex = mem.exports;
+	// wait for the GPU (the module asks for it at start)
+	await new Promise((r) => setTimeout(r, 0));
+	if (gpuFailed) return;
+
 	// for the console and tests
 	window.viewer = {
 		open: (path) => open(path),
+		openUrl: (url) => openUrl(url),
 		view: (zoom, x, y) => ex.viewer_view(zoom, x, y),
 		fit: () => ex.viewer_fit(),
 		pan: (dx, dy) => ex.viewer_pan(dx, dy),
@@ -124,6 +414,11 @@
 		memory: () => mem.memory.buffer.byteLength, // the module's heap, in bytes
 		page: (i) => ex.viewer_set_page(i),
 		theme: (axis, value) => setTheme(axis, value),
+		pick: (x, y, mode = 0) => ex.viewer_pick(x, y, mode),
+		select: (uid) => ex.viewer_select(uid),
+		zoomTo: (uid) => ex.viewer_zoom_to(uid),
+		exportPng: (uid, scale) => exportPng(uid, scale),
+		exportCanvas: (uid, scale) => exportCanvas(uid, scale), // (tests: the picture without the download)
 	};
 
 	const params = new URLSearchParams(location.search);
@@ -132,10 +427,12 @@
 		const i = pair.indexOf(":");
 		if (i > 0) setTheme(pair.slice(0, i), pair.slice(i + 1));
 	}
-	const file = params.get("file");
-	if (file) open(new URL(file, location.href).pathname);
+	if (params.get("file")) open(new URL(params.get("file"), location.href).pathname);
+	else if (params.get("url")) openUrl(params.get("url"));
+	else if (params.has("sample")) openSample();
+	else showWelcome();
 
-	// ---------------------------------------------------------------- pan and zoom
+	// ---------------------------------------------------------------- pointer and keys
 
 	function at(e) {
 		const r = canvas.getBoundingClientRect();
@@ -154,8 +451,19 @@
 		else ex.viewer_pan(-dx, -dy);
 	}, { passive: false });
 
+	// Safari's trackpad pinch
+	let gestureScale = 1;
+	canvas.addEventListener("gesturestart", (e) => { e.preventDefault(); gestureScale = 1; });
+	canvas.addEventListener("gesturechange", (e) => {
+		e.preventDefault();
+		const [x, y] = at(e);
+		ex.viewer_zoom(e.scale / gestureScale, x, y);
+		gestureScale = e.scale;
+	});
+
 	const pointers = new Map(); // id -> [x, y]
 	let pinch = 0; // the distance between two fingers
+	let press = null; // where a press began, until it moves: a click selects
 
 	function spread() {
 		const [a, b] = [...pointers.values()];
@@ -165,12 +473,16 @@
 	canvas.addEventListener("pointerdown", (e) => {
 		canvas.setPointerCapture(e.pointerId);
 		pointers.set(e.pointerId, at(e));
+		press = pointers.size === 1 && e.button === 0 ? { at: at(e), deep: e.metaKey || e.ctrlKey } : null;
 		if (pointers.size === 2) pinch = spread()[0];
-		canvas.classList.add("dragging");
+		$("export-dialog").hidden = true;
 	});
 	canvas.addEventListener("pointermove", (e) => {
 		if (!pointers.has(e.pointerId)) return;
 		const [x, y] = at(e);
+		if (press && Math.hypot(x - press.at[0], y - press.at[1]) < 4) return;
+		press = null;
+		canvas.classList.add("dragging");
 		if (pointers.size === 2) {
 			const [, mx0, my0] = spread();
 			pointers.set(e.pointerId, [x, y]);
@@ -185,50 +497,77 @@
 		ex.viewer_pan(x - px, y - py);
 	});
 	const release = (e) => {
+		if (press && e.type === "pointerup") ex.viewer_pick(press.at[0], press.at[1], press.deep ? 2 : 0);
+		press = null;
 		pointers.delete(e.pointerId);
 		pinch = pointers.size === 2 ? spread()[0] : 0;
 		if (!pointers.size) canvas.classList.remove("dragging");
 	};
 	canvas.addEventListener("pointerup", release);
 	canvas.addEventListener("pointercancel", release);
+	canvas.addEventListener("dblclick", (e) => {
+		const [x, y] = at(e);
+		ex.viewer_pick(x, y, 1);
+	});
 
 	window.addEventListener("keydown", (e) => {
-		if (e.target instanceof HTMLSelectElement) return;
+		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || !ex) return;
 		const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2;
-		if (e.key === "0" || e.key === "1" && e.shiftKey || e.key === "!") ex.viewer_fit();
+		if (e.key === "Escape") {
+			if (!$("export-dialog").hidden) $("export-dialog").hidden = true;
+			else if (!$("open-menu").hidden) closeMenu();
+			else ex.viewer_select(0);
+		} else if (e.metaKey || e.ctrlKey || e.altKey) return;
+		else if (e.key === "0" || (e.key === "1" && e.shiftKey) || e.key === "!") ex.viewer_fit();
+		else if ((e.key === "2" && e.shiftKey) || e.key === "@" || e.key === "f") ex.viewer_zoom_to(0);
+		else if (e.key === "Enter" && e.shiftKey) ex.viewer_select_parent();
 		else if (e.key === "+" || e.key === "=") ex.viewer_zoom(1.25, cx, cy);
-		else if (e.key === "-") ex.viewer_zoom(0.8, cx, cy);
+		else if (e.key === "-" || e.key === "_") ex.viewer_zoom(0.8, cx, cy);
 		else return;
 		e.preventDefault();
 	});
 
-	zoom.addEventListener("click", () => ex.viewer_fit());
-	pages.addEventListener("change", () => ex.viewer_set_page(Number(pages.value)));
+	$("zoom").addEventListener("click", () => ex.viewer_fit());
+	$("zoom-in").addEventListener("click", () => ex.viewer_zoom(1.25, canvas.clientWidth / 2, canvas.clientHeight / 2));
+	$("zoom-out").addEventListener("click", () => ex.viewer_zoom(0.8, canvas.clientWidth / 2, canvas.clientHeight / 2));
+	$("toggle-side").addEventListener("click", () => setSide($("side").hidden));
 
-	// ---------------------------------------------------------------- local files
+	// ---------------------------------------------------------------- opening
 
-	// Files the user dropped or picked go under /local/, keeping their folders, so a
-	// document finds its images, fonts and libraries next to it as on disk.
-	async function addLocal(entries) {
-		let docs = [];
-		for (const [path, file] of entries) {
-			const p = "/local/" + path.replace(/^\/+/, "");
-			local.set(p, new Uint8Array(await file.arrayBuffer()));
-			if (p.endsWith(".pen")) docs.push(p);
-		}
-		// a design over a library (.lib.pen), the shallowest first
-		docs.sort((a, b) => (a.endsWith(".lib.pen") - b.endsWith(".lib.pen")) || (a.split("/").length - b.split("/").length) || a.localeCompare(b));
-		if (docs.length) open(docs[0]);
-		else showMessage("There is no .pen file among these.", true);
+	function closeMenu() {
+		$("open-menu").hidden = true;
+		$("open").setAttribute("aria-expanded", "false");
 	}
+	$("open").addEventListener("click", (e) => {
+		e.stopPropagation();
+		const menu = $("open-menu");
+		menu.hidden = !menu.hidden;
+		$("open").setAttribute("aria-expanded", menu.hidden ? "false" : "true");
+	});
+	document.addEventListener("click", (e) => { if (!e.target.closest(".menu-wrap")) closeMenu(); });
+	$("open-menu").addEventListener("keydown", (e) => {
+		if ((e.key === "Enter" || e.key === " ") && e.target.tagName === "LABEL") { e.preventDefault(); e.target.click(); }
+	});
+	for (const el of document.querySelectorAll('[data-action="sample"]')) el.addEventListener("click", () => { closeMenu(); openSample(); });
+	document.querySelector('[data-action="url"]').addEventListener("click", () => {
+		closeMenu();
+		showWelcome();
+		$("url-input").focus();
+	});
+	$("url-form").addEventListener("submit", (e) => {
+		e.preventDefault();
+		const url = $("url-input").value;
+		history.replaceState(null, "", "?url=" + encodeURIComponent(url));
+		openUrl(url);
+	});
 
 	function picked(input) {
 		const files = [...input.files].map((f) => [f.webkitRelativePath || f.name, f]);
 		input.value = "";
+		closeMenu();
 		if (files.length) addLocal(files);
 	}
-	document.getElementById("open-dir").addEventListener("change", (e) => picked(e.target));
-	document.getElementById("open-files").addEventListener("change", (e) => picked(e.target));
+	for (const id of ["open-dir", "open-files", "welcome-dir", "welcome-files"]) $(id).addEventListener("change", (e) => picked(e.target));
 
 	async function walk(entry, prefix, out) {
 		if (entry.isFile) {
@@ -243,19 +582,18 @@
 		}
 	}
 
-	window.addEventListener("dragover", (e) => {
-		e.preventDefault();
-		document.body.classList.add("drop");
-	});
-	window.addEventListener("dragleave", () => document.body.classList.remove("drop"));
+	let dragDepth = 0;
+	window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth += 1; $("drop").hidden = false; });
+	window.addEventListener("dragover", (e) => e.preventDefault());
+	window.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $("drop").hidden = true; });
 	window.addEventListener("drop", async (e) => {
 		e.preventDefault();
-		document.body.classList.remove("drop");
+		dragDepth = 0;
+		$("drop").hidden = true;
 		const out = [];
-		for (const item of [...e.dataTransfer.items]) {
-			const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
-			if (entry) await walk(entry, "", out);
-		}
+		const items = [...e.dataTransfer.items].map((item) => item.webkitGetAsEntry && item.webkitGetAsEntry()).filter(Boolean);
+		if (items.length) for (const entry of items) await walk(entry, "", out);
+		else for (const f of e.dataTransfer.files) out.push([f.name, f]);
 		if (out.length) addLocal(out);
 	});
 })();

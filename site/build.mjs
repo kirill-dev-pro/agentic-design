@@ -90,6 +90,9 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 		if (fs.statSync(p).isDirectory()) fs.cpSync(p, path.join(out, "view", extra), { recursive: true });
 		else write("view/" + extra, fs.readFileSync(p));
 	}
+	// the sample design (the landing page, with its fonts) for "Try the sample"
+	const sample = path.join(here, "..", "designs", "sample");
+	if (fs.existsSync(sample)) fs.cpSync(sample, path.join(out, "view", "samples", "agentic-design"), { recursive: true });
 	console.log("viewer: included from", viewer);
 } else {
 	console.log("viewer: not built (", viewer, "), /view is left out");

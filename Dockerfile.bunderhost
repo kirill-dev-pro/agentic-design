@@ -27,6 +27,7 @@ RUN sh tools/build_web.sh
 FROM node:22-alpine AS site
 WORKDIR /src
 COPY site ./site
+COPY designs/sample ./designs/sample
 COPY --from=viewer /src/build/web ./build/web
 RUN node site/build.mjs
 

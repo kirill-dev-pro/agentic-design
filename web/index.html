@@ -2,40 +2,127 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Agentic Design viewer</title>
-<style>
-	:root { color-scheme: dark; }
-	html, body { margin: 0; height: 100%; background: #1e1e1e; color: #e6e6e6; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
-	#bar { position: fixed; inset: 0 0 auto 0; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #1e1e1e; border-bottom: 1px solid #2c2c2c; box-sizing: border-box; }
-	#title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	#bar .spacer { flex: 1; }
-	#themes { display: flex; gap: 6px; }
-	#bar select, #bar button, #bar label.button { background: #2a2a2a; color: inherit; border: 1px solid #3a3a3a; border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer; }
-	#bar select:hover, #bar button:hover, #bar label.button:hover { background: #333; }
-	#missing { color: #e0a85a; display: none; }
-	#canvas { position: fixed; inset: 40px 0 0 0; width: 100%; height: calc(100% - 40px); display: block; touch-action: none; cursor: grab; }
-	#canvas.dragging { cursor: grabbing; }
-	#message { position: fixed; inset: 40px 0 0 0; display: flex; align-items: center; justify-content: center; text-align: center; color: #9a9a9a; pointer-events: none; padding: 24px; line-height: 1.6; }
-	#message.error { color: #e57373; }
-	body.drop #canvas { outline: 2px dashed #6e56cf; outline-offset: -8px; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>.pen viewer — Agentic Design</title>
+<meta name="description" content="Open .pen design files in the browser, drawn by the engine of the Agentic Design app (WebAssembly and WebGPU). Files you open stay in your browser.">
+<link rel="canonical" href="https://agentic-design.kcrz.dev/view/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Agentic Design">
+<meta property="og:url" content="https://agentic-design.kcrz.dev/view/">
+<meta property="og:title" content=".pen viewer — Agentic Design">
+<meta property="og:description" content="Open .pen design files in the browser, drawn by the engine of the Agentic Design app. Files you open stay in your browser.">
+<meta property="og:image" content="https://agentic-design.kcrz.dev/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1e1e1e">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="preload" href="viewer.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="stylesheet" href="viewer.css">
 </head>
 <body>
-<div id="bar">
-	<span id="title">Agentic Design viewer</span>
-	<select id="pages" hidden></select>
-	<span id="themes"></span>
+<header id="bar">
+	<a class="home" href="/" title="Agentic Design">
+		<span class="mark"><svg viewBox="2 1 15 16.5" aria-hidden="true"><path d="M2 1 L17 8.5 L10.2 10.6 L7.4 17.5 Z"/></svg></span>
+	</a>
+	<button id="toggle-side" class="icon-btn" type="button" title="Pages and frames" aria-label="Pages and frames" aria-expanded="true" hidden>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+	</button>
+	<span id="title">.pen viewer</span>
 	<span class="spacer"></span>
-	<span id="missing"></span>
-	<button id="zoom" title="Zoom to fit (0)">100%</button>
-	<label class="button" title="Open a .pen file with its images, fonts and libraries">Open folder<input id="open-dir" type="file" webkitdirectory hidden></label>
-	<label class="button" title="Open .pen files and the files they use">Open files<input id="open-files" type="file" multiple hidden></label>
+	<span id="themes"></span>
+	<button id="export" class="btn" type="button" disabled aria-haspopup="dialog">Export</button>
+	<div class="menu-wrap">
+		<button id="open" class="btn primary" type="button" aria-haspopup="menu" aria-expanded="false">Open</button>
+		<div id="open-menu" class="menu" role="menu" hidden>
+			<label role="menuitem" tabindex="0">A .pen file and what it uses…<input id="open-files" type="file" multiple hidden></label>
+			<label role="menuitem" tabindex="0">A folder…<input id="open-dir" type="file" webkitdirectory hidden></label>
+			<button role="menuitem" type="button" data-action="url">A public URL…</button>
+			<button role="menuitem" type="button" data-action="sample">The sample design</button>
+		</div>
+	</div>
+</header>
+
+<aside id="side" hidden>
+	<section id="pages-section" hidden>
+		<h2>Pages</h2>
+		<ul id="pages"></ul>
+	</section>
+	<section>
+		<h2>Frames</h2>
+		<ul id="frames"></ul>
+	</section>
+	<p class="private">Files you open stay in this browser. Nothing is uploaded.</p>
+</aside>
+
+<main id="stage">
+	<canvas id="canvas" aria-label="The design"></canvas>
+	<div id="notices" aria-live="polite"></div>
+	<div id="info" hidden>
+		<div class="info-head">
+			<strong id="info-name"></strong>
+			<span id="info-type"></span>
+		</div>
+		<dl>
+			<div><dt>X</dt><dd id="info-x"></dd></div>
+			<div><dt>Y</dt><dd id="info-y"></dd></div>
+			<div><dt>W</dt><dd id="info-w"></dd></div>
+			<div><dt>H</dt><dd id="info-h"></dd></div>
+		</dl>
+		<div class="info-actions">
+			<button id="info-zoom" class="btn small" type="button">Zoom to</button>
+			<button id="info-parent" class="btn small" type="button" title="Shift Enter">Parent</button>
+			<button id="info-export" class="btn small" type="button">PNG</button>
+		</div>
+	</div>
+	<div id="zoombar">
+		<button id="zoom-out" class="icon-btn" type="button" title="Zoom out (−)" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+		<button id="zoom" type="button" title="Zoom to fit (0)">100%</button>
+		<button id="zoom-in" class="icon-btn" type="button" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
+	</div>
+
+	<div id="welcome" class="card-wrap" hidden>
+		<div class="card">
+			<h1>Open a .pen file</h1>
+			<p>Drop a .pen file here, or the folder it is in, so its images, fonts and libraries come along. It is drawn by the engine of the <a href="/">Agentic Design</a> app, in WebAssembly and WebGPU.</p>
+			<div class="row">
+				<label class="btn primary">Choose files<input id="welcome-files" type="file" multiple hidden></label>
+				<label class="btn">Choose a folder<input id="welcome-dir" type="file" webkitdirectory hidden></label>
+				<button class="btn" type="button" data-action="sample">Try the sample</button>
+			</div>
+			<form id="url-form" class="row">
+				<input id="url-input" type="url" placeholder="https://… a public .pen file" aria-label="URL of a public .pen file" required>
+				<button class="btn" type="submit">Open URL</button>
+			</form>
+			<p class="private">Your files stay in this browser: nothing is uploaded. A URL is fetched by your browser from its server.</p>
+		</div>
+	</div>
+	<div id="message" class="card-wrap" hidden><div class="card"><h1 id="message-title"></h1><p id="message-text"></p><div class="row" id="message-actions"></div></div></div>
+	<div id="drop" hidden><div>Drop to open</div></div>
+</main>
+
+<div id="export-dialog" class="popover" role="dialog" aria-label="Export PNG" hidden>
+	<h2>Export PNG</h2>
+	<fieldset>
+		<legend>What</legend>
+		<label><input type="radio" name="what" value="sel" checked> <span id="export-sel-label">The selected layer</span></label>
+		<label><input type="radio" name="what" value="page"> The whole page</label>
+	</fieldset>
+	<fieldset>
+		<legend>Scale</legend>
+		<label><input type="radio" name="scale" value="1"> 1×</label>
+		<label><input type="radio" name="scale" value="2" checked> 2×</label>
+		<label><input type="radio" name="scale" value="3"> 3×</label>
+	</fieldset>
+	<div class="row end">
+		<button id="export-cancel" class="btn" type="button">Cancel</button>
+		<button id="export-go" class="btn primary" type="button">Download</button>
+	</div>
 </div>
-<canvas id="canvas"></canvas>
-<div id="message">Drop a .pen file, or the folder it is in, here.<br>Or open one by URL: <code>?file=/path/to/design.pen</code></div>
-<script src="odin.js"></script>
-<script src="wgpu.js"></script>
-<script src="viewer.js"></script>
+
+<noscript><div class="card-wrap"><div class="card"><h1>JavaScript is off</h1><p>The viewer runs the app's engine in WebAssembly, which needs JavaScript.</p></div></div></noscript>
+<script src="odin.js" defer></script>
+<script src="wgpu.js" defer></script>
+<script src="viewer.js" defer></script>
 </body>
 </html>
