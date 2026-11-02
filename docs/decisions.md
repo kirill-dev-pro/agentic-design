@@ -1366,7 +1366,8 @@ a tilted layer landed: `bounds` is the unrotated layout box.
 **Decision.**
 
 - Dashes are `strokeDashPattern: [dash, gap, ...]`, next to `strokeWidth`, as the 2.21
-  schema names stroke properties; older files with the dashes in the stroke object
+  schema names stroke properties (since #67 kept in `metadata`, the only place pen.dev
+  keeps it); older files with the dashes in the stroke object
   (`dashPattern`) are read too. The schema has no dash property: pen.dev keeps the stroke
   and draws it solid (checked in pen.dev 1.2.21), so dashes are this app's extension. The
   vendored NanoVG gained `StrokeDash`: `Stroke` splits the flattened outline into open
@@ -1607,3 +1608,40 @@ card. `tools/zorder.py` in the tests repository checks the keys, the hint texts,
 MCP replies, undo and the pixels at the overlap on a minimal file with a turned wrapper
 and a turned, shadowed card. The import's order (the live page puts the "+" over the
 card with CSS stacking) is a separate fix in the importer.
+
+## 67. Extension data lives in metadata: the dash pattern moves there (updates #60)
+
+**Problem.** pen.dev 1.2.21 drops every property it does not know when it loads a file; of
+our own data only `metadata` (`{type: string, ...any}` in the 2.21 schema) comes back
+(checked by hand in pen.dev with a probe file). The node-level `strokeDashPattern` of #60
+was therefore lost as soon as a file was opened and saved there.
+
+**Decision.**
+
+- The dash pattern is `metadata.strokeDashPattern`. The stroke itself stays standard
+  (`stroke`, `strokeWidth`, caps, joins, alignment), so pen.dev draws it solid and keeps the
+  pattern for this app.
+- Reading accepts all three forms: `metadata.strokeDashPattern`, a node-level
+  `strokeDashPattern` (files written before, and what agents send) and the old stroke
+  object's `dashPattern`. Writing produces only the first: before every refresh
+  (`migrate_extension_props`) a node-level key is moved into `metadata`, also inside instance
+  overrides (`descendants`). Metadata of another type (a connector's) gains the key next to
+  its own; a node without metadata gets `{"type": "agentic-design", ...}`, as the schema
+  requires a type. `null` removes the pattern, and metadata that holds nothing else goes
+  with it.
+- `scale_nodes` scales the pattern in `metadata`; `outline_text` keeps `metadata`.
+- Audit of what else the app writes outside the schema: no node keys. `outline_text` writes
+  a standard `path` (`geometry`, `viewBox`, `fillRule` are in the schema), `scale_nodes`
+  rewrites existing numbers. The header keys `pages` and `fonts` and metadata without a
+  `type` (the lint tool's `{"lintIgnore": true}`) are not in the published schema; whether
+  pen.dev keeps them waits for one batched pen.dev check (the probe is ready:
+  every extension form in one file).
+
+**Consequences.** Agents still send `strokeDashPattern` on the node and read it back in
+`metadata`. In a quiet window: a file with the old key saves it in `metadata`; an update on
+a connector's metadata keeps `type` and `foo`; `null` removes it; `scale_nodes` ×2 turns
+[6, 3] into [12, 6]; an outlined text keeps it; an override `{"strokeDashPattern": [4, 4]}`
+becomes `{"metadata": {...}}`; strokes from metadata draw dashed (22 dash edges along a
+200-unit side), and a stroke without a pattern stays solid. The sample saves to the same
+JSON.
+

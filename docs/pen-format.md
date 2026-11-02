@@ -96,6 +96,10 @@ The reader accepts both. Edits keep the form the node already uses (`Node.stroke
   - Top-level nodes listed under no page belong to the first page.
   - The key is not written when the document has a single default page with no ids.
   - Other tools are expected to keep or ignore it.
+- **`fonts`** in the header, when fonts are added to the document (`add_fonts`).
+- **`metadata.strokeDashPattern`**: a dashed stroke's pattern (#67). pen.dev keeps
+  `metadata` and drops unknown keys, so the app's own data goes there; a node-level
+  `strokeDashPattern` is read and moved into `metadata`.
 - **Image files.** Images placed through the app are copied into `images/` next to the
   document and referenced as `./images/<name>`.
 

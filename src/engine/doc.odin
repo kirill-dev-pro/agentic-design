@@ -1152,6 +1152,10 @@ override_set :: proc(doc: ^Document, inst: ^Node, id, key: string, value: json.V
 	if !has do entry = make(json.Object, context.temp_allocator)
 	if value == nil do delete_key(&entry, key)
 	else do entry[key] = value
+	if key == DASH_KEY {
+		if value == nil do entry[key] = json.Null(nil)
+		move_dash_into_metadata(&entry) // extension data lives in metadata (decision 67)
+	}
 	if len(entry) == 0 do delete_key(&desc, path)
 	else do desc[path] = entry
 	if len(desc) == 0 do node_unset(doc, inst, "descendants")
@@ -1195,6 +1199,12 @@ node_set_raw :: proc(n: ^Node, key, raw: string) {
 }
 
 node_unset :: proc(doc: ^Document, n: ^Node, key: string) {
+	if key == DASH_KEY {
+		// kept in metadata: removing it there (migrate_extension_props treats null as removal)
+		node_set_raw(n, DASH_KEY, "null")
+		node_refresh(doc, n)
+		return
+	}
 	i := prop_index(n, key)
 	if i < 0 do return
 	delete(n.props[i].key)
@@ -1386,6 +1396,7 @@ node_set_text :: proc(doc: ^Document, n: ^Node, key, text: string) -> (err: stri
 // Rebuilds the parsed fields from `props`.
 node_refresh :: proc(doc: ^Document, n: ^Node) {
 	if !doc.building_ghosts do doc_bump(doc)
+	migrate_extension_props(n)
 	node_free_derived(n)
 	// the theme in effect decides what every $variable below resolves to
 	if v, ok := prop_value(n, "theme"); ok {
@@ -1501,6 +1512,10 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 			n.stroke_sides, n.stroke_per_side = parse_sides(doc, v)
 		case "strokeDashPattern":
 			parse_dash(doc, n, v)
+		case "metadata":
+			if m, is_obj := v.(json.Object); is_obj {
+				if d, has := m[DASH_KEY]; has do parse_dash(doc, n, d)
+			}
 		case "strokeAlignment":
 			switch json_str(doc, v) {
 			case "inner": n.stroke_align = .Inner
@@ -2166,9 +2181,11 @@ doc_rename_variable :: proc(doc: ^Document, old, new: string) {
 	doc_write_variables(doc, vars)
 }
 
-// Dashes of a stroke: [dash, gap, ...] (strokeDashPattern next to strokeWidth, the way the
-// 2.21 schema names stroke properties). The schema has no dash property: pen.dev keeps the
-// stroke and draws it solid.
+// Dashes of a stroke: [dash, gap, ...]. The 2.21 schema has no dash property, and pen.dev
+// drops every key it does not know when it loads a file; only `metadata` comes back. So the
+// pattern is kept as metadata.strokeDashPattern (decision 67): pen.dev keeps it and draws the
+// stroke solid. A node-level strokeDashPattern (as written before, or sent by an agent) is
+// read and moved into metadata (migrate_extension_props).
 parse_dash :: proc(doc: ^Document, n: ^Node, v: json.Value) {
 	n.ndash = 0
 	arr, ok := v.(json.Array)
@@ -2178,6 +2195,72 @@ parse_dash :: proc(doc: ^Document, n: ^Node, v: json.Value) {
 		if f, fok := num(doc, item); fok && f >= 0 {
 			n.dash[n.ndash] = f
 			n.ndash += 1
+		}
+	}
+}
+
+DASH_KEY :: "strokeDashPattern"
+// metadata.type for metadata the app adds only to hold its own keys; the schema requires a type
+META_TYPE :: "agentic-design"
+
+// `obj` (a node or an override entry) with a top-level strokeDashPattern moved into its
+// metadata; null removes it from metadata. False when there was nothing to move.
+move_dash_into_metadata :: proc(obj: ^json.Object) -> bool {
+	v, has := obj[DASH_KEY]
+	if !has do return false
+	delete_key(obj, DASH_KEY)
+	meta := make(json.Object, context.temp_allocator)
+	if old, ok := obj["metadata"].(json.Object); ok do for k, x in old do meta[k] = x
+	if _, is_null := v.(json.Null); is_null do delete_key(&meta, DASH_KEY)
+	else do meta[DASH_KEY] = v
+	if len(meta) == 0 || (len(meta) == 1 && (meta["type"].(json.String) or_else "") == META_TYPE) {
+		delete_key(obj, "metadata")
+	} else {
+		if _, typed := meta["type"].(json.String); !typed do meta["type"] = json.String(META_TYPE)
+		obj["metadata"] = meta
+	}
+	return true
+}
+
+// Keeps extension data where pen.dev keeps it: a node-level strokeDashPattern, on the node or
+// in its instance overrides, goes into metadata. Runs before every refresh, so files written
+// before (and agents' updates) end up in the one form the app writes.
+migrate_extension_props :: proc(n: ^Node) {
+	if i := prop_index(n, DASH_KEY); i >= 0 {
+		obj := make(json.Object, context.temp_allocator)
+		if v, err := json.parse_string(n.props[i].raw, .JSON5, false, context.temp_allocator); err == nil do obj[DASH_KEY] = v
+		if m, ok := prop_value(n, "metadata"); ok do obj["metadata"] = m
+		delete(n.props[i].key)
+		delete(n.props[i].raw)
+		ordered_remove(&n.props, i)
+		move_dash_into_metadata(&obj)
+		if m, ok := obj["metadata"]; ok {
+			b := strings.builder_make(context.temp_allocator)
+			write_json_value(&b, m)
+			node_set_raw(n, "metadata", strings.to_string(b))
+		} else if j := prop_index(n, "metadata"); j >= 0 {
+			delete(n.props[j].key)
+			delete(n.props[j].raw)
+			ordered_remove(&n.props, j)
+		}
+	}
+	if j := prop_index(n, "descendants"); j >= 0 && strings.contains(n.props[j].raw, DASH_KEY) {
+		v, err := json.parse_string(n.props[j].raw, .JSON5, false, context.temp_allocator)
+		desc, ok := v.(json.Object)
+		if err != nil || !ok do return
+		changed := false
+		for k, e in desc {
+			entry, is_obj := e.(json.Object)
+			if !is_obj do continue
+			if move_dash_into_metadata(&entry) {
+				desc[k] = entry
+				changed = true
+			}
+		}
+		if changed {
+			b := strings.builder_make(context.temp_allocator)
+			write_json_value(&b, desc)
+			node_set_raw(n, "descendants", strings.to_string(b))
 		}
 	}
 }

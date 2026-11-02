@@ -767,6 +767,13 @@ api_scale_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 				out[k] = scale_value(v, f, k, report)
 			case "offset", "stroke", "effect":
 				out[k] = scale_value(v, f, k, report)
+			case "metadata":
+				// the app's own lengths kept in metadata (the dash pattern), nothing else of it
+				if m, ok := v.(json.Object); ok && engine.DASH_KEY in m {
+					nm := make(json.Object, len(m), context.temp_allocator)
+					for mk, mv in m do nm[mk] = scale_value(mv, f, mk, report) if mk == engine.DASH_KEY else mv
+					out[k] = nm
+				} else do out[k] = v
 			case "descendants":
 				// overrides by id, and slot content (their children) inside them
 				if d, ok := v.(json.Object); ok {
