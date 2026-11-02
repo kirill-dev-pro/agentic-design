@@ -1,6 +1,7 @@
 # Builds what a change could break without anyone noticing: the browser viewer (the engine
 # for js_wasm32). The macOS app is built and checked by release.yml on tags; the viewer is
-# otherwise only built when the website deploys, after the change is already on main.
+# otherwise only built when the website deploys (Bunderhost, site/scripts/viewer.sh), after the
+# change is already on main.
 name: CI
 
 on:
@@ -20,7 +21,7 @@ jobs:
   web:
     runs-on: ubuntu-24.04
     env:
-      # the same Odin release as release.yml and pages.yml, for Linux
+      # the same Odin release as release.yml and site/scripts/viewer.sh, for Linux
       ODIN_VERSION: dev-2026-10
       ODIN_SHA256: c3c8b095621fd0c75f7f73e3a0829f1b4d45324225f20ba11ed8dc4da310a8ab
     steps:
