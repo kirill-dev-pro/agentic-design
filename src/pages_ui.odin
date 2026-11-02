@@ -87,7 +87,7 @@ page_delete :: proc(i: int) {
 	for &n in app.doc.nodes {
 		if n.parent == 0 && engine.page_of_top(&app.doc, n.id) == i do append(&doomed, n.uid)
 	}
-	for uid in doomed do engine.doc_delete(&app.doc, uid)
+	engine.doc_delete_layers(&app.doc, doomed[:])
 	p := app.doc.pages[i]
 	delete(p.name)
 	for id in p.ids do delete(id)

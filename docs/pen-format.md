@@ -103,6 +103,23 @@ The reader accepts both. Edits keep the form the node already uses (`Node.stroke
 - **Image files.** Images placed through the app are copied into `images/` next to the
   document and referenced as `./images/<name>`.
 
+- **Connectors, labels and shapes with text** (decision #67) are plain nodes that pen.dev
+  draws as last saved, with their live part in `metadata`, the only place pen.dev 1.2.21
+  keeps data it does not know:
+  - a connector: a stroked `path` with `layoutPosition: "absolute"` and `metadata
+    {"type": "connector", "source": {"path", "anchor"}, "target": {"path", "anchor"},
+    "routing", "startMarker", "endMarker", "waypoints"?}`. `path` is an id path (through
+    instances: `"card/title"`), `anchor` is `center`, `top`, `right`, `bottom` or `left`,
+    as in the schema's ConnectionEndpoint. The app rewrites `geometry`, `x`, `y`,
+    `width`, `height` and `viewBox` with the current route.
+  - its label: a frame with a text and `metadata {"type": "connection-label",
+    "connection": <connector id>, "at": 0..1}`.
+  - a shape with text: a frame with `metadata {"type": "shape", "shape": "diamond" |
+    "ellipse" | "capsule", "inset"?}`, whose `padding` (and a capsule's `cornerRadius`)
+    the app writes, and an outline child with `metadata {"type": "shape-outline"}`.
+  - The schema's own `connection` nodes are read as connectors' ends would be, but never
+    written: pen.dev 1.2.21 drops them.
+
 Nothing else is added. Computed boxes (`bounds`) appear only in socket and MCP answers,
 never in the file.
 

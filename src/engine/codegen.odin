@@ -830,7 +830,13 @@ gen_html_node :: proc(g: ^Gen, n: ^Node, indent: int, prefix: string, top: bool)
 	case .Text:
 		fmt.sbprintf(&g.out, "<p class=\"n-%s\">%s</p>\n", cls, html_escape(n.content))
 	case .Path:
-		fmt.sbprintf(&g.out, "<svg class=\"n-%s\" viewBox=\"%s %s %s %s\" preserveAspectRatio=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%s\"%s vector-effect=\"non-scaling-stroke\"/></svg>\n", cls, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), html_escape(n.geometry), " fill-rule=\"evenodd\"" if n.even_odd else "")
+		heads := ""
+		if hd := connector_heads_d(n); hd != "" {
+			// a connector's filled markers, in its stroke colour (the route and the outlines
+			// come from the geometry, as on the canvas)
+			heads = fmt.tprintf("<path d=\"%s\" style=\"fill:%s;stroke:none\"/>", hd, color_css(n, "stroke", n.stroke))
+		}
+		fmt.sbprintf(&g.out, "<svg class=\"n-%s\" viewBox=\"%s %s %s %s\" preserveAspectRatio=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%s\"%s vector-effect=\"non-scaling-stroke\"/>%s</svg>\n", cls, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), html_escape(n.geometry), " fill-rule=\"evenodd\"" if n.even_odd else "", heads)
 	case .Icon:
 		fmt.sbprintf(&g.out, "<svg class=\"n-%s\" data-icon=\"%s\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%s\"/></svg>\n", cls, html_escape(n.icon), html_escape(n.geometry))
 	case .Ref:
@@ -1210,7 +1216,9 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 		if is_prop do fmt.sbprintf(&g.out, "%s<p %s>{{props.%s ?? %s}}</p>\n", pad, cls_attr, prop, js_string(n.content))
 		else do fmt.sbprintf(&g.out, "%s<p %s>%s</p>\n", pad, cls_attr, content)
 	case .Path:
-		fmt.sbprintf(&g.out, "%s<svg %s viewBox=\"%s %s %s %s\" preserveAspectRatio=\"none\"><path d=\"%s\"%s vectorEffect=\"non-scaling-stroke\" /></svg>\n", pad, cls_attr, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), n.geometry, " fillRule=\"evenodd\"" if n.even_odd else "")
+		heads := ""
+		if hd := connector_heads_d(n); hd != "" do heads = fmt.tprintf("<path d=\"%s\" style={{{{ fill: %s, stroke: \"none\" }}}} />", hd, js_string(color_css(n, "stroke", n.stroke)))
+		fmt.sbprintf(&g.out, "%s<svg %s viewBox=\"%s %s %s %s\" preserveAspectRatio=\"none\"><path d=\"%s\"%s vectorEffect=\"non-scaling-stroke\" />%s</svg>\n", pad, cls_attr, num_text(n.view_box[0]), num_text(n.view_box[1]), num_text(n.view_box[2]), num_text(n.view_box[3]), n.geometry, " fillRule=\"evenodd\"" if n.even_odd else "", heads)
 	case .Icon:
 		icon_cls := fmt.tprintf("cn(\"%s\", props.%sClassName)", cls, camel(n.id)) if styled_part else fmt.tprintf("\"%s\"", cls)
 		if is_prop do fmt.sbprintf(&g.out, "%s{{React.createElement(props.%s ?? %s, {{ className: %s }})}}\n", pad, prop, pascal(n.icon), icon_cls)

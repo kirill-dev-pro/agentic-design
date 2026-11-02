@@ -285,6 +285,7 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 		} else {
 			fill_and_stroke(vg, n)
 		}
+		if n.flow == .Connector do fill_connector_heads(vg, n, sx, sy)
 	case .Text:
 		if lod_scale > 0 && n.font_size * lod_scale < 2 do draw_text_bars(vg, n)
 		else do draw_text(vg, n)
@@ -298,6 +299,36 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 	case .Other:
 		draw_placeholder(vg, n, n.type_name)
 	}
+}
+
+// A connector's filled markers (arrow, diamond, circle): the closed subpaths of its
+// geometry, filled with its stroke colour. The route itself is open and only stroked.
+fill_connector_heads :: proc(vg: ^nvg.Context, n: ^Node, sx, sy: f32) {
+	if !n.has_stroke do return
+	tp :: proc(p: [2]f32, n: ^Node, sx, sy: f32) -> [2]f32 {
+		return {n.x + (p.x - n.view_box[0]) * sx, n.y + (p.y - n.view_box[1]) * sy}
+	}
+	nvg.BeginPath(vg)
+	any := false
+	start := -1
+	for c, i in n.cmds {
+		if c.kind == .Move do start = i
+		if c.kind != .Close || start < 0 do continue
+		for k in start ..= i {
+			cc := n.cmds[k]
+			p := tp(cc.p[2], n, sx, sy)
+			#partial switch cc.kind {
+			case .Move: nvg.MoveTo(vg, p.x, p.y)
+			case .Line: nvg.LineTo(vg, p.x, p.y)
+			case .Close: nvg.ClosePath(vg)
+			}
+		}
+		any = true
+		start = -1
+	}
+	if !any do return
+	nvg.FillColor(vg, to_nvg(n.stroke))
+	nvg.Fill(vg)
 }
 
 // A path's stroke aligned outside its outline, over a fill that hides the inside: drawn as

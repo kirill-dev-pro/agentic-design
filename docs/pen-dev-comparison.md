@@ -38,6 +38,8 @@ was found while using the app for real work (the dogfooding log, kept with the t
 | Polygon, icon picker | primitives menu | icons via the format and MCP only | same | partial (no icon picker UI) |
 | Scale tool | K, scales text, strokes, effects | — | — | missing |
 | Sticky note | N | — | — | missing |
+| Connectors | in the schema, dropped by the 1.2.21 editor | free paths and hand-turned arrowheads | C: connectors attached to layers that re-route when they move, markers, labels; plain paths with metadata, so pen.dev draws them as saved | done (no routing around other boxes) |
+| Text inside shapes | — | a text laid over a path | diamond, ellipse and capsule frames whose text wraps in the shape and grows it | done |
 
 ## Selection
 

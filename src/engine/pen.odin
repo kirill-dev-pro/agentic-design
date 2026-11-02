@@ -323,6 +323,15 @@ write_node :: proc(b: ^strings.Builder, doc: ^Document, n: ^Node, indent: int, a
 		write_indent(b, inner)
 		fmt.sbprintf(b, `"bounds":[%s,%s,%s,%s]`, num_text(n.x), num_text(n.y), num_text(n.w), num_text(n.h))
 		write_visual_bounds(b, n)
+		if route, has := connector_routes[n.uid]; has && n.flow == .Connector {
+			// where it runs, page coordinates, from shape to shape
+			strings.write_string(b, `,"route":[`)
+			for p, i in route {
+				if i > 0 do strings.write_byte(b, ',')
+				fmt.sbprintf(b, "[%s,%s]", num_text(p.x), num_text(p.y))
+			}
+			strings.write_byte(b, ']')
+		}
 	}
 	if api && api_depth_limit >= 0 && api_depth >= api_depth_limit && plain > 0 {
 		fmt.sbprintf(b, `,"childCount":%d`, plain)

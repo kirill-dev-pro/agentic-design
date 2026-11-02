@@ -67,7 +67,7 @@ api_batch :: proc(b: ^strings.Builder, params: json.Object) -> string {
 				append(&uids, n.uid)
 			}
 			if err == "" {
-				for uid in uids do engine.doc_delete(&app.doc, uid)
+				engine.doc_delete_layers(&app.doc, uids[:])
 				prune_selection()
 				strings.write_string(&sub, `{"deleted":true}`)
 			}
@@ -75,8 +75,10 @@ api_batch :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			err = batch_move(&sub, o)
 		case "set_variables":
 			err = api_set_variables(&sub, o)
+		case "connect":
+			err = api_connect(&sub, o)
 		case:
-			err = "op must be create, update, delete, move or set_variables"
+			err = "op must be create, update, delete, move, connect or set_variables"
 		}
 		if err != "" {
 			// undo everything this batch did

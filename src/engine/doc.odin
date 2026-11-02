@@ -214,6 +214,7 @@ Node :: struct {
 	rotation:     f32, // degrees counter-clockwise around the top-left corner
 	flip_x:       bool,
 	flip_y:       bool,
+	flow:         Flow_Role, // metadata.type: a connector, its label or a shape (connector.odin)
 	// computed by the layout pass
 	mw, mh:       f32, // measured intrinsic size
 	x, y, w, h:   f32, // absolute box
@@ -1436,6 +1437,7 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 	n.stroke_sides, n.stroke_per_side = {}, false
 	n.letter_spacing, n.underline, n.strikethrough = 0, false, false
 	n.text_valign = .Start
+	n.flow = .None
 	icon_lib, icon_name := "", ""
 
 	n.type_name = strings.clone(prop_string(n, "type"))
@@ -1500,6 +1502,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 			n.clip = json_bool(doc, v) or_else false
 		case "layoutPosition":
 			n.abs_pos = json_str(doc, v) == "absolute"
+		case "metadata":
+			n.flow = flow_role(v)
 		case "fill":
 			n.fill, n.has_fill = color_of(doc, v)
 			if url, mode, ok := image_of(doc, v); ok {
@@ -1675,6 +1679,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 		if n.width.mode == .Fixed && !n.width.has_value do n.width.value = n.view_box[2]
 		if n.height.mode == .Fixed && !n.height.has_value do n.height.value = n.view_box[3]
 	}
+	// connectors and their labels are placed by the routing pass, never by a flex parent
+	if n.flow == .Connector || n.flow == .Label do n.abs_pos = true
 	n.stroke_width = thickness if thickness >= 0 else (stroke_width if stroke_width >= 0 else 1)
 	if n.stroke_per_side do n.stroke_width = max(n.stroke_sides[0], n.stroke_sides[1], n.stroke_sides[2], n.stroke_sides[3])
 	if n.kind == .Text {

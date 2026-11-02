@@ -60,6 +60,11 @@ handle_input :: proc() {
 		return
 	}
 
+	// connectors: the connector tool, and the ends of a selected connector
+	if app.editing == 0 && connector_input(page, over_canvas) {
+		update_cursor(over_canvas)
+		return
+	}
 	// the pen tool and path editing take the pointer first
 	if app.tool == .Pen && !pen.drawing && over_canvas && mouse_pressed(glfw.MOUSE_BUTTON_LEFT) && !key_down(glfw.KEY_SPACE) do pen_start_drawing()
 	if pen_active() && (over_canvas || pen.drag != .None) && !key_down(glfw.KEY_SPACE) && !mouse_pressed(glfw.MOUSE_BUTTON_MIDDLE) {
@@ -224,6 +229,7 @@ hit_test :: proc(page: [2]f32) -> int {
 }
 
 point_in_node :: proc(n: ^engine.Node, p_in: [2]f32) -> bool {
+	if n.flow == .Connector do return point_on_connector(n, p_in)
 	slop := 3 / app.zoom
 	p := p_in
 	// a turned or mirrored node: test the point in the node's own frame
@@ -298,6 +304,10 @@ mouse_down_tool :: proc(page: [2]f32) {
 				return
 			}
 			if n, _ := engine.doc_find_uid(&app.doc, hit); n != nil {
+				if n.flow == .Connector {
+					edit_connector_label(n)
+					return
+				}
 				if page.y < n.y {
 					start_rename(hit, true)
 					return
@@ -335,7 +345,7 @@ mouse_down_tool :: proc(page: [2]f32) {
 			append(&app.sel, hit)
 		}
 		app.drag.kind = .Move
-	case .Pen: // pen_input handles it
+	case .Pen, .Connector: // pen_input and connector_input handle them
 	case .Frame, .Rect, .Ellipse:
 		kind := engine.Node_Kind.Frame if app.tool == .Frame else (.Rectangle if app.tool == .Rect else .Ellipse)
 		push_undo()
@@ -554,7 +564,7 @@ handle_shortcuts :: proc() {
 			if len(app.sel) > 0 {
 				copy_selection()
 				push_undo()
-				for uid in app.sel do engine.doc_delete(&app.doc, uid)
+				engine.doc_delete_layers(&app.doc, app.sel[:])
 				clear(&app.sel)
 			}
 		case key_pressed(glfw.KEY_Z) && shift: redo()
@@ -660,6 +670,7 @@ handle_shortcuts :: proc() {
 	case key_pressed(glfw.KEY_E), key_pressed(glfw.KEY_O): app.tool = .Ellipse
 	case key_pressed(glfw.KEY_T): app.tool = .Text
 	case key_pressed(glfw.KEY_P): app.tool = .Pen
+	case key_pressed(glfw.KEY_C): app.tool = .Connector
 	case key_pressed(glfw.KEY_A) && shift: wrap_selection(.Auto_Layout)
 	case key_pressed(glfw.KEY_ESCAPE):
 		app.tool = .Select
@@ -681,7 +692,7 @@ handle_shortcuts :: proc() {
 	case key_pressed(glfw.KEY_BACKSPACE), key_pressed(glfw.KEY_DELETE):
 		if len(app.sel) > 0 {
 			push_undo()
-			for uid in app.sel do engine.doc_delete(&app.doc, uid)
+			engine.doc_delete_layers(&app.doc, app.sel[:])
 			clear(&app.sel)
 		}
 	}

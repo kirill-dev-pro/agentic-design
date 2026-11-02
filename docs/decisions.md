@@ -1690,3 +1690,67 @@ so the engine's PNG path cannot export.
 - No WebGL fallback: the GL backend is desktop OpenGL. Without WebGPU the page says which
   browsers work and links the app.
 
+## 67. Connectors, markers and shapes with text, as plain .pen that pen.dev draws
+
+**Problem.** Agents draw flowcharts (D54–D57 of the dogfooding log: a chat bot's flows,
+seven pages, 120 arrows). An arrow was a free path that stayed behind when a box moved or
+its text grew, every arrowhead a separate triangle turned by hand, and a decision diamond
+a frame with a path and a text laid over it that did not wrap to it. The .pen 2.21 schema
+has a `connection` type (`source`/`target`: an id path and an anchor), but pen.dev 1.2.21
+drops connections when it loads a file ("Unknown node type: connection" from its API) and
+drops every property it does not know; a probe saved by pen.dev kept only `metadata`.
+
+**Decision.** Everything is plain .pen that pen.dev draws as last saved; what makes it live
+is in `metadata`, which pen.dev keeps.
+
+- A connector is a stroked `path` (`layoutPosition: absolute`) with `metadata {"type":
+  "connector", "source": {"path", "anchor"}, "target": {...}, "routing", "startMarker",
+  "endMarker", "waypoints"?}`; the endpoints use the schema's ConnectionEndpoint (id paths
+  through instances; center, top, right, bottom, left). After every layout the routing
+  pass (`engine/connector.odin`) works out the route between the two layers' boxes as
+  drawn and writes it into the path's geometry, position and size when it changed: a
+  connector follows its shapes, and the saved file shows the current picture.
+  - `center` leaves from the side that faces the other layer. Orthogonal routes (the
+    default) run 16 px straight out of a side and bend at most three times; facing boxes
+    that overlap across the flow get a straight line where they overlap (a diamond or an
+    ellipse only at its tips). Straight and curved routes too. Going around third boxes
+    is not done; crossings will be a lint rule (D60).
+  - Markers (arrow, open arrow, circle, diamond, bar) are drawn into the geometry as
+    outlines, the route trimmed under filled ones; the app fills the closed ones in the
+    stroke colour, pen.dev shows their outlines. HTML and React export draw the filled
+    heads as a second SVG path.
+  - A label is a small frame with a text and `metadata {"type": "connection-label",
+    "connection": id, "at": 0.5}`, kept centred on the route; pen.dev shows it where it
+    was saved. Its fill is the nearest solid container fill.
+  - Native `connection` nodes are not written (pen.dev would drop them).
+- A shape with text is a frame with `metadata {"type": "shape", "shape": "diamond" |
+  "ellipse" | "capsule"}`: layout gives it the padding that puts its content in the
+  shape's inscribed box (a diamond's middle half, an ellipse's 71 %, a capsule between its
+  round ends) and a frame that fits its content grows to hold it. Its outline is a child
+  with `metadata {"type": "shape-outline"}` (a path or an ellipse) kept at the frame's
+  size; a capsule is the frame's own fill and a radius of half its height. Padding,
+  outline and radius are written into the file.
+- MCP: `connect {from, to, fromSide, toSide, routing, startMarker, endMarker, label,
+  stroke, strokeWidth, parent_id, id}` (also a `batch` op); `update_nodes` on a connector
+  takes `source`, `target`, sides, routing, markers and `label`; `get_document` gives a
+  connector's `route`; `create_nodes` takes `{"type": "frame", "shape", "content", ...}`
+  and expands it. Deleting a layer deletes the connectors attached to it and their labels,
+  in the same undo step.
+- Canvas: the connector tool (C) drags from one layer to another (from a side dot for a
+  fixed side); a selected connector shows its ends, which drag onto other layers or
+  sides; double-click edits its label; connectors are picked by their line, not their box;
+  the inspector has routing, start and end markers and the label. `get_selection` also
+  gives the view (`zoom`, `origin`) for tools that drive the pointer.
+- Layers created without an id get it where the loader puts it (after `type`), so a file
+  saved right after an edit reads back and saves to the same bytes.
+
+**Consequences.** `tools/connectors.py` in the tests repository checks routes against the
+boxes, re-routing, markers in pixels, labels, `update_nodes`, `batch`, errors, the delete
+cascade and undo, a diamond's text inside its middle half and growing with it, the
+capsule's radius, HTML export, the connector tool, dragging an end, label editing, and a
+saved file that is stable across a reload and has no `connection` node or unknown key
+(32 checks). pen.dev 1.2.21 opens such a file and draws the same diagram, arrowheads as
+outlines. Files without connectors or shapes are unchanged (`get_document`, the saved
+file and a screenshot of a product design are byte-identical); the D43 batch takes as
+long as before. A connector inside a turned frame is routed in page space; routes do not
+avoid other boxes.

@@ -379,7 +379,7 @@ context_menu_apply :: proc() {
 	case "Export PNG": export_request()
 	case "Delete":
 		push_undo()
-		for uid in app.sel do engine.doc_delete(&app.doc, uid)
+		engine.doc_delete_layers(&app.doc, app.sel[:])
 		clear(&app.sel)
 	}
 }

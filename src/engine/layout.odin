@@ -35,6 +35,8 @@ layout_document :: proc(doc: ^Document) {
 		w, h := measure(doc, n, {-1, -1}, 0)
 		arrange(doc, n, n.pos.x, n.pos.y, w, h, 0)
 	}
+	fit_shapes(doc)
+	route_connectors(doc)
 }
 
 // Intrinsic size of a node. `avail` is the space the parent offers on each
@@ -70,7 +72,8 @@ measure :: proc(doc: ^Document, n: ^Node, avail: [2]f32, depth: int) -> (f32, f3
 			content = {w, h}
 		}
 	case .Frame, .Group:
-		content = measure_children(doc, n, own, depth)
+		if n.flow == .Shape do content = measure_shape(doc, n, own, depth)
+		else do content = measure_children(doc, n, own, depth)
 	case .Rectangle, .Ellipse, .Other:
 		content = {100, 100}
 	}
@@ -96,7 +99,8 @@ measure_children :: proc(doc: ^Document, n: ^Node, own: [2]f32, depth: int) -> [
 			c, _ := doc_find_uid(doc, cu)
 			if c == nil do continue
 			cw, ch := measure(doc, c, inner, depth + 1)
-			if !c.enabled do continue
+			// connectors follow their shapes: a frame fitting its content does not grow for them
+			if !c.enabled || c.flow == .Connector || c.flow == .Label do continue
 			ext = {max(ext.x, c.pos.x + cw), max(ext.y, c.pos.y + ch)}
 		}
 		return ext

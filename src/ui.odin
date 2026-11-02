@@ -533,7 +533,7 @@ draw_tools :: proc(vg: ^nvg.Context) {
 		icon: Icon,
 		tip:  string,
 	}
-	tools := [?]Tool_Button{{.Select, .Select, "Move  V"}, {.Hand, .Hand, "Hand  H"}, {.Frame, .Frame, "Frame  F"}, {.Rect, .Rect, "Rectangle  R"}, {.Ellipse, .Ellipse, "Ellipse  E"}, {.Text, .Text, "Text  T"}, {.Pen, .Pen, "Pen  P"}}
+	tools := [?]Tool_Button{{.Select, .Select, "Move  V"}, {.Hand, .Hand, "Hand  H"}, {.Frame, .Frame, "Frame  F"}, {.Rect, .Rect, "Rectangle  R"}, {.Ellipse, .Ellipse, "Ellipse  E"}, {.Text, .Text, "Text  T"}, {.Pen, .Pen, "Pen  P"}, {.Connector, .Connector, "Connector  C"}}
 	y := TAB_H + 8
 	for t in tools {
 		if icon_button(vg, {LEFT_W + 6, y, 32, 32}, t.icon, app.tool == t.tool, t.tip) {
@@ -630,7 +630,7 @@ draw_inspector_content :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 		if button(vg, {x, y^, half, 28}, "Duplicate") do duplicate_selection()
 		if button(vg, {x + half + 8, y^, half, 28}, "Delete") {
 			push_undo()
-			for uid in app.sel do engine.doc_delete(&app.doc, uid)
+			engine.doc_delete_layers(&app.doc, app.sel[:])
 			clear(&app.sel)
 		}
 		y^ += 36
@@ -640,6 +640,7 @@ draw_inspector_content :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 	n, _ := engine.doc_find_uid(&app.doc, app.sel[0])
 	if n == nil do return
 	if ui.focus != "" && ui.focus_uid != n.uid do field_commit()
+	if n.flow == .Connector do draw_connector_section(vg, n, x, right, y)
 	draw_node_properties(vg, n, x, right, y)
 }
 

@@ -39,6 +39,7 @@ Tool :: enum {
 	Ellipse,
 	Text,
 	Pen,
+	Connector,
 }
 
 Drag_Kind :: enum {
@@ -666,6 +667,7 @@ draw_canvas :: proc() {
 	}
 	draw_gradient_handles(vg)
 	draw_pen_overlay(vg)
+	draw_connector_overlay(vg)
 	draw_measurements(vg)
 	// marquee, and the region of the zoom tool
 	if (app.drag.kind == .Marquee || app.drag.kind == .Zoom) && (abs(app.mouse.x - to_screen(app.drag.start_page).x) >= 0.5 || abs(app.mouse.y - to_screen(app.drag.start_page).y) >= 0.5) {
@@ -780,6 +782,7 @@ selection_color :: proc(n: ^engine.Node) -> nvg.Color {
 }
 
 outline_node :: proc(n: ^engine.Node, width: f32) {
+	if n.flow == .Connector && outline_connector(n, width) do return
 	vg := app.vg
 	a := to_screen({n.x, n.y})
 	if n.w * app.zoom < 0.5 && n.h * app.zoom < 0.5 do return // see draw_node_tree
@@ -817,6 +820,7 @@ outline_node :: proc(n: ^engine.Node, width: f32) {
 // Resize handles work on the axis-aligned box; turned or mirrored layers are resized
 // from the inspector.
 resizable :: proc(n: ^engine.Node) -> bool {
+	if n.flow == .Connector do return false // its route follows its ends
 	_, tr := engine.node_transform(n)
 	return !tr
 }

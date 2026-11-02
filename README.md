@@ -138,6 +138,7 @@ use the image tool to place them; they are copied into `images/` next to the doc
 | Shift 1 / Cmd 0 | fit all / 100% |
 | Hold Z / hold Option | zoom tool (click, Option-click, drag) / measure distances |
 | P | pen tool (double click or Enter on a path edits its points) |
+| C | connector tool: drag from one layer to another (from a side dot for that side); drag a selected connector's end onto another layer; double click a connector to edit its label |
 | Shift Cmd C / Option Cmd C | copy as PNG / copy as HTML |
 | Cmd F, ?, Cmd , | find layers, shortcut sheet, settings |
 | Cmd ' | pixel grid |
@@ -202,7 +203,7 @@ where they say, without a panel.
 colours, missing fonts, text that does not fit, layers cut off, broken refs, off-pixel values),
 `get_document` (with `ids` for subtrees and `depth` for big files), `get_selection`,
 `get_variables`, `get_styles` (the CSS code export writes for given nodes), `create_nodes`
-(`.pen` nodes, nested `children`; an instance as `parent_id` takes slot content; an image paint's `url` may be any local file, copied into `images/`), `update_nodes`, `delete_nodes`, `reorder`, `select`,
+(`.pen` nodes, nested `children`; an instance as `parent_id` takes slot content; an image paint's `url` may be any local file, copied into `images/`), `update_nodes`, `delete_nodes` (with the connectors attached), `connect` (a connector between two layers that re-routes when they move: sides, orthogonal, straight or curved routing, arrow, open arrow, circle, diamond or bar markers, a label; `create_nodes` also takes `{"type": "frame", "shape": "diamond" | "ellipse" | "capsule", "content"}` for a shape whose text wraps inside it), `reorder`, `select`,
 `zoom_to_fit`, `screenshot` (a node, the canvas, or the whole window with `view: true`),
 `undo`, `redo`, `save`, `open` (`create: true` starts a new file), `add_fonts` (font files or installed families into the document), `scale_nodes` (a subtree at another size, in plain .pen), `outline_text` (text layers into paths of their glyph outlines, which keep a stroke in pen.dev; also "Outline text" in the context menu), `set_variables` (variables, theme axes and the shown theme),
 `set_pages`, `set_libraries` (import other .pen files as libraries; they are re-read when their files

@@ -57,6 +57,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		e = api_add_fonts(&b, params)
 	case "outline_text":
 		e = api_outline_text(&b, params)
+	case "connect":
+		e = api_connect(&b, params)
 	case "get_guide":
 		api_get_guide(&b)
 	case "lint":
@@ -75,7 +77,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		uids := uids_param(params, "ids")
 		if len(uids) == 0 do return api_error("ids is required (and must name existing nodes)"), false
 		push_undo()
-		for uid in uids do engine.doc_delete(&app.doc, uid)
+		engine.doc_delete_layers(&app.doc, uids[:])
 		prune_selection()
 		strings.write_string(&b, `{"deleted":true}`)
 	case "set_variables":
@@ -292,6 +294,12 @@ api_get_document :: proc(b: ^strings.Builder, params: json.Object, selection_onl
 		else do strings.write_string(b, "null")
 	}
 	strings.write_byte(b, ']')
+	if selection_only {
+		// where the page is in the window (screen = origin + page × zoom), for tests and
+		// agents that drive the pointer
+		o := to_screen({0, 0})
+		fmt.sbprintf(b, `,"view":{{"zoom":%s,"origin":[%s,%s]}}`, engine.num_text(app.zoom), engine.num_text(o.x), engine.num_text(o.y))
+	}
 	if selection_only && status_showing() {
 		// the toast the window shows now (a hint after a command), for agents driving it
 		strings.write_string(b, `,"status":`)
@@ -464,7 +472,9 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	if !ok || len(specs) == 0 do return "nodes must be a non-empty array of .pen nodes"
 	push_undo()
 	created := make([dynamic]int, context.temp_allocator)
-	for spec in specs {
+	for spec_in in specs {
+		spec, serr := expand_shape_spec(spec_in)
+		if serr != "" do return serr
 		uid, err := engine.node_from_json(&app.doc, spec, parent)
 		if err != "" do return err
 		if slot != "" do if cn, _ := engine.doc_find_uid(&app.doc, uid); cn != nil do cn.slot_of = strings.clone(slot)
@@ -607,7 +617,13 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			engine.doc_reparent(&app.doc, uid, np)
 			n, _ = engine.doc_find_uid(&app.doc, uid)
 		}
+		if n.flow == .Connector {
+			has_conn := false
+			for k in o do if is_connector_key(k) do has_conn = true
+			if has_conn do if e := update_connector(n, o); e != "" do return e
+		}
 		for k, v in o {
+			if n.flow == .Connector && is_connector_key(k) do continue
 			switch k {
 			case "id", "parent_id", "children", "type":
 			case:
