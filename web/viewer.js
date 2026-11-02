@@ -194,9 +194,31 @@
 		return li;
 	};
 
+	// ?page=N from the URL, applied once the document has that many pages
+	let pendingPage = Number(new URLSearchParams(location.search).get("page")) || 0;
+
+	// A document from a URL (or the sample) keeps its page and theme in the address, so the
+	// link opens the same view; dropped files have no address to share.
+	function syncAddress() {
+		if (!info || docPath.startsWith("/local/") || !location.search) return;
+		const params = new URLSearchParams(location.search);
+		if (info.page > 0) params.set("page", String(info.page));
+		else params.delete("page");
+		const set = (info.themes || []).filter((a) => a.values.length && a.value !== a.values[0]).map((a) => `${a.name}:${a.value}`);
+		if (set.length) params.set("theme", set.join(","));
+		else params.delete("theme");
+		const next = "?" + params.toString().replace(/%3A/g, ":").replace(/%2C/g, ",").replace(/%2F/g, "/").replace(/^\?sample=(&|$)/, "?sample$1");
+		if (next !== location.search) history.replaceState(null, "", next);
+	}
+
 	let shownShape = "";
 	function showInfo(next) {
 		info = next;
+		if (pendingPage && (info.pages || []).length > pendingPage) {
+			const p = pendingPage;
+			pendingPage = 0;
+			ex.viewer_set_page(p);
+		}
 		window.viewerInfo = info; // (for the console and tests)
 		const loaded = !!(info.frames && (info.frames.length || (info.pages || []).length));
 		const title = loaded && info.title !== "." ? info.title : "";
@@ -243,6 +265,7 @@
 			if (select) select.value = a.value;
 		}
 		placeThemes();
+		syncAddress();
 
 		$("zoom").textContent = Math.round(info.zoom * 100) + "%";
 
