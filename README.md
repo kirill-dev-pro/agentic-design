@@ -197,7 +197,7 @@ where they say, without a panel.
 
 ## MCP tools
 
-A session starts with `open` (the `.pen` file to work on). Edits go only to that document:
+The MCP server starts the window when none is running; `agentic-design mcp --no-launch` (or `AGENTIC_NO_LAUNCH=1`) reports an error instead, for scripts that must drive a window that is already open, and a started window inherits the environment (`AGENTIC_QUIET`, `AGENTIC_PORT`). A session starts with `open` (the `.pen` file to work on). Edits go only to that document:
 before one is opened, or when the window shows another (the user switched tabs, or the
 window restarted), they are refused instead of landing in whatever is open; a call can also
 name its document with `"document": <path>`. Every reply says which `file` it read or

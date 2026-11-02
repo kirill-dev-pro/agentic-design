@@ -194,7 +194,8 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s%s}}`, name, args_json, strings.to_string(agent), file_json)
 	response, ok := app_request(request)
 	if !ok {
-		tool_error(b, "Could not reach the Agentic Design window. It failed to start or is not responding.")
+		if !mcp_may_launch() do tool_error(b, fmt.tprintf("No Agentic Design window answers on port %d, and starting one is off (--no-launch or AGENTIC_NO_LAUNCH).", server_port()))
+		else do tool_error(b, "Could not reach the Agentic Design window. It failed to start or is not responding.")
 		return
 	}
 	res, err := json.parse_string(response, .JSON, true, context.temp_allocator)
@@ -244,10 +245,20 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 	strings.write_string(b, "}]}")
 }
 
-// Sends one request line to the window, starting it if it is not running.
+// Whether the MCP server may start a window when none answers on the port: yes for agents
+// (the app opens when they first need it), no with `mcp --no-launch` or AGENTIC_NO_LAUNCH=1,
+// for scripts that drive a window that must already be there (D90).
+mcp_may_launch :: proc() -> bool {
+	for a in os.args[2:] do if a == "--no-launch" do return false
+	v := os.get_env("AGENTIC_NO_LAUNCH", context.temp_allocator)
+	return v == "" || v == "0"
+}
+
+// Sends one request line to the window, starting it if it is not running (and allowed to).
 app_request :: proc(request: string) -> (string, bool) {
 	sock, err := net.dial_tcp_from_hostname_and_port_string(fmt.tprintf("127.0.0.1:%d", server_port()))
 	if err != nil {
+		if !mcp_may_launch() do return "", false
 		launch_app()
 		for _ in 0 ..< 50 {
 			time.sleep(200 * time.Millisecond)
