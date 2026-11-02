@@ -197,6 +197,12 @@ where they say, without a panel.
 
 ## MCP tools
 
+A session starts with `open` (the `.pen` file to work on). Edits go only to that document:
+before one is opened, or when the window shows another (the user switched tabs, or the
+window restarted), they are refused instead of landing in whatever is open; a call can also
+name its document with `"document": <path>`. Every reply says which `file` it read or
+changed.
+
 `get_guide` (what the document holds and how its parts are named; the place to start),
 `batch` (several edits as one undo step, all or nothing), `find_nodes`, `rename_references`
 (repoint variables and refs; with `library`, move a file onto an imported library), `lint` (`metadata.lintIgnore` on a layer or `ignore` per call skips rules; hard-coded

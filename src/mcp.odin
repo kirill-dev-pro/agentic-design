@@ -16,6 +16,7 @@ import "core:time"
 // Agentic Design window over the local control socket and starts the window if needed.
 
 MCP_INSTRUCTIONS :: `Agentic Design is a native design canvas running on this Mac that edits .pen files (pencil.design). The user sees every change live.
+Start with open (the path of the .pen file you work on; "create": true starts a new one). Edits go only to that document: until a session has opened one, or a call passes "document": <path>, edits are refused instead of landing in whatever the window shows, and if the window shows another document (the user switched tabs, or it restarted), calls are refused until you open yours again. Every reply names the "file" it read or changed.
 Nodes are exchanged in the .pen format itself. A node has "type", "id" (a unique string, auto-generated if omitted) and properties:
 - types: frame (container; "layout": "none" | "horizontal" | "vertical", "gap", "padding" (n or [v,h] or [t,r,b,l]), "justifyContent", "alignItems", "clip"), group, rectangle, ellipse, path ("geometry": SVG path data), text ("content", "fontSize", "fontWeight" "400".."700", "textGrowth": "auto" | "fixed-width" | "fixed-width-height", "textAlign", "letterSpacing", "underline"), icon ("library": "lucide", "icon": "house"; its "fill" is the color), ref (instance of a node with "reusable": true; "ref": its id; "descendants": {"<id inside the component>": {"content": ...}} overrides its parts).
 - Design tokens: set_variables defines variables and theme axes; use them as "$name" in any property.
@@ -63,6 +64,21 @@ TOOLS_JSON :: `[
 
 // The MCP client this proxy serves (its `clientInfo`), sent along with every request.
 mcp_client, mcp_client_title: string
+
+// The document this session works on (decision 75):
+// set by `open`, or by a call's "document" argument. Every request then names it, and the
+// window refuses one when it shows another document; edits without one are refused here,
+// so they never land in whatever happens to be open (after a restart, untitled.pen).
+mcp_file: string
+
+// Tools that change the document (or save it).
+mcp_edits :: proc(name: string) -> bool {
+	switch name {
+	case "batch", "create_nodes", "update_nodes", "delete_nodes", "reorder", "connect", "set_variables", "set_pages", "set_libraries", "rename_references", "scale_nodes", "outline_text", "add_fonts", "undo", "redo", "save":
+		return true
+	}
+	return false
+}
 
 mcp_main :: proc() {
 	posix_ignore_sigpipe()
@@ -148,7 +164,34 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 	strings.write_string(&agent, `,"title":`)
 	engine.json_write_string(&agent, mcp_client_title)
 	strings.write_string(&agent, "}")
-	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s}}`, name, args_json, strings.to_string(agent))
+	// which document: the call's own "document", else the session's
+	file := mcp_file
+	if args, aerr := json.parse_string(args_json, .JSON, true, context.temp_allocator); aerr == nil {
+		if ao, is_obj := args.(json.Object); is_obj {
+			if d, has := ao["document"].(json.String); has && d != "" do file = engine.absolute_path(string(d))
+		}
+	}
+	if name == "open" do file = ""
+	if file == "" && mcp_edits(name) {
+		shown := ""
+		if r, rok := app_request(`{"method":"window","params":{}}`); rok {
+			if v, perr := json.parse_string(r, .JSON, true, context.temp_allocator); perr == nil {
+				if vo, is_obj := v.(json.Object); is_obj do shown = string(vo["file"].(json.String) or_else "")
+			}
+		}
+		msg := "No document chosen for edits in this session, so nothing was changed. Call open with the path of the .pen file you mean to edit, or pass \"document\": <path> with this call."
+		if shown != "" do msg = fmt.tprintf("%s The window shows %s; open it to keep working there.", msg, shown)
+		tool_error(b, msg)
+		return
+	}
+	file_json := ""
+	if file != "" {
+		fb := strings.builder_make(context.temp_allocator)
+		strings.write_string(&fb, `,"file":`)
+		engine.json_write_string(&fb, file)
+		file_json = strings.to_string(fb)
+	}
+	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s%s}}`, name, args_json, strings.to_string(agent), file_json)
 	response, ok := app_request(request)
 	if !ok {
 		tool_error(b, "Could not reach the Agentic Design window. It failed to start or is not responding.")
@@ -164,7 +207,18 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 		tool_error(b, string(obj["error"].(json.String) or_else "unknown error"))
 		return
 	}
+	// the session follows the document it opened, or saved under another name
+	shown := string(obj["file"].(json.String) or_else "")
+	if shown != "" && (name == "open" || mcp_edits(name) || file != "") {
+		delete(mcp_file)
+		mcp_file = strings.clone(shown)
+	}
 	result := obj["result"]
+	// say which document was read or changed
+	if ro, is_obj := result.(json.Object); is_obj && shown != "" && !("file" in ro) && !("markdown" in ro) && !("png_base64" in ro) {
+		ro["file"] = json.String(shown)
+		result = ro
+	}
 	if ro, is_obj := result.(json.Object); is_obj {
 		if md, has := ro["markdown"].(json.String); has {
 			// a guide: the text itself, not JSON around it

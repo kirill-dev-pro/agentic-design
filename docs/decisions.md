@@ -1890,3 +1890,34 @@ label hits to 0, 2 and 1 (the two overlaps and the label are real). Layout with 
 takes 2.8 ms on it. `tools/connectors.py` checks routing around a box, the z-order, the
 label id and colour, the close boxes, spread ports, captions and the lint rules (47
 checks). Files without connectors are unchanged.
+
+## 75. Agents' edits name their document; the window refuses them for another one
+
+**Problem.** After a window restart the window reopens `untitled.pen` (or the last file),
+and an agent's next edit through the MCP server landed there: in the user's scratch file,
+silently (D52). The same happened when the user switched tabs while an agent worked.
+
+**Decision.**
+
+- The MCP server keeps the document of its session: the path `open` answered with, or the
+  `document` argument of a call (which also binds the session). Every request then names it
+  (`"file"` next to `"method"`), and the window refuses any request about the document
+  (reads too) when it shows another one, with both paths and "Call open with … to work on
+  it again". Nothing is changed.
+- An edit (`batch`, `create_nodes`, `update_nodes`, `delete_nodes`, `reorder`, `connect`,
+  `set_variables`, `set_pages`, `set_libraries`, `rename_references`, `scale_nodes`,
+  `outline_text`, `add_fonts`, `undo`, `redo`, `save`) in a session without a document is
+  refused by the MCP server itself, naming the document the window shows (new method
+  `window`), so the agent opens it on purpose. Reads without a document still work.
+- Every successful answer carries `"file"`, the document it read or changed (written after
+  the method ran, so `open` and `save` under another name report the new one); the MCP
+  server adds it to the result it returns.
+- Socket clients that send no `"file"` (tests, the interface driver) work as before.
+
+**Consequences.** An agent's first edit costs one `open` more. A test through the MCP
+server: an edit before `open` is refused and names `a.pen`; after `open` it lands in `a.pen`
+and says so; with the window restarted on `untitled.pen` the next edit and `save` are
+refused and `untitled.pen` is byte-identical afterwards; `open` again and the edit lands in
+`a.pen`; a fresh session can pass `document`, and a `document` the window does not show is
+refused.
+

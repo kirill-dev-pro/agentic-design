@@ -10,6 +10,7 @@ import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
+import "core:sys/posix"
 import "vendor:glfw"
 import nvg "nanovg"
 
@@ -34,6 +35,16 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: string, deferred: bool) {
 	method := string(obj["method"].(json.String) or_else "")
 	params, _ := obj["params"].(json.Object)
+
+	// The document a request is for ("file", next to "method"): a request that names one is
+	// refused when the window shows another, so an agent's edits never fall back to whatever
+	// is open (after a restart, or when the user switched tabs). The MCP server sends it.
+	if f, has := obj["file"].(json.String); has && f != "" && !document_free(method) {
+		if app.tab < 0 || !same_file(string(f), app.file_path) {
+			shown := app.file_path if app.tab >= 0 else "no document"
+			return api_error(fmt.tprintf("This request is for %s, but the window shows %s. Nothing was changed. Call open with %s to work on it again (or open another file on purpose).", f, shown, f)), false
+		}
+	}
 
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, `{"ok":true,"result":`)
@@ -198,6 +209,14 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		strings.write_string(&b, `{"path":`)
 		engine.json_write_string(&b, app.file_path)
 		strings.write_string(&b, "}")
+	case "window":
+		// what the window shows: the document (the envelope's "file") and the open tabs
+		strings.write_string(&b, `{"tabs":[`)
+		for t, i in app.tabs {
+			if i > 0 do strings.write_byte(&b, ',')
+			engine.json_write_string(&b, t.path)
+		}
+		strings.write_string(&b, "]}")
 	case "open":
 		path := string(params["path"].(json.String) or_else "")
 		if path == "" do return api_error("pass path"), false
@@ -268,8 +287,33 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		return api_error(fmt.tprintf("unknown method '%s'", method)), false
 	}
 	if e != "" do return api_error(e), false
+	// every answer says which document it read or changed (after the method: open and save
+	// may have changed it)
+	if app.tab >= 0 {
+		strings.write_string(&b, `,"file":`)
+		engine.json_write_string(&b, app.file_path)
+	}
 	strings.write_string(&b, "}")
 	return strings.clone(strings.to_string(b), big_allocator()), false
+}
+
+// Methods that do not depend on the document shown.
+document_free :: proc(method: string) -> bool {
+	switch method {
+	case "open", "window", "update", "onboarding", "perf", "memory", "input", "presence":
+		return true
+	}
+	return false
+}
+
+// The same file, also through symlinks (/tmp and /private/tmp).
+same_file :: proc(a, b: string) -> bool {
+	if a == b do return true
+	ra := posix.realpath(strings.clone_to_cstring(a, context.temp_allocator))
+	rb := posix.realpath(strings.clone_to_cstring(b, context.temp_allocator))
+	defer if ra != nil do posix.free(ra)
+	defer if rb != nil do posix.free(rb)
+	return ra != nil && rb != nil && string(ra) == string(rb)
 }
 
 api_error :: proc(msg: string) -> string {
