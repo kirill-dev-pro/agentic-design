@@ -11,6 +11,7 @@ import * as v from 'valibot'
 import { WorkerstackError } from 'workerstack'
 
 import type { App } from './blobs'
+import { cleanup } from './cleanup'
 import { fileRoutes } from './files'
 import * as schema from './schema'
 import { countView, manifestOf, resolveToken, shareJson, tokenOfShareUrl } from './share'
@@ -50,6 +51,15 @@ export const backend = workerstack({
 		},
 	}),
 	rateLimit: { windowMs: 60_000, max: 120 },
+	jobs: (j) =>
+		j.define({
+			cleanup: j.cron({
+				schedule: '30 3 * * *',
+				handler: async (ctx) => {
+					await cleanup(ctx as unknown as App)
+				},
+			}),
+		}),
 	api: (o) => ({
 		...fileRoutes(o),
 
