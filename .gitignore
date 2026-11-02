@@ -7,3 +7,5 @@ designs/fonts/
 src/wgpu/lib/
 dist/
 
+# the website's JavaScript dependencies (site/)
+node_modules/

@@ -1,11 +1,10 @@
-// Builds the website into site/dist, plain static files (GitHub Pages serves them, see
-// .github/workflows/pages.yml): the pages from site/pages and, when it has been built, the
-// browser viewer (build/web, tools/build_web.sh) under /view with the sample design. Every
-// asset but the pages, the crawler files and the icons gets a content hash in its name, so a
-// cached copy can never be a stale one (Pages sets no long cache and takes no headers).
+// Builds the site's static files into site/dist/client (the Worker's assets directory): the
+// pages from site/pages and, when it has been built, the browser viewer (build/web,
+// tools/build_web.sh) under /view with the sample design. Every asset but the pages, the
+// crawler files and the icons gets a content hash in its name; _headers marks those
+// immutable. Plain files: any static host can serve the folder.
 //   node site/build.mjs      (or bun; from anywhere)
-// VIEWER=path/to/web overrides where the viewer build is read from; CNAME=host writes the
-// custom domain file (default agentic-design.kcrz.dev, CNAME= for none).
+// VIEWER=path/to/web overrides where the viewer build is read from.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -13,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.join(here, "pages");
-const out = path.join(here, "dist");
+const out = path.join(here, "dist", "client");
 const viewer = process.env.VIEWER || path.join(here, "..", "build", "web");
 
 fs.rmSync(out, { recursive: true, force: true });
@@ -99,15 +98,28 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	console.log("viewer: not built (", viewer, "), /view is left out");
 }
 
-// ---------------------------------------------------------------- Pages
+// ---------------------------------------------------------------- headers
 
 const all = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
 	const p = path.join(dir, e.name);
 	return e.isDirectory() ? all(p) : [p];
 });
-const domain = process.env.CNAME ?? "agentic-design.kcrz.dev";
-if (domain) write("CNAME", domain + "\n");
-write(".nojekyll", ""); // files as they are: no Jekyll pass over them
+// Cloudflare's static assets read _headers: names with a content hash never change; the rest
+// revalidate.
+write("_headers", [
+	"/*",
+	"  X-Content-Type-Options: nosniff",
+	"  Referrer-Policy: strict-origin-when-cross-origin",
+	...[...new Set(all(out).map((f) => path.relative(out, f).split(path.sep).join("/")).filter((f) => /\.[0-9a-f]{10}\.[a-z0-9]+$/.test(f)))]
+		.flatMap((f) => ["/" + f, "  Cache-Control: public, max-age=31536000, immutable"]),
+	"/img/*",
+	"  Cache-Control: public, max-age=86400",
+	"/favicon.*",
+	"  Cache-Control: public, max-age=86400",
+	"/view/samples/*",
+	"  Cache-Control: public, max-age=3600",
+	"",
+].join("\n"));
 
 const written = all(out);
-console.log(`dist: ${written.length} files, ${(written.reduce((n, f) => n + fs.statSync(f).size, 0) / 1024).toFixed(0)} KB`);
+console.log(`dist/client: ${written.length} files, ${(written.reduce((n, f) => n + fs.statSync(f).size, 0) / 1024).toFixed(0)} KB`);

@@ -1,0 +1,6 @@
+{
+	"name": "agentic-design-repo",
+	"private": true,
+	"//": "Only the website (site/) is a JavaScript package; the app is Odin (build.sh). Bunderhost installs dependencies from the repository root.",
+	"workspaces": ["site"]
+}
