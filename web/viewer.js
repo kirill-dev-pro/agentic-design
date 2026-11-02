@@ -199,8 +199,9 @@
 		info = next;
 		window.viewerInfo = info; // (for the console and tests)
 		const loaded = !!(info.frames && (info.frames.length || (info.pages || []).length));
-		$("title").textContent = info.title || ".pen viewer";
-		document.title = info.title ? info.title + " — .pen viewer" : ".pen viewer — Agentic Design";
+		const title = loaded && info.title !== "." ? info.title : "";
+		$("title").textContent = title || ".pen viewer";
+		document.title = title ? title + " — .pen viewer" : ".pen viewer — Agentic Design";
 		$("export").disabled = !loaded;
 		$("toggle-side").hidden = !loaded;
 		if (loaded && !body.dataset.sideSet) {
