@@ -214,7 +214,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		strings.write_string(&b, `{"tabs":[`)
 		for t, i in app.tabs {
 			if i > 0 do strings.write_byte(&b, ',')
-			engine.json_write_string(&b, t.path)
+			engine.json_write_string(&b, app.file_path if i == app.tab else t.path)
 		}
 		strings.write_string(&b, "]}")
 	case "open":

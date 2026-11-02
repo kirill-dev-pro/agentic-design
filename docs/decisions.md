@@ -1936,3 +1936,33 @@ does not apply, so a PDF's name has no `@2x`.
 1440 × 1164 page, 93 KB, whose text PDFKit reads back. As in #71, blurs are drawn without
 the blur, and gradients and shadows are images; the raster PDF had them as pixels.
 
+## 77. Documents opened from Finder go to the app's delegate; .pen is a declared type
+
+**Problem.** Double-clicking a `.pen` file, Open With, a file dropped on the Dock icon and
+`open file.pen` showed the system alert "Agentic Design cannot open files in the 'Pen
+document' format". macOS hands such documents to the application delegate's
+`application:openURLs:`; GLFW's delegate does not implement it, so AppKit fell back to
+`NSDocumentController`, which has no document class for the type. The bundle declared the
+type by extension only.
+
+**Decision.**
+
+- `application:openURLs:` is added to GLFW's delegate class (`GLFWApplicationDelegate`, by
+  the Objective-C runtime) before `glfwInit`, so the files a launch was asked to open,
+  which arrive while GLFW finishes launching, are caught as well. Each `.pen` opens in a
+  tab, or activates the tab that has it; its libraries resolve next to it as for any open.
+  A launch for documents opens those instead of the scratch `untitled.pen`.
+- The bundle exports the type `dev.kcrz.agentic-design.pen` (extension `pen`, conforming to
+  `public.json`, so Quick Look and Spotlight treat it as JSON text). pen.dev declares
+  `.pen` only by extension and exports no type, so nothing conflicts; it keeps opening
+  `.pen` files. The document type is that content type, role Editor, rank Default, and has
+  no `NSDocumentClass`.
+- The socket's `window` method lists the open tabs.
+
+**Consequences.** Checked with a copy of the release bundle under another bundle id (the
+user's own copy was running): `open -n -a … reaktor-search.pen` launched it on that file
+alone, with its library `reaktor.lib.pen` imported; `open -a` with a second file opened a
+second tab in the running app, the first file again activated its tab, the library file
+opened in a third. `mdls` reports `.pen` files as `dev.kcrz.agentic-design.pen` under
+`public.json`. A double-click in Finder and a drop on the Dock icon send the same event.
+

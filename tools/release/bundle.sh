@@ -49,13 +49,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key><true/>
 	<key>NSHumanReadableCopyright</key><string>Agentic Design, agentic-design.kcrz.dev</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key><string>dev.kcrz.agentic-design.pen</string>
+			<key>UTTypeDescription</key><string>Pen document</string>
+			<key>UTTypeConformsTo</key><array><string>public.json</string></array>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>pen</string></array></dict>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key><string>Pen document</string>
-			<key>CFBundleTypeExtensions</key><array><string>pen</string></array>
+			<key>LSItemContentTypes</key><array><string>dev.kcrz.agentic-design.pen</string></array>
 			<key>CFBundleTypeRole</key><string>Editor</string>
-			<key>LSHandlerRank</key><string>Alternate</string>
+			<key>LSHandlerRank</key><string>Default</string>
 		</dict>
 	</array>
 </dict>

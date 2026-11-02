@@ -159,7 +159,10 @@ app_main :: proc(path: string) {
 	ui.tab_target = -1
 	settings_load()
 	recents_load()
-	if path != "" && !open_in_tab(path) do set_status("Could not read %s as a .pen document", path)
+	// launched to open documents (Finder, `open`): those instead of the scratch file
+	launched_with_documents := len(os.args) <= 1 && len(pf.open_requests) > 0
+	if launched_with_documents do handle_open_requests()
+	if !launched_with_documents && path != "" && !open_in_tab(path) do set_status("Could not read %s as a .pen document", path)
 	update_title()
 	server_start()
 	onboarding_maybe_start()
@@ -216,6 +219,7 @@ app_main :: proc(path: string) {
 		build_draw_order()
 		t1 := time.tick_now()
 		handle_drops()
+		handle_open_requests()
 		handle_input()
 		if app.needs_layout {
 			engine.layout_invalidate()

@@ -35,6 +35,7 @@ Platform :: struct {
 	key_repeated:   [MAX_KEYS]bool, // went down or auto-repeated this frame
 	chars:          [dynamic]rune,
 	dropped:        [dynamic]string, // files dropped on the window since last frame
+	open_requests:  [dynamic]string, // documents the system asked to open (open_events_darwin.odin)
 	button_down:    [MAX_BUTTONS]bool,
 	button_pressed: [MAX_BUTTONS]bool,
 	mouse:          [2]f32,
@@ -53,6 +54,7 @@ Platform :: struct {
 pf: Platform
 
 platform_init :: proc(width, height: int, title: cstring) -> bool {
+	install_open_handler() // before glfwInit: a launch's files arrive while it finishes launching
 	if !glfw.Init() do return false
 	when engine.RENDERER == "gl" {
 		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, 3)
