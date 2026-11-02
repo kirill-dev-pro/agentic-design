@@ -1,0 +1,11 @@
+{
+	"name": "Agentic Design",
+	"short_name": "Agentic Design",
+	"icons": [
+		{ "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+		{ "src": "/img/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+	],
+	"theme_color": "#C8643F",
+	"background_color": "#FAFAF7",
+	"display": "browser"
+}

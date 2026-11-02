@@ -1,0 +1,39 @@
+# The website, agentic-design.kcrz.dev, as Bunderhost builds and runs it (site/README.md):
+# the browser viewer compiled to WebAssembly, the pages, both served by Caddy on :3000.
+# Bunderhost looks for this file at the repository root; the project's root directory is
+# site/ (its bunderstack.blueprint.yaml). Locally: docker build -f Dockerfile.bunderhost .
+
+# ---- the viewer: src/web on the pinned Odin release (as the app's release workflow)
+FROM ubuntu:24.04 AS viewer
+ARG ODIN_VERSION=dev-2026-10
+ARG ODIN_SHA256=c3c8b095621fd0c75f7f73e3a0829f1b4d45324225f20ba11ed8dc4da310a8ab
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates curl lld \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& { command -v wasm-ld >/dev/null || ln -s "$(ls /usr/lib/llvm-*/bin/wasm-ld | head -n 1)" /usr/local/bin/wasm-ld; }
+RUN curl -fsSL -o /tmp/odin.tar.gz "https://github.com/odin-lang/Odin/releases/download/$ODIN_VERSION/odin-linux-amd64-$ODIN_VERSION.tar.gz" \
+	&& echo "$ODIN_SHA256  /tmp/odin.tar.gz" | sha256sum -c - \
+	&& mkdir /opt/odin && tar xzf /tmp/odin.tar.gz -C /opt/odin --strip-components=1 && rm /tmp/odin.tar.gz
+ENV PATH=/opt/odin:$PATH
+WORKDIR /src
+COPY assets ./assets
+COPY src ./src
+COPY web ./web
+COPY tools/build_web.sh ./tools/build_web.sh
+COPY designs/sample ./designs/sample
+RUN sh tools/build_web.sh
+
+# ---- the pages: hashed names, inline CSS, .br and .gz copies
+FROM node:22-alpine AS site
+WORKDIR /src
+COPY site ./site
+COPY --from=viewer /src/build/web ./build/web
+RUN node site/build.mjs
+
+# ---- the server
+FROM caddy:2-alpine
+COPY site/Caddyfile /etc/caddy/Caddyfile
+COPY --from=site /src/site/dist /srv
+ENV PORT=3000 SITE_ROOT=/srv
+EXPOSE 3000
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
