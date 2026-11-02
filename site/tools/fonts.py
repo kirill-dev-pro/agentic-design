@@ -1,4 +1,4 @@
-# Writes the site's web fonts (site/src/fonts/*.woff2): Latin subsets of the sample's fonts
+# Writes the site's web fonts (site/pages/fonts/*.woff2): Latin subsets of the sample's fonts
 # (designs/sample/fonts, OFL). Run from the repository root:
 #   python3 site/tools/fonts.py        (needs fontTools and brotli: pip install fonttools brotli)
 import os
@@ -6,7 +6,7 @@ from fontTools import subset
 from fontTools.ttLib import TTFont
 
 SRC = "designs/sample/fonts"
-OUT = "site/src/fonts"
+OUT = "site/pages/fonts"
 # Basic Latin, Latin-1, general punctuation (· — – “ ” ‘ ’ …), arrows, the euro sign
 UNICODES = "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+2013-2014,U+2018-201E,U+2022,U+2026,U+2032-2033,U+20AC,U+2122,U+2190-2193,U+2212"
 FONTS = {

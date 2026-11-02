@@ -2,12 +2,33 @@
 	"name": "agentic-design-site",
 	"private": true,
 	"type": "module",
-	"//": "Static files: nothing to install. Bunderhost's contract asks for a bunderstack dependency and build and start scripts; Dockerfile.bunderhost runs the build, Caddy serves.",
 	"scripts": {
-		"build": "node build.mjs",
-		"start": "caddy run --config Caddyfile --adapter caddyfile"
+		"build": "sh scripts/viewer.sh && workerstack build && node build.mjs",
+		"pages": "node build.mjs",
+		"dev": "workerstack dev",
+		"blueprint": "workerstack blueprint",
+		"blueprint:check": "workerstack blueprint --check",
+		"db:generate": "drizzle-kit generate"
+	},
+	"dependencies": {
+		"@libsql/client": "^0.14.0",
+		"@orpc/client": "2.0.0-beta.37",
+		"@orpc/json-schema": "2.0.0-beta.37",
+		"@orpc/openapi": "2.0.0-beta.37",
+		"@orpc/publisher": "2.0.0-beta.37",
+		"@orpc/server": "2.0.0-beta.37",
+		"@orpc/valibot": "2.0.0-beta.37",
+		"better-auth": "^1.7.6",
+		"drizzle-orm": "0.45.2",
+		"drizzle-valibot": "0.4.2",
+		"valibot": "^1.4.0",
+		"workerstack": "0.2.4"
 	},
 	"devDependencies": {
-		"bunderstack": "0.24.0"
+		"@cloudflare/vite-plugin": "^1.62.0",
+		"drizzle-kit": "^0.30.0",
+		"typescript": "^5.8.0",
+		"vite": "^8.0.14",
+		"wrangler": "^4.143.0"
 	}
 }

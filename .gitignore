@@ -6,3 +6,6 @@ designs/fonts/
 # wgpu-native, fetched by tools/fetch_wgpu.sh
 src/wgpu/lib/
 dist/
+
+# the website's JavaScript dependencies (site/)
+node_modules/

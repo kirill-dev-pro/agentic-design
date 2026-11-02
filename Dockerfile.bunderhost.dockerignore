@@ -1,6 +1,0 @@
-.git
-build
-site/dist
-src/wgpu/lib
-designs/fonts
-*.DS_Store
