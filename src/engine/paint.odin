@@ -30,7 +30,13 @@ gradient_image :: proc(vg: ^nvg.Context, p: ^Paint) -> int {
 	key := hash.fnv64a(key_data[:1 + p.nstops * 8])
 	if img, ok := gradient_images[key]; ok do return img
 	if len(gradient_images) > 128 {
-		for _, img in gradient_images do nvg.DeleteImage(vg, img)
+		for _, img in gradient_images {
+			nvg.DeleteImage(vg, img)
+			if src, has := image_sources[img]; has {
+				delete(src.pixels)
+				delete_key(&image_sources, img)
+			}
+		}
 		clear(&gradient_images)
 	}
 	w, h := 256, 1
@@ -58,6 +64,10 @@ gradient_image :: proc(vg: ^nvg.Context, p: ^Paint) -> int {
 	}
 	img := nvg.CreateImageRGBA(vg, w, h, {}, pixels)
 	gradient_images[key] = img
+	// PDF export samples the gradient from these
+	kept := make([]u8, len(pixels))
+	copy(kept, pixels)
+	image_sources[img] = {pixels = kept, w = w, h = h}
 	return img
 }
 

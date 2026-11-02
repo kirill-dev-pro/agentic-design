@@ -23,6 +23,7 @@ image_for :: proc(url: string) -> (img: int, w, h: int) {
 		if data, ok := read_file(path, context.temp_allocator); ok do img = nvg.CreateImageMem(renderer, data, {})
 		if img < 0 do img = 0
 		images[strings.clone(path)] = img
+		if img > 0 do image_sources[img] = {path = strings.clone(path)} // for PDF export
 	}
 	if img > 0 do w, h = nvg.ImageSize(renderer, img)
 	return

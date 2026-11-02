@@ -56,3 +56,7 @@ index lists), sits next to the GL one, and so that the following fixes can be ap
   with Regular's kerning, wider or tighter than in Chrome by up to a pixel per pair.
 - nanovg: `TextSnapScale` tells the caller whether `Text` will put glyphs on whole device
   pixels, and at how many per unit (the engine then places the baseline as Blink does).
+- nanovg/fontstash: a context can have a `Recorder` that `Fill`, `Stroke` and `Text` hand
+  their path (device space), paint, scissor and stroke style, or their glyphs and origins,
+  to instead of drawing; fontstash keeps the last glyph's origin (`last_pen`) for it.
+  Vector PDF export draws through it (`engine/pdf.odin`).

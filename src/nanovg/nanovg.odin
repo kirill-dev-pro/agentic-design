@@ -182,7 +182,33 @@ State :: struct {
 	fontId:          int,
 }
 
+// Agentic Design patch: while a context has a recorder, Fill, Stroke and Text hand what they
+// would draw to it instead (the path in device space, the paint, scissor and stroke
+// style; text as glyphs with their origins), for vector PDF export.
+Recorder :: struct {
+	fill:   proc(r: ^Recorder, paint: ^Paint, scissor: ^ScissorT, commands: []f32),
+	stroke: proc(r: ^Recorder, paint: ^Paint, scissor: ^ScissorT, commands: []f32, width: f32, cap, join: LineCapType, miter: f32, dash: []f32),
+	text:   proc(r: ^Recorder, run: ^Text_Run),
+	user:   rawptr,
+}
+
+Text_Glyph :: struct {
+	codepoint: rune,
+	x, y:      f32, // origin on the baseline, user space (before the transform)
+}
+
+Text_Run :: struct {
+	font:    int, // fontstash font
+	size:    f32, // user units
+	spacing: f32, // letter spacing, user units
+	color:   Color, // global alpha applied
+	xform:   Matrix,
+	scissor: ScissorT,
+	glyphs:  []Text_Glyph,
+}
+
 Context :: struct {
+	recorder:      ^Recorder, // Agentic Design patch (see Recorder)
 	params:        Params,
 	commands:      [dynamic]f32,
 	commandx,      commandy: f32,
@@ -2513,6 +2539,12 @@ Circle :: #force_inline proc(ctx: ^Context, cx, cy: f32, radius: f32) {
 Fill :: proc(ctx: ^Context) {
 	state := __getState(ctx)
 	fill_paint := state.fill
+	if ctx.recorder != nil {
+		fill_paint.innerColor.a *= state.alpha
+		fill_paint.outerColor.a *= state.alpha
+		ctx.recorder.fill(ctx.recorder, &fill_paint, &state.scissor, ctx.commands[:])
+		return
+	}
 
 	__flattenPaths(ctx)
 
@@ -2550,6 +2582,14 @@ Stroke :: proc(ctx: ^Context) {
 	scale := __getAverageScale(state.xform[:])
 	strokeWidth := clamp(state.strokeWidth * scale, 0, 200)
 	stroke_paint := state.stroke
+	if ctx.recorder != nil {
+		stroke_paint.innerColor.a *= state.alpha
+		stroke_paint.outerColor.a *= state.alpha
+		dash: [8]f32
+		for i in 0 ..< state.ndash do dash[i] = state.dash[i] * scale
+		ctx.recorder.stroke(ctx.recorder, &stroke_paint, &state.scissor, ctx.commands[:], strokeWidth, state.lineCap, state.lineJoin, state.miterLimit, dash[:state.ndash])
+		return
+	}
 
 	if strokeWidth < ctx.fringeWidth {
 		// If the stroke width is less than pixel size, use alpha to emulate coverage.
@@ -2961,6 +3001,23 @@ Text :: proc(ctx: ^Context, x, y: f32, text: string) -> f32 {
 	fontstash.SetAlignHorizontal(fs, state.alignHorizontal)
 	fontstash.SetAlignVertical(fs, state.alignVertical)
 	fontstash.SetFont(fs, state.fontId)
+
+	if ctx.recorder != nil {
+		// the glyphs and their origins as fontstash places them (kerning, spacing,
+		// alignment), unsnapped
+		glyphs := make([dynamic]Text_Glyph, 0, len(text), context.temp_allocator)
+		fs.snap = false
+		it := fontstash.TextIterInit(fs, x * scale, y * scale, text)
+		q: fontstash.Quad
+		for fontstash.TextIterNext(fs, &it, &q) {
+			if it.previousGlyphIndex == -1 do continue
+			append(&glyphs, Text_Glyph{it.codepoint, fs.last_pen.x * invscale, fs.last_pen.y * invscale})
+		}
+		run := Text_Run{font = state.fontId, size = state.fontSize, spacing = state.letterSpacing, color = state.fill.innerColor, xform = state.xform, scissor = state.scissor, glyphs = glyphs[:]}
+		run.color.a *= state.alpha
+		ctx.recorder.text(ctx.recorder, &run)
+		return it.nextx * invscale
+	}
 
 	cverts := max(2, len(text)) * 6 // conservative estimate.
 	verts := __allocTempVerts(ctx, cverts)

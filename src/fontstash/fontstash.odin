@@ -128,6 +128,7 @@ FontContext :: struct {
 	// fractional positions and smeared by the texture's bilinear sampling.
 	snap:     bool,
 	snap_off: [2]f32, // device pixel = position here + snap_off
+	last_pen: [2]f32, // where __getQuad put the last glyph's origin (after kerning)
 	// called in state_end to update the texture region that changed
 	callbackUpdate: proc(data: rawptr, dirtyRect: [4]f32, textureData: rawptr), 
 }
@@ -987,6 +988,7 @@ __getQuad :: proc(
 	}
 	advance := glyph.xadvance
 	pen := [2]f32{x^, y^}
+	ctx.last_pen = pen
 	glyph := glyph
 	if ctx.snap {
 		// the glyph rasterised at the pen's subpixel offset, on whole device pixels

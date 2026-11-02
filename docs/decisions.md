@@ -1770,3 +1770,38 @@ gives them. `created` (the ids) stays as it was.
 **Consequences.** The `get_document` after each step is gone. `tools/connectors.py` checks
 the answers against `get_document`. A request that changes a layer can move others (its
 siblings in a flex frame); those still need a read.
+
+## 69. PDF is vector, with real text, and exports pages into one file
+
+**Problem.** `screenshot {format: "pdf"}` wrapped a JPEG: a seven-page diagram came out as
+seven pictures, 10.6 MB, with no text to select, search or copy, and one layer per call
+(D59).
+
+**Decision.** PDF is drawn by the canvas's own code into a recording NanoVG context
+(`nanovg.Recorder`): `Fill`, `Stroke` and `Text` hand their path, paint, scissor and stroke
+style, or their glyphs and origins, to `engine/pdf.odin` instead of drawing.
+
+- Paths keep their curves, fill rule (each subpath turned as NanoVG fills it), clip, and
+  stroke width, caps, joins and dashes. Opacity is an ExtGState.
+- Text is text: each font is embedded once per file as a subset (TrueType: only the glyphs
+  used and their components, ids unchanged, no hinting or cmap; CFF fonts under 4 MB
+  whole), as a CIDFontType2 or CIDFontType0 with Identity-H and a ToUnicode map. Glyphs
+  sit where fontstash puts them (kerning, GPOS variation deltas, fallbacks); letter
+  spacing is the text's character spacing, so words stay whole when copied. Fonts that
+  cannot be embedded (collections, bitmap glyphs) draw their glyphs as outlines.
+- Image fills are the image, placed as on the canvas. Gradients and shadows (which PDF
+  has no operator for in NanoVG's terms) are images at 2 px per unit over the shape,
+  sampled as the canvas's shader samples them. Layer and background blurs are drawn
+  without the blur.
+- Colours are in an ICC-based sRGB space (the system's sRGB profile), as the canvas draws
+  them; DeviceRGB would be shown through a generic profile.
+- `export_pages {path, ids? | page?}` writes one PDF, a page per top-level layer (all
+  pages' layers in order by default, or a page by name or index, or ids in their order);
+  `screenshot` with format pdf writes a layer (or the shown page) the same way.
+
+**Consequences.** The seven-page diagram: 223 KB instead of 10.6 MB, its text extracts
+(also Cyrillic), written in 0.05 s. A landing page drawn from the PDF by CoreGraphics
+differs from the canvas by a mean of 1.5–2.2 per channel at 1× (glyph antialiasing and
+baseline snapping). `tools/pdfexport.py` checks pages, sizes, text, subset fonts, sRGB,
+`export_pages` by page and ids, and both pages against the canvas (17 checks). Canvas,
+saved files and screenshots of files are unchanged.

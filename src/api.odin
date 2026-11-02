@@ -59,6 +59,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		e = api_outline_text(&b, params)
 	case "connect":
 		e = api_connect(&b, params)
+	case "export_pages":
+		e = api_export_pages(&b, params)
 	case "get_guide":
 		api_get_guide(&b)
 	case "lint":
@@ -251,6 +253,15 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 				return api_error("node not found"), false
 			}
 			shot.uid = n.uid
+		}
+		if shot.format == .PDF && !shot.view {
+			// vector, drawn now: the layer, or the frames of the page shown
+			uids := []int{shot.uid} if shot.uid != 0 else page_frames(app.page)
+			path := shot.path
+			shot = {}
+			if e = write_pdf(&b, uids, path); e != "" do return api_error(e), false
+			strings.write_string(&b, "}")
+			return strings.clone(strings.to_string(b), big_allocator()), false
 		}
 		return "", true
 	case:
