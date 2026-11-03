@@ -36,6 +36,13 @@
       "when": 1793707456752,
       "tag": "0004_familiar_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793707699551,
+      "tag": "0005_delete_smoke_test_account",
+      "breakpoints": true
     }
   ]
 }
