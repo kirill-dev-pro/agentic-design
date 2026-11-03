@@ -79,6 +79,9 @@ is compiled into the app (`UPDATE_FEED`, set by the workflow from `github.reposi
    - …
    ```
 
+   `docs/releases/v<version>.ru.md` holds the same notes in Russian, with the same English
+   `##` headings; Macs whose first language is Russian show it (the sheet's own words are
+   translated in `src/whats_new.odin`), and a version without one shows the English notes.
    Only `## New`, `## Improved` and `## Fixed` are read; leave out a section with nothing in
    it. Backticks and `**` are dropped in the sheet. Set the date on the day of the tag.
 3. Commit, then tag and push:

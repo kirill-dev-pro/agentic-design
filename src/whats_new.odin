@@ -61,6 +61,49 @@ Release_Entry :: struct {
 Release :: struct {
 	version, date: string, // "0.1.4", "2026-11-03"
 	entries:       [Release_Kind][dynamic]Release_Entry,
+	ru:            ^Release, // the same notes in Russian (v<version>.ru.md), if written
+}
+
+// The sheet's own words, in English and Russian (the notes come from v<version>.md and
+// v<version>.ru.md; a version without Russian notes shows the English ones).
+Whats_New_Text :: enum {
+	Title,
+	Updated, // "Updated from %s to %s"
+	Version, // "Version %s"
+	All_Changes,
+	Got_It,
+}
+
+WHATS_NEW_EN := [Whats_New_Text]string {
+	.Title       = "What's new in Agentic Design",
+	.Updated     = "Updated from %s to %s",
+	.Version     = "Version %s",
+	.All_Changes = "All changes",
+	.Got_It      = "Got it",
+}
+
+WHATS_NEW_RU := [Whats_New_Text]string {
+	.Title       = "Что нового в Agentic Design",
+	.Updated     = "Обновлено с %s до %s",
+	.Version     = "Версия %s",
+	.All_Changes = "Все изменения",
+	.Got_It      = "Понятно",
+}
+
+RELEASE_KIND_LABELS_RU := [Release_Kind]string {
+	.New      = "Новое",
+	.Improved = "Улучшено",
+	.Fixed    = "Исправлено",
+}
+
+// Russian when the Mac's first preferred language is Russian (AGENTIC_LANG overrides it).
+whats_new_ru :: proc() -> bool {
+	if l := os.get_env("AGENTIC_LANG", context.temp_allocator); l != "" do return strings.has_prefix(l, "ru")
+	return strings.has_prefix(preferred_language(), "ru")
+}
+
+wn_text :: proc(t: Whats_New_Text) -> string {
+	return WHATS_NEW_RU[t] if whats_new.ru else WHATS_NEW_EN[t]
 }
 
 whats_new: struct {
@@ -68,6 +111,7 @@ whats_new: struct {
 	pending:  bool, // open once the onboarding (or another sheet) is closed
 	manual:   bool, // opened from the menu or Settings: "Version Y", not "Updated from X"
 	from, to: string, // versions: the notes of (from, to] are shown
+	ru:       bool, // shown in Russian
 	date:     string,
 	entries:  [Release_Kind][dynamic]Release_Entry,
 	scroll:   f32,
@@ -81,10 +125,18 @@ whats_new: struct {
 // Parses the compiled-in notes once, newest version first.
 release_notes :: proc() -> []Release {
 	if len(whats_new.releases) > 0 do return whats_new.releases[:]
+	russian := make([dynamic]Release, context.temp_allocator)
 	for f in RELEASE_NOTES {
 		name := f.name
 		if !strings.has_prefix(name, "v") || !strings.has_suffix(name, ".md") do continue
-		append(&whats_new.releases, release_parse(name[1:len(name) - 3], string(f.data)))
+		if strings.has_suffix(name, ".ru.md") do append(&russian, release_parse(name[1:len(name) - 6], string(f.data)))
+		else do append(&whats_new.releases, release_parse(name[1:len(name) - 3], string(f.data)))
+	}
+	for &r in whats_new.releases {
+		for ru in russian do if ru.version == r.version {
+			r.ru = new(Release)
+			r.ru^ = ru
+		}
 	}
 	slice.sort_by(whats_new.releases[:], proc(a, b: Release) -> bool {return version_newer(a.version, b.version)})
 	return whats_new.releases[:]
@@ -137,6 +189,10 @@ date_long :: proc(iso: string) -> string {
 	if len(p) != 3 do return iso
 	m, d := version_part_int(p[1]), version_part_int(p[2])
 	if m < 1 || m > 12 do return iso
+	if whats_new.ru {
+		MONTHS_RU := [12]string{"января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"}
+		return fmt.tprintf("%d %s %s", d, MONTHS_RU[m - 1], p[0])
+	}
 	return fmt.tprintf("%s %d, %s", MONTHS[m - 1], d, p[0])
 }
 
@@ -250,12 +306,14 @@ whats_new_collect :: proc(from: string) {
 	whats_new.from = strings.clone(from)
 	whats_new.to = VERSION
 	whats_new.date = ""
+	whats_new.ru = whats_new_ru()
 	// newest first, so each section reads from the latest change back
-	for r in release_notes() {
+	for &r in release_notes() {
 		if version_newer(r.version, VERSION) do continue
 		if from != "" && !version_newer(r.version, from) do continue
 		if r.version == VERSION || whats_new.date == "" do whats_new.date = r.date
-		for k in Release_Kind do append(&whats_new.entries[k], ..r.entries[k][:])
+		notes := r.ru if whats_new.ru && r.ru != nil else &r
+		for k in Release_Kind do append(&whats_new.entries[k], ..notes.entries[k][:])
 	}
 }
 
@@ -311,10 +369,10 @@ draw_whats_new :: proc(vg: ^nvg.Context) {
 		nvg.Fill(vg)
 	}
 	tx := ix + ICON + 12
-	ob_text(vg, tx, iy + 18, "What's new in Agentic Design", 18, TEXT_FG, 600)
+	ob_text(vg, tx, iy + 18, wn_text(.Title), 18, TEXT_FG, 600)
 	sub: string
-	if whats_new.manual || whats_new.from == "" do sub = fmt.tprintf("Version %s", whats_new.to)
-	else do sub = fmt.tprintf("Updated from %s to %s", whats_new.from, whats_new.to)
+	if whats_new.manual || whats_new.from == "" do sub = fmt.tprintf(wn_text(.Version), whats_new.to)
+	else do sub = fmt.tprintf(wn_text(.Updated), whats_new.from, whats_new.to)
 	if whats_new.date != "" do sub = fmt.tprintf("%s · %s", sub, date_long(whats_new.date))
 	ob_text(vg, tx, iy + 42, sub, 13, {0.6, 0.61, 0.64, 1}, 400)
 	close := Rect{sheet.x + sheet.w - 46, sheet.y + 16, 30, 30}
@@ -343,7 +401,7 @@ draw_whats_new :: proc(vg: ^nvg.Context) {
 	// footer: the whole changelog, and Got it
 	fy := sheet.y + sheet.h - FOOTER_H
 	fill_rect(vg, {sheet.x, fy, sheet.w, 1}, {1, 1, 1, 0.07})
-	link_label := "All changes"
+	link_label := wn_text(.All_Changes)
 	lw := ob_width(vg, link_label, 13, 500)
 	link := Rect{sheet.x + pad - 8, fy + 18, lw + 34, 36}
 	link_hot := hovered(link)
@@ -358,7 +416,7 @@ draw_whats_new :: proc(vg: ^nvg.Context) {
 		open_url(url)
 	}
 	ok := Rect{sheet.x + sheet.w - pad - 108, fy + 18, 108, 36}
-	if ob_button(vg, ok, "Got it", .Primary) || ((key_pressed(KEY_ENTER) || key_pressed(KEY_KP_ENTER)) && ui.focus == "") {
+	if ob_button(vg, ok, wn_text(.Got_It), .Primary) || ((key_pressed(KEY_ENTER) || key_pressed(KEY_KP_ENTER)) && ui.focus == "") {
 		whats_new_close()
 	}
 }
@@ -380,7 +438,7 @@ whats_new_list :: proc(vg: ^nvg.Context, x, y, w: f32, draw: bool) -> f32 {
 			nvg.Circle(vg, x + 4, yy + 9, 4)
 			nvg.FillColor(vg, c)
 			nvg.Fill(vg)
-			lab := strings.to_upper(RELEASE_KIND_LABELS[k], context.temp_allocator)
+			lab := strings.to_upper(RELEASE_KIND_LABELS_RU[k] if whats_new.ru else RELEASE_KIND_LABELS[k], context.temp_allocator)
 			nvg.FontFace(vg, ob_face(600))
 			nvg.FontSize(vg, 11)
 			nvg.TextLetterSpacing(vg, 0.9)
@@ -445,7 +503,7 @@ api_whats_new :: proc(b: ^strings.Builder, open, close, menu: bool) -> string {
 	if close do whats_new_close()
 	else if open do whats_new_show()
 	else if menu && !app_menu_click_whats_new() do return "the application menu has no What's New item"
-	fmt.sbprintf(b, `{{"open":%v,"pending":%v,"manual":%v,"from":`, whats_new.open, whats_new.pending, whats_new.manual)
+	fmt.sbprintf(b, `{{"open":%v,"pending":%v,"manual":%v,"ru":%v,"from":`, whats_new.open, whats_new.pending, whats_new.manual, whats_new.ru)
 	engine.json_write_string(b, whats_new.from)
 	fmt.sbprintf(b, `,"to":"%s","date":"%s","lastSeen":`, whats_new.to, whats_new.date)
 	engine.json_write_string(b, settings.last_seen_version)

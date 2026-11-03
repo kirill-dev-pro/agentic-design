@@ -1,6 +1,7 @@
 package agentic_design
 
 import "base:intrinsics"
+import "core:strings"
 import NS "core:sys/darwin/Foundation"
 
 // Additions to the application menu GLFW builds (About, Services, Hide, Quit):
@@ -67,4 +68,20 @@ open_url :: proc(url: string) {
 	if u == nil do return
 	ws := intrinsics.objc_send(^Workspace, Workspace, "sharedWorkspace")
 	_ = intrinsics.objc_send(NS.BOOL, ws, "openURL:", u)
+}
+
+// The Mac's first preferred language ("ru-RU", "en"), or "".
+preferred_language :: proc() -> string {
+	pool := NS.AutoreleasePool.alloc()->init()
+	defer pool->drain()
+	langs := intrinsics.objc_send(^NS.Array, Locale, "preferredLanguages")
+	if langs == nil || langs->count() == 0 do return ""
+	first := langs->objectAs(0, ^NS.String)
+	if first == nil do return ""
+	return strings.clone(first->odinString(), context.temp_allocator)
+}
+
+@(objc_class = "NSLocale")
+Locale :: struct {
+	using _: NS.Object,
 }
