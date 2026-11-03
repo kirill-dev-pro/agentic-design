@@ -60,13 +60,13 @@ export const backend = workerstack({
 		j.define({
 			cleanup: j.cron({
 				schedule: '30 3 * * *',
-				handler: async (ctx) => {
+				handler: async (_invocation, ctx) => {
 					await cleanup(ctx as unknown as App)
 				},
 			}),
 			accountDeletions: j.cron({
 				schedule: '15 * * * *',
-				handler: async (ctx) => {
+				handler: async (_invocation, ctx) => {
 					await runAccountDeletions(ctx as unknown as App)
 				},
 			}),
