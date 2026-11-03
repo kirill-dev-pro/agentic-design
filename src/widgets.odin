@@ -121,7 +121,7 @@ widgets_end_frame :: proc(vg: ^nvg.Context) {
 
 // True while an overlay owns the pointer and keyboard.
 ui_modal :: proc() -> bool {
-	return ui.menu.open || ui.picker.open || ui.dialog.open || onboarding.open || vtable.open || settings_open || shortcuts_open || whats_new.open
+	return ui.menu.open || ui.picker.open || ui.dialog.open || onboarding.open || vtable.open || settings_open || shortcuts_open || whats_new.open || share_open
 }
 
 // ---------------------------------------------------------------- primitives

@@ -2045,3 +2045,28 @@ for users, no internal names. A tester can run the launch decision in a quiet wi
 `AGENTIC_WHATS_NEW_TEST=1` and `HOME` set to a sandbox (refused with the real home, so the
 user's settings stay untouched); the socket's `whats_new` method reports the sheet, opens
 it, presses the menu item or closes it. The app has one, dark, theme; the sheet follows it.
+
+## 81. The Mac app shares through the cloud with a browser sign-in and a device token
+
+**Problem.** Cloud M1 shares files by link (docs/cloud-design.md). The Mac app needs the
+same, without its own password form and without keeping the user's password.
+
+**Decision.** Sign-in is PKCE (S256) through the system browser and a loopback port
+(RFC 8252): the app listens on 127.0.0.1, opens `/auth/app` with the challenge, the
+signed-in user approves this Mac, the browser returns to `/callback` with a one-time code,
+and the app trades it with its verifier for a device session (30 days, renewed while used),
+kept in the login Keychain per site and sent as `Authorization: Bearer`. HTTP goes through
+`/usr/bin/curl` with its options on stdin, so the token never appears in a command line.
+Sharing uploads the saved `.pen` and the files it refers to: every relative `url` (image
+fills, fonts) and every `imports` library, recursively, as paths from the document's
+folder, each by SHA-256; the server asks only for the blobs it lacks, which are PUT to
+presigned URLs before the version is committed. Each file's share (file id, link) is kept in
+`shared.json` next to the settings, so sharing again uploads a new version behind the same
+link. Previews are not rendered by the app yet (the site falls back to the viewer).
+
+**Consequences.** Test windows keep the token and shares in memory and never open a
+browser; the socket's `cloud` method reports the sign-in URL, so a test plays the browser
+(tests/cloud/share.py in the tests repository, against the local dev server). A file deleted
+on the site is shared as a new file the next time. `AGENTIC_CLOUD_URL` points a window at
+another site (local development).
+

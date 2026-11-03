@@ -82,6 +82,16 @@ The first launch after an update shows "What's new": the changes since the versi
 skipped versions included; the app menu ("What's New in Agentic Design…") and Settings →
 Updates open it again. How releases are made: [docs/releasing.md](docs/releasing.md).
 
+## Share
+
+**Share** (top of the inspector) puts the open file on the web behind a link that opens in
+any browser, phones included. The first time, "Sign in with browser" opens your Agentic
+Design account in the browser to approve this Mac; the app never asks for a password and
+keeps the device's session in the Keychain. "Create link" uploads the saved file with the
+images, fonts and libraries it uses and copies the link; "Upload changes" puts a new version
+behind the same link. The link can allow download and embedding, and "Turn off link" stops
+it at once. Files you share are listed on the site's My files page.
+
 ## Build and run
 
 ```sh
@@ -262,6 +272,7 @@ Contributing).
 | `src/main.odin` | entry: editor, `mcp` mode or `--version` |
 | `src/version.odin` | the version (the one place it is written), bundle id and bundle paths |
 | `src/update.odin` | updates: signed manifest from GitHub Releases, download, verification, atomic install |
+| `src/cloud.odin`, `src/share_ui.odin`, `src/keychain_darwin.odin` | the cloud: browser sign-in (PKCE, loopback), the device token in the Keychain, sharing a file by link |
 | `src/whats_new.odin`, `docs/releases/` | "What's new" after an update, from the release notes compiled into the app |
 | `tools/release/` | the release build, `.app` bundle, update signing tool and icon ([docs/releasing.md](docs/releasing.md)) |
 | `src/platform.odin` | GLFW window and per-frame input state |

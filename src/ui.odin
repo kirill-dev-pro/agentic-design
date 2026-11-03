@@ -35,6 +35,7 @@ draw_ui :: proc() {
 	draw_shortcuts_sheet(vg)
 	draw_onboarding(vg)
 	draw_whats_new(vg)
+	draw_share_sheet(vg)
 	draw_status(vg)
 	widgets_end_frame(vg)
 }
@@ -580,6 +581,7 @@ draw_inspector :: proc(vg: ^nvg.Context) {
 		case 5: zoom_at(c, 4 / app.zoom)
 		}
 	}
+	if button(vg, {right - 76 - 8 - 60, y + 2, 60, 24}, "Share", primary = true) do share_sheet_open()
 	export := Rect{right - 76, y + 2, 76, 24}
 	if button(vg, export, "Export ▾") do menu_open("export", export, {"PNG\tShift Cmd E", "HTML + CSS", "React + Tailwind"})
 	if pick, ok := menu_take("export"); ok {
