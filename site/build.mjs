@@ -38,7 +38,7 @@ const rewrite = (text, map) => {
 
 const map = new Map();
 // files kept at their names: crawlers, the og image and favicons are fetched by URL
-const plain = new Set(["index.html", "404.html", "robots.txt", "sitemap.xml", "favicon.ico", "img/og.png", "img/apple-touch-icon.png", "favicon.svg", "img/icon-192.png", "img/icon-512.png", "site.webmanifest"]);
+const plain = new Set(["index.html", "404.html", "robots.txt", "sitemap.xml", "favicon.ico", "img/og.png", "img/apple-touch-icon.png", "favicon.svg", "img/icon-192.png", "img/icon-512.png", "img/icon-maskable-512.png", "sw.js", "site.webmanifest"]);
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
 	const p = path.join(dir, e.name);
 	return e.isDirectory() ? walk(p) : [path.relative(src, p).split(path.sep).join("/")];
@@ -107,13 +107,15 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 		if (fs.statSync(p).isDirectory()) fs.cpSync(p, path.join(out, "view", extra), { recursive: true });
 		else write("view/" + extra, fs.readFileSync(p));
 	}
-	// the service worker: a new build is a new cache, holding the hashed files
-	if (fs.existsSync(path.join(viewer, "sw.js"))) {
-		const sw = fs.readFileSync(path.join(viewer, "sw.js"), "utf8")
+	// the site's service worker (/sw.js): a new build is a new cache of the viewer's hashed
+	// files; /view/sw.js is the stub that retires the one the viewer used to register
+	const rootSw = path.join(src, "sw.js");
+	if (fs.existsSync(rootSw)) {
+		write("sw.js", fs.readFileSync(rootSw, "utf8")
 			.replace('"__BUILD__"', JSON.stringify(hash(shell.join(","))))
-			.replace("__ASSETS__", JSON.stringify(shell));
-		write("view/sw.js", sw);
+			.replace("__ASSETS__", JSON.stringify(shell)));
 	}
+	if (fs.existsSync(path.join(viewer, "sw.js"))) write("view/sw.js", fs.readFileSync(path.join(viewer, "sw.js")));
 	// the sample design (the landing page, with its fonts) for "Try the sample"
 	const sample = path.join(here, "..", "designs", "sample");
 	if (fs.existsSync(sample)) fs.cpSync(sample, path.join(out, "view", "samples", "agentic-design"), { recursive: true });

@@ -154,6 +154,22 @@
 		else open(toVirtual(url.href));
 	}
 
+	// Files shared to the installed app (Android's share sheet): /sw.js keeps them in a cache
+	async function openShared() {
+		history.replaceState(null, "", location.pathname);
+		try {
+			const inbox = await caches.open("inbox");
+			const keys = await inbox.keys();
+			const files = await Promise.all(keys.map(async (k) => {
+				const name = decodeURIComponent(new URL(k.url).pathname.split("/").pop());
+				return [name, new File([await (await inbox.match(k)).blob()], name)];
+			}));
+			for (const k of keys) await inbox.delete(k);
+			if (files.length) return addLocal(files);
+		} catch (e) {}
+		showWelcome();
+	}
+
 	function openSample() {
 		openUrl(new URL(SAMPLE, HERE).href);
 		history.replaceState(null, "", "?sample");
@@ -326,7 +342,7 @@
 		const cors = [...failed].filter(([p, why]) => why === "cors" && p !== docPath).map(([p]) => p);
 		if (cors.length) notes.push(["cors", `The server does not let this page read ${cors.length} of the document's files (CORS).`, "Download the folder and drop it here instead."]);
 		const box = $("notices");
-		box.replaceChildren(...notes.filter(([key, text]) => !dismissed.has(key + text)).map(([key, text, more]) => {
+		box.replaceChildren(...box.querySelectorAll("[data-key]"), ...notes.filter(([key, text]) => !dismissed.has(key + text)).map(([key, text, more]) => {
 			const div = document.createElement("div");
 			div.className = "notice";
 			const p = document.createElement("p");
@@ -497,6 +513,36 @@
 
 	// ---------------------------------------------------------------- start
 
+	// A one-off notice above the canvas (the same look as the missing-file notices).
+	function notice(key, text) {
+		const div = document.createElement("div");
+		div.className = "notice";
+		div.dataset.key = key;
+		const p = document.createElement("p");
+		p.textContent = text;
+		const close = Object.assign(document.createElement("button"), { type: "button", textContent: "×" });
+		close.setAttribute("aria-label", "Dismiss");
+		close.addEventListener("click", () => div.remove());
+		div.append(p, close);
+		$("notices").prepend(div);
+	}
+
+	// iPhone and iPad Safari install a site only through Share → Add to Home Screen: say so
+	// once, on a share page, in the browser (not when it already runs from the home screen).
+	function iosInstallHint() {
+		const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+		const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+		let seen = false;
+		try { seen = localStorage.getItem("ios-install-hint") === "1"; } catch (e) {}
+		if (!ios || standalone || seen || embed) return;
+		const box = $("ios-install");
+		box.hidden = false;
+		box.querySelector("button").addEventListener("click", () => {
+			box.hidden = true;
+			try { localStorage.setItem("ios-install-hint", "1"); } catch (e) {}
+		});
+	}
+
 	// ---------------------------------------------------------------- share pages
 
 	const SHARE_ERRORS = {
@@ -555,6 +601,17 @@
 			return showMessage(title, text, { error: true, actions: [["Agentic Design", "/", true]] });
 		}
 		shareBar();
+		if (!navigator.onLine) notice("offline", "You are offline. This is the version of the file you last opened on this device.");
+		iosInstallHint();
+	}
+
+	// one anonymous count per share view: whether this browser has WebGPU (cloud design §5.1)
+	if (share && !share.error) {
+		const ua = navigator.userAgent;
+		const platform = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) ? "ios"
+			: /Android/.test(ua) ? "android" : /Mac/.test(ua) ? "mac" : /Win/.test(ua) ? "windows" : /Linux/.test(ua) ? "linux" : "other";
+		const standalone = !!(navigator.standalone || matchMedia("(display-mode: standalone)").matches);
+		fetch("/api/metrics/view", { method: "POST", credentials: "omit", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ webgpu: !!navigator.gpu, platform, standalone }) }).catch(() => {});
 	}
 
 	if (!navigator.gpu) return share ? showFrames() : noGpu();
@@ -621,6 +678,7 @@
 	} else if (params.get("file")) open(new URL(params.get("file"), location.href).pathname);
 	else if (params.get("url")) openUrl(params.get("url"));
 	else if (params.has("sample")) openSample();
+	else if (params.has("shared")) openShared();
 	else showWelcome();
 
 	// ---------------------------------------------------------------- frame by frame
@@ -869,6 +927,6 @@
 	}
 	// offline and instant reopening (sw.js)
 	if ("serviceWorker" in navigator && window.isSecureContext) {
-		navigator.serviceWorker.register(new URL("sw.js", HERE).href, { scope: new URL("./", HERE).href }).catch(() => {});
+		navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
 	}
 })();

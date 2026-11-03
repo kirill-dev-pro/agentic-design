@@ -1,11 +1,25 @@
 {
+	"id": "/",
 	"name": "Agentic Design",
 	"short_name": "Agentic Design",
+	"description": "View and share .pen design files. Files you open stay on your device.",
+	"start_url": "/files",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#1e1e1e",
+	"theme_color": "#1e1e1e",
 	"icons": [
 		{ "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png" },
-		{ "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" }
+		{ "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+		{ "src": "/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
 	],
-	"theme_color": "#C8643F",
-	"background_color": "#FAFAF7",
-	"display": "browser"
+	"file_handlers": [
+		{ "action": "/view/", "accept": { "application/x-pen": [".pen"] } }
+	],
+	"share_target": {
+		"action": "/view/share-target",
+		"method": "POST",
+		"enctype": "multipart/form-data",
+		"params": { "files": [{ "name": "files", "accept": [".pen", "application/json", "application/octet-stream", "image/*", "font/*"] }] }
+	}
 }

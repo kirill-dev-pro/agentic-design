@@ -187,3 +187,4 @@ body:has(#frame-nav:not([hidden])) #zoombar { display: none; }
 @media (max-width: 720px) {
 	#frames-btn { padding: 0 8px; }
 }
+#ios-install { position: absolute; left: 12px; right: 12px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 3; margin: 0 auto; max-width: 420px; border-left-color: var(--accent); }
