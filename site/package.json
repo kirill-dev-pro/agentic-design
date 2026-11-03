@@ -18,7 +18,7 @@
 		"@orpc/publisher": "2.0.0-beta.37",
 		"@orpc/server": "2.0.0-beta.37",
 		"@orpc/valibot": "2.0.0-beta.37",
-		"better-auth": "^1.7.6",
+		"better-auth": "^1.7.16",
 		"drizzle-orm": "0.45.2",
 		"drizzle-valibot": "0.4.2",
 		"valibot": "^1.4.0",
