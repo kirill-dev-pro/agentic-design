@@ -1,6 +1,5 @@
 package agentic_design
 
-import "core:os"
 import "core:strings"
 
 // The app's version: the one place it is written. The bundle script puts it into
@@ -15,7 +14,7 @@ APP_NAME :: "Agentic Design"
 // The .app this binary runs from ("/Applications/Agentic Design.app"), or "" when it runs
 // from a build directory.
 bundle_path :: proc() -> string {
-	exe, err := os.get_executable_path(context.temp_allocator)
+	exe, err := fs_executable(context.temp_allocator)
 	if err != nil do return ""
 	i := strings.index(exe, ".app/Contents/MacOS/")
 	if i < 0 do return ""

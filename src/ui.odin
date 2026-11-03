@@ -4,7 +4,6 @@ import "engine"
 
 import "core:encoding/json"
 import "core:fmt"
-import "core:os"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
@@ -1355,14 +1354,14 @@ export_render :: proc() {
 			used[strings.to_lower(name, context.temp_allocator)] = true
 			data, eok := export_encode({uid}, export_scale, export_format)
 			if !eok do continue
-			if os.write_entire_file(fmt.tprintf("%s/%s", dir, name), data) == nil do written += 1
+			if fs_write(fmt.tprintf("%s/%s", dir, name), data) == nil do written += 1
 		}
 		if written == 0 {
 			set_status("Export failed")
 			return
 		}
 		remember_export_dir(dir)
-		export_done(fmt.tprintf("Exported %d of %d layers to %s", written, len(uids), os.base(dir)), dir)
+		export_done(fmt.tprintf("Exported %d of %d layers to %s", written, len(uids), fs_base(dir)), dir)
 		return
 	}
 	uids := app.sel[:] if len(app.sel) > 0 else all_uids(true)
@@ -1389,17 +1388,17 @@ export_render :: proc() {
 		set_status("Export failed")
 		return
 	}
-	if err := os.write_entire_file(path, data); err != nil {
+	if err := fs_write(path, data); err != nil {
 		set_status("Export failed: %v", err)
 		return
 	}
-	remember_export_dir(os.dir(path))
-	export_done(fmt.tprintf("Exported %s", os.base(path)), path)
+	remember_export_dir(fs_dir(path))
+	export_done(fmt.tprintf("Exported %s", fs_base(path)), path)
 }
 
 // ".png" of "a/b.png", "" without one.
 filepath_ext :: proc(path: string) -> string {
-	base := os.base(path)
+	base := fs_base(path)
 	if i := strings.last_index_byte(base, '.'); i > 0 do return base[i:]
 	return ""
 }

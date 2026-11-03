@@ -3,8 +3,6 @@ package agentic_design
 import "base:intrinsics"
 import "core:encoding/json"
 import "core:fmt"
-import "core:os"
-import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 import "core:time"
@@ -17,13 +15,13 @@ library_add :: proc(path: string) -> (string, bool) {
 	if imports == nil do imports = make(json.Object, 1, context.temp_allocator)
 	for _, rel in imports {
 		p := string(rel.(json.String) or_else "")
-		if !filepath.is_abs(p) do p, _ = filepath.join({filepath.dir(app.file_path), p}, context.temp_allocator)
+		if !fs_path_is_abs(p) do p, _ = fs_path_join({fs_dir(app.file_path), p}, context.temp_allocator)
 		if p == path do return "", false
 	}
 	alias := engine.library_alias(&app.doc, path)
-	rel, err := filepath.rel(filepath.dir(app.file_path), path, context.temp_allocator)
+	rel, err := fs_path_rel(fs_dir(app.file_path), path, context.temp_allocator)
 	if err != nil do rel = path
-	if !strings.has_prefix(rel, ".") && !filepath.is_abs(rel) do rel = fmt.tprintf("./%s", rel)
+	if !strings.has_prefix(rel, ".") && !fs_path_is_abs(rel) do rel = fmt.tprintf("./%s", rel)
 	imports[alias] = json.String(rel)
 	push_undo()
 	engine.doc_set_header(&app.doc, "imports", imports)
@@ -50,15 +48,15 @@ libraries_refresh :: proc() -> bool {
 	engine.lib_checked = now
 	imports := engine.doc_imports(&app.doc)
 	b := strings.builder_make(context.temp_allocator)
-	base := filepath.dir(app.file_path)
+	base := fs_dir(app.file_path)
 	names := make([dynamic]string, context.temp_allocator)
 	for alias in imports do append(&names, alias)
 	slice.sort(names[:])
 	for alias in names {
 		path := string(imports[alias].(json.String) or_else "")
-		if !filepath.is_abs(path) do path, _ = filepath.join({base, path}, context.temp_allocator)
+		if !fs_path_is_abs(path) do path, _ = fs_path_join({base, path}, context.temp_allocator)
 		mtime: i64 = -1
-		if st, serr := os.stat(path, context.temp_allocator); serr == nil do mtime = st.modification_time._nsec
+		if st, serr := fs_stat(path, context.temp_allocator); serr == nil do mtime = st.modification_time._nsec
 		fmt.sbprintf(&b, "%s=%s@%d;", alias, path, mtime)
 	}
 	stamp := strings.to_string(b)

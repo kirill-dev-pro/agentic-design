@@ -4,7 +4,6 @@ import "engine"
 
 import "core:fmt"
 import "core:math"
-import "core:os"
 import "core:strconv"
 import "core:strings"
 import "core:sync"
@@ -140,13 +139,13 @@ app_main :: proc(path: string) {
 // Everything before the first frame: the window, the renderer, fonts, settings, the
 // documents to open, the control socket. False when there is no window or renderer.
 app_start :: proc(path: string) -> bool {
-	engine.lod_off = os.get_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
+	engine.lod_off = fs_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
 	use_big_allocator_for_temp()
 	posix_ignore_sigpipe()
 
 	// AGENTIC_WINDOW=1200x800 sets the window size (tests)
 	win := [2]int{1440, 900}
-	if v := os.get_env("AGENTIC_WINDOW", context.temp_allocator); v != "" {
+	if v := fs_env("AGENTIC_WINDOW", context.temp_allocator); v != "" {
 		if parts := strings.split(v, "x", context.temp_allocator); len(parts) == 2 {
 			w, wok := strconv.parse_int(parts[0])
 			h, hok := strconv.parse_int(parts[1])
@@ -158,7 +157,7 @@ app_start :: proc(path: string) -> bool {
 		return false
 	}
 	// AGENTIC_WINDOW_POS=40,60 places the window (two test windows side by side)
-	if v := os.get_env("AGENTIC_WINDOW_POS", context.temp_allocator); v != "" {
+	if v := fs_env("AGENTIC_WINDOW_POS", context.temp_allocator); v != "" {
 		if parts := strings.split(v, ",", context.temp_allocator); len(parts) == 2 {
 			x, xok := strconv.parse_int(parts[0])
 			y, yok := strconv.parse_int(parts[1])
@@ -182,14 +181,14 @@ app_start :: proc(path: string) -> bool {
 	app.cam = {-80, -60}
 	app.canvas_bg = CANVAS_BG
 	app.tab = -1
-	app.files_dir = strings.clone(os.dir(engine.absolute_path(path)))
+	app.files_dir = strings.clone(fs_dir(engine.absolute_path(path)))
 	// no field takes the keyboard until the user picks one (0 would focus the first
 	// field drawn, now the layer search)
 	ui.tab_target = -1
 	settings_load()
 	recents_load()
 	// launched to open documents (Finder, `open`): those instead of the scratch file
-	launched_with_documents := len(os.args) <= 1 && len(pf.open_requests) > 0
+	launched_with_documents := len(fs_args()) <= 1 && len(pf.open_requests) > 0
 	if launched_with_documents do handle_open_requests()
 	if !launched_with_documents && path != "" && !open_in_tab(path) do set_status("Could not read %s as a .pen document", path)
 	update_title()
@@ -271,7 +270,7 @@ app_stop :: proc() {
 	if app.dirty do save_document(app.file_path)
 	for &t in app.tabs do if t.dirty && t.path != "" {
 		data := engine.doc_serialize(&t.doc)
-		_ = os.write_entire_file(t.path, data)
+		_ = fs_write(t.path, data)
 		delete(data)
 	}
 	platform_shutdown()
@@ -375,14 +374,14 @@ open_document :: proc(path: string) -> bool {
 
 // Creates an empty .pen file next to the current one and opens it.
 new_document :: proc() {
-	dir := os.dir(app.file_path) if app.file_path != "" else app.files_dir
+	dir := fs_dir(app.file_path) if app.file_path != "" else app.files_dir
 	for i in 1 ..< 1000 {
 		path := fmt.tprintf("%s/untitled-%d.pen", dir, i)
-		if os.exists(path) do continue
-		_ = os.make_directory_all(dir)
-		if os.write_entire_file(path, "{\n  \"version\": \"2.21\",\n  \"children\": []\n}\n") == nil {
+		if fs_exists(path) do continue
+		_ = fs_mkdir_all(dir)
+		if fs_write(path, "{\n  \"version\": \"2.21\",\n  \"children\": []\n}\n") == nil {
 			open_in_tab(path)
-			set_status("Created %s", os.base(path))
+			set_status("Created %s", fs_base(path))
 		} else {
 			set_status("Could not create %s", path)
 		}
@@ -399,7 +398,7 @@ set_status :: proc(format: string, args: ..any) {
 }
 
 update_title :: proc() {
-	title := fmt.ctprintf("%s%s — Agentic Design", os.base(app.file_path), " •" if app.dirty else "") if app.tab >= 0 else "Agentic Design"
+	title := fmt.ctprintf("%s%s — Agentic Design", fs_base(app.file_path), " •" if app.dirty else "") if app.tab >= 0 else "Agentic Design"
 	platform_set_title(title)
 }
 
@@ -423,8 +422,8 @@ save_document :: proc(path: string) -> bool {
 	engine.pages_prune(&app.doc)
 	data := engine.doc_serialize(&app.doc)
 	defer delete(data)
-	_ = os.make_directory_all(os.dir(path))
-	if err := os.write_entire_file(path, data); err != nil {
+	_ = fs_mkdir_all(fs_dir(path))
+	if err := fs_write(path, data); err != nil {
 		set_status("Save failed: %v", err)
 		return false
 	}

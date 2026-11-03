@@ -2,7 +2,6 @@ package agentic_design
 
 import "core:encoding/json"
 import "core:fmt"
-import "core:os"
 import "core:strings"
 import "engine"
 
@@ -30,7 +29,7 @@ write_pdf :: proc(b: ^strings.Builder, uids: []int, path: string) -> string {
 	data, ok := engine.export_pdf(engine.renderer, &app.doc, uids)
 	if !ok do return "could not draw the PDF"
 	defer delete(data)
-	if err := os.write_entire_file(path, data); err != nil do return fmt.tprintf("cannot write %s: %v", path, err)
+	if err := fs_write(path, data); err != nil do return fmt.tprintf("cannot write %s: %v", path, err)
 	fmt.sbprintf(b, `{{"path":`)
 	engine.json_write_string(b, path)
 	fmt.sbprintf(b, `,"pages":%d,"bytes":%d}}`, len(uids), len(data))

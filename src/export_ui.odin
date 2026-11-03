@@ -1,7 +1,6 @@
 package agentic_design
 
 import "core:fmt"
-import "core:os"
 import "core:strings"
 import "engine"
 
@@ -10,16 +9,16 @@ export_code_to_dir :: proc(format: engine.Code_Format, dir := "", roots: []int =
 	files := engine.generate_code(&app.doc, format, roots)
 	target := dir
 	if target == "" do target = fmt.tprintf("%s/%s", downloads_dir(), code_folder_name(format))
-	if err := os.make_directory_all(target); err != nil && !os.is_dir(target) do return target, false // fails on an existing folder
+	if err := fs_mkdir_all(target); err != nil && !fs_is_dir(target) do return target, false // fails on an existing folder
 	for f in files {
-		if err := os.write_entire_file(fmt.tprintf("%s/%s", target, f.name), f.content); err != nil do return target, false
+		if err := fs_write(fmt.tprintf("%s/%s", target, f.name), f.content); err != nil do return target, false
 	}
 	// the fonts and images the code refers to, next to it
 	for rel, src in engine.export_assets {
 		dst := fmt.tprintf("%s/%s", target, rel)
-		_ = os.make_directory_all(os.dir(dst))
-		if os.exists(dst) do _ = os.remove(dst)
-		if err := os.copy_file(dst, src); err != nil do return target, false
+		_ = fs_mkdir_all(fs_dir(dst))
+		if fs_exists(dst) do _ = fs_remove(dst)
+		if err := fs_copy(dst, src); err != nil do return target, false
 	}
 	return target, true
 }
@@ -34,8 +33,8 @@ export_code_ui :: proc(format: engine.Code_Format) {
 	target, ok := ask_save_path(code_folder_name(format), nil)
 	if !ok do return
 	if dir, wok := export_code_to_dir(format, target); wok {
-		remember_export_dir(os.dir(dir))
-		export_done(fmt.tprintf("Exported %s", os.base(dir)), dir)
+		remember_export_dir(fs_dir(dir))
+		export_done(fmt.tprintf("Exported %s", fs_base(dir)), dir)
 	} else {
 		set_status("Export failed: could not write to %s", dir)
 	}
@@ -47,11 +46,11 @@ export_code_ui :: proc(format: engine.Code_Format) {
 // (and would show the user a dialog).
 downloads_dir :: proc() -> string {
 	if pf.quiet {
-		dir := fmt.tprintf("%s/agentic-design-downloads", strings.trim_suffix(os.temp_directory(context.temp_allocator) or_else "/tmp", "/"))
-		_ = os.make_directory_all(dir)
+		dir := fmt.tprintf("%s/agentic-design-downloads", strings.trim_suffix(fs_temp_dir(context.temp_allocator) or_else "/tmp", "/"))
+		_ = fs_mkdir_all(dir)
 		return dir
 	}
-	home, _ := os.user_home_dir(context.temp_allocator)
+	home, _ := fs_home(context.temp_allocator)
 	return fmt.tprintf("%s/Downloads", home)
 }
 
@@ -59,8 +58,8 @@ downloads_dir :: proc() -> string {
 
 // The folder a save panel opens in: the last one exported to, else the document's folder.
 export_start_dir :: proc() -> string {
-	if settings.export_dir != "" && os.is_dir(settings.export_dir) do return settings.export_dir
-	if app.file_path != "" do return os.dir(app.file_path)
+	if settings.export_dir != "" && fs_is_dir(settings.export_dir) do return settings.export_dir
+	if app.file_path != "" do return fs_dir(app.file_path)
 	return downloads_dir()
 }
 

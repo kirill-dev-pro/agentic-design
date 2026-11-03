@@ -5,7 +5,6 @@ import "engine"
 import "core:encoding/json"
 import "core:fmt"
 import "core:math"
-import "core:os"
 import "core:strconv"
 import "core:strings"
 import nvg "nanovg"
@@ -42,7 +41,7 @@ settings_path :: proc() -> string {
 }
 
 settings_load :: proc() {
-	data, err := os.read_entire_file(settings_path(), context.temp_allocator)
+	data, err := fs_read(settings_path(), context.temp_allocator)
 	if err != nil do return
 	v, perr := json.parse_string(string(data), .JSON, false, context.temp_allocator)
 	if perr != nil do return
@@ -61,13 +60,13 @@ settings_load :: proc() {
 // Test windows keep the user's settings as they are.
 settings_save :: proc() {
 	if pf.quiet do return
-	_ = os.make_directory_all(support_dir())
+	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
 		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s\n}}\n",
 		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir),
 	)
-	_ = os.write_entire_file(settings_path(), text)
+	_ = fs_write(settings_path(), text)
 }
 
 json_quote :: proc(s: string) -> string {
