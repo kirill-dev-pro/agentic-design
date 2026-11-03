@@ -59,15 +59,19 @@ Taken when the proposal was approved (November 2026).
 
 **Recommendations of this document, taken as decisions:**
 
-5. **User content is on a separate registrable domain**, cookieless. Until that domain
-   is registered, M1 serves user content from its own hostname under the site's domain.
-   The site's session cookies are host-only, so they never reach it. The separate domain
-   is required before cloud documents (M2) launch.
-6. **Data region: the EU.**
-   - Durable Objects use the `eu` jurisdiction.
-   - Object storage is pinned to the EU: R2's `eu` jurisdiction, or an EU region on
-     Tigris.
-   - The database region follows Bunderhost's provider and is to be confirmed.
+5. **User content is served from the site's own domain** (reverses the proposal of a
+   separate domain; owner's decision). Files are reachable only through access checks: the
+   owner's workspace, an explicit share, or a share link. What may be uploaded is narrow:
+   a `.pen` that passes the server's check, and images, fonts and libraries whose bytes
+   match their declared type. HTML is never accepted. Every user file is sent with
+   `nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` and
+   `Cross-Origin-Resource-Policy: same-site`, so a file opened directly runs no script
+   with the site's cookies. From M2 the `.pen` check is the engine's own parser (§2), the
+   same code that renders previews and history.
+6. **Data region: not pinned for now** (reverses the EU proposal; owner's decision).
+   Object storage uses the platform's default (Tigris, global); Durable Objects and the
+   database follow the platform's defaults. Pinning a region is revisited later, together
+   with the GDPR paperwork (§7).
 7. **Edit links require sign-in** (M3). There is no anonymous editing. View links never
    need an account.
 8. **History:** automatic versions are kept for 30 days. Named versions are kept as long
@@ -1048,7 +1052,4 @@ it down:
 The other questions of the proposal are answered under [Decisions](#decisions).
 
 1. **Billing**: provider, prices and trial, before M2 ships.
-2. **The user-content domain**: which separate registrable domain to register (decision 5).
-3. **Database region**: where Bunderhost's database provider keeps the site's data
-   (decision 6).
-4. **Team pricing**: per seat or per workspace, before M3.
+2. **Team pricing**: per seat or per workspace, before M3.

@@ -140,6 +140,27 @@ async function fileJson(app: App, doc: typeof document.$inferSelect, request?: R
 
 // ---------------------------------------------------------------- upload
 
+/** The shape of a .pen (docs/pen-format.md): an object whose `children` is a list of nodes,
+ * each an object with a string `type`, nested children likewise. The engine's own parser
+ * replaces this check in M2. */
+export function isPen(doc: unknown): boolean {
+	if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false
+	const d = doc as Record<string, unknown>
+	if (d.version !== undefined && typeof d.version !== 'string') return false
+	const nodesOk = (list: unknown, depth: number): boolean =>
+		Array.isArray(list) &&
+		depth < 200 &&
+		list.every(
+			(n) =>
+				n !== null &&
+				typeof n === 'object' &&
+				!Array.isArray(n) &&
+				typeof (n as Record<string, unknown>).type === 'string' &&
+				((n as Record<string, unknown>).children === undefined || nodesOk((n as Record<string, unknown>).children, depth + 1)),
+		)
+	return nodesOk(d.children, 0)
+}
+
 async function startUpload(app: App, request: Request, ws: Workspace, userId: string, input: UploadInput, existingId?: string) {
 	const ent = ws.entitlements
 	if (input.pen.size > ent.maxPenBytes) fail('PAYLOAD_TOO_LARGE', 'TOO_LARGE', 'The .pen file is larger than the plan allows')
@@ -235,15 +256,14 @@ async function commit(app: App, request: Request, ws: Workspace, docId: string, 
 			if (bad === 'type') fail('BAD_REQUEST', 'BAD_TYPE', `A file is not the ${b.type} it was declared as`, { hash: b.hash })
 			fail('BAD_REQUEST', 'HASH_MISMATCH', `A file differs from its declared ${bad}`, { hash: b.hash })
 		}
-		if (b.hash === m.pen.hash) {
+		if (b.type === 'application/json') {
 			let ok = false
 			try {
-				const pen = JSON.parse(new TextDecoder().decode(bytes))
-				ok = pen !== null && typeof pen === 'object' && !Array.isArray(pen)
+				ok = isPen(JSON.parse(new TextDecoder().decode(bytes)))
 			} catch {}
 			if (!ok) {
 				await store.delete(blobKey(ws.id, b.hash))
-				fail('BAD_REQUEST', 'INVALID_PEN', 'The .pen file is not a JSON object')
+				fail('BAD_REQUEST', 'INVALID_PEN', 'A .pen file (the document or a library) is not a valid .pen')
 			}
 		}
 		await app.db.update(asset).set({ ready: true }).where(and(eq(asset.workspaceId, ws.id), eq(asset.hash, b.hash)))
