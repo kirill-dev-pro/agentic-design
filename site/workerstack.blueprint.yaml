@@ -41,6 +41,9 @@ resources:
       - exportName: account
         physicalName: account
         system: false
+      - exportName: accountDeletion
+        physicalName: account_deletion
+        system: false
       - exportName: appAuthCode
         physicalName: app_auth_code
         system: false
@@ -117,6 +120,11 @@ api:
       effect: mutation
       method: POST
       path: /api/docs/{docId}/links
+    - handle: deleteAccount
+      operationId: deleteAccount
+      effect: mutation
+      method: POST
+      path: /api/account/delete
     - handle: deleteFile
       operationId: deleteFile
       effect: mutation
@@ -180,6 +188,9 @@ api:
 background:
   jobs: []
   cron:
+    - name: accountDeletions
+      schedule: "15 * * * *"
+      timezone: UTC
     - name: cleanup
       schedule: "30 3 * * *"
       timezone: UTC

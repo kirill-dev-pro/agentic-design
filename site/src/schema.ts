@@ -212,3 +212,11 @@ export const appAuthCode = sqliteTable('app_auth_code', {
 	usedAt: timestamp('usedAt'),
 	createdAt: timestamp('createdAt').notNull(),
 })
+
+/** Accounts an operator deletes (src/account.ts): the cleanup job purges them. */
+export const accountDeletion = sqliteTable('account_deletion', {
+	userId: text('userId').primaryKey(),
+	reason: text('reason'),
+	requestedAt: timestamp('requestedAt').notNull(),
+	doneAt: timestamp('doneAt'),
+})

@@ -18,7 +18,8 @@ export function crc32(bytes: Uint8Array): number {
 	return (c ^ 0xffffffff) >>> 0
 }
 
-type Entry = { path: string; hash: string }
+/** A file of the archive: a blob by its hash, or bytes given here. */
+export type Entry = { path: string; hash: string; data?: Uint8Array }
 
 export function zip(entries: Entry[], read: (hash: string) => Promise<Uint8Array>): ReadableStream<Uint8Array> {
 	const enc = new TextEncoder()
@@ -33,7 +34,7 @@ export function zip(entries: Entry[], read: (hash: string) => Promise<Uint8Array
 			if (done) return
 			if (i < files.length) {
 				const f = files[i++]!
-				const data = await read(f.hash)
+				const data = f.data ?? (await read(f.hash))
 				const name = enc.encode(f.path)
 				const crc = crc32(data)
 				const local = new DataView(new ArrayBuffer(30))

@@ -242,10 +242,14 @@ async function commit(app: App, request: Request, ws: Workspace, docId: string, 
 	const store = bucket(app)
 	const incomplete: string[] = []
 	for (const b of blobs) {
-		if (ready.has(b.hash)) continue
+		// A blob seen before must still be there (a HEAD): storage lost it, or a cleanup raced.
+		if (ready.has(b.hash) && (await store.exists(blobKey(ws.id, b.hash)))) continue
 		const res = await store.get(blobKey(ws.id, b.hash))
 		if (!res.ok) {
 			incomplete.push(b.hash)
+			// so that the next upload asks for it again
+			if (ready.has(b.hash))
+				await app.db.update(asset).set({ ready: false }).where(and(eq(asset.workspaceId, ws.id), eq(asset.hash, b.hash)))
 			continue
 		}
 		const bytes = new Uint8Array(await res.arrayBuffer())

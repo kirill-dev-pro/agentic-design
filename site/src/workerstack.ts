@@ -12,6 +12,7 @@ import { WorkerstackError } from 'workerstack'
 
 import { access } from './access'
 import type { App } from './blobs'
+import { deleteOwnAccount, runAccountDeletions } from './account'
 import { exchangeCode } from './app-auth'
 import { cleanup } from './cleanup'
 import { fileRoutes } from './files'
@@ -61,6 +62,12 @@ export const backend = workerstack({
 				schedule: '30 3 * * *',
 				handler: async (ctx) => {
 					await cleanup(ctx as unknown as App)
+				},
+			}),
+			accountDeletions: j.cron({
+				schedule: '15 * * * *',
+				handler: async (ctx) => {
+					await runAccountDeletions(ctx as unknown as App)
 				},
 			}),
 		}),
@@ -114,6 +121,17 @@ export const backend = workerstack({
 				if (!out) throw new WorkerstackError('BAD_REQUEST', 'The code is not valid', { reason: 'INVALID_CODE' })
 				context.resHeaders?.set('cache-control', 'no-store')
 				return out
+			}),
+
+		deleteAccount: o.protected
+			.route({ method: 'POST', path: '/api/account/delete' })
+			.input(v.object({ password: v.optional(v.string()) }))
+			.handler(async ({ input, context }) => {
+				const r = await deleteOwnAccount(context as never, context.request, input.password)
+				if (r !== 'ok') throw new WorkerstackError('FORBIDDEN', r === 'PASSWORD' ? 'The password is not right' : 'Sign in again to delete the account', { reason: r })
+				context.resHeaders?.append('set-cookie', 'better-auth.session_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax')
+				context.resHeaders?.append('set-cookie', '__Secure-better-auth.session_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax')
+				return { ok: true }
 			}),
 
 		viewMetric: o.public
