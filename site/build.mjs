@@ -69,7 +69,7 @@ for (const rel of files.sort((a, b) => order(a) - order(b))) {
 if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	const vmap = new Map();
 	const shell = []; // the viewer's hashed files, cached by sw.js
-	for (const name of ["viewer.wasm", "odin.js", "wgpu.js", "viewer.css"]) {
+	for (const name of ["viewer.wasm", "odin.js", "wgpu.js", "viewer.css", "upload.js"]) {
 		if (!fs.existsSync(path.join(viewer, name))) continue;
 		const data = fs.readFileSync(path.join(viewer, name));
 		const h = hashed(name, data);
@@ -102,7 +102,7 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	write("_embed.html", template("embed"));
 	for (const extra of fs.readdirSync(viewer)) {
 		// samples and other files the page links to by name
-		if (/^(index\.html|viewer\.(wasm|js|css)|odin\.js|wgpu\.js|sw\.js)$/.test(extra)) continue;
+		if (/^(index\.html|viewer\.(wasm|js|css)|upload\.js|odin\.js|wgpu\.js|sw\.js)$/.test(extra)) continue;
 		const p = path.join(viewer, extra);
 		if (fs.statSync(p).isDirectory()) fs.cpSync(p, path.join(out, "view", extra), { recursive: true });
 		else write("view/" + extra, fs.readFileSync(p));

@@ -166,3 +166,11 @@ body.embed #info { display: none; }
 }
 
 body.share #side .private { display: none; }
+
+/* ---------------------------------------------------------------- share by link */
+.share-pop { right: 12px; width: 380px; max-width: calc(100vw - 16px); top: calc(var(--top) + 4px); }
+.share-pop .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
+.share-pop input[type="text"] { height: 32px; padding: 0 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; color: var(--text); font-size: 13px; flex: 1; min-width: 0; }
+.share-pop .hint { margin: 0 0 12px; color: #c9c9c9; line-height: 1.5; }
+.share-pop .row { margin-bottom: 10px; }
+.share-error { margin: 8px 0 0; color: var(--error); line-height: 1.45; }

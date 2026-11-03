@@ -34,6 +34,7 @@
 	let docPath = ""; // the open document's path, as the engine knows it
 	let info = null; // the last page_info
 	const failed = new Map(); // path -> why it could not be fetched
+	const read = new Map(); // every file the engine read for the open document: path -> bytes (null: missing)
 	const dismissed = new Set();
 
 	// ---------------------------------------------------------------- messages
@@ -109,6 +110,7 @@
 
 	async function fetchFiles(paths) {
 		const got = await Promise.all(paths.map(getFile));
+		paths.forEach((path, i) => read.set(path, got[i]));
 		if (got[paths.indexOf(docPath)] === null) return docFailed(docPath);
 		paths.forEach((path, i) => {
 			const [p, pl] = put(encoder.encode(path));
@@ -136,6 +138,7 @@
 		$("welcome").hidden = true;
 		docPath = path;
 		failed.clear();
+		read.clear();
 		dismissed.clear();
 		const [p, pl] = put(encoder.encode(path));
 		ex.viewer_open(p, pl);
@@ -235,6 +238,8 @@
 			document.title = title ? title + " — .pen viewer" : ".pen viewer — Agentic Design";
 		}
 		$("export").disabled = !loaded;
+		// sharing a file opened here; not a share page, not a file already on the server
+		$("share-btn").hidden = !loaded || !!share || docPath.startsWith("/c/") || docPath.startsWith("/api/");
 		$("toggle-side").hidden = !loaded;
 		if (loaded && !body.dataset.sideSet) {
 			body.dataset.sideSet = "1";
@@ -416,6 +421,79 @@
 	$("info-zoom").addEventListener("click", () => ex.viewer_zoom_to(0));
 	$("info-parent").addEventListener("click", () => ex.viewer_select_parent());
 
+	// ---------------------------------------------------------------- share by link (upload.js)
+
+	// ?update=<docId>: the file is uploaded as a new version of that shared file (from /files)
+	const updateId = new URLSearchParams(location.search).get("update");
+	const shareDialog = $("share-dialog");
+	const step = (name) => { for (const el of shareDialog.querySelectorAll("[data-step]")) el.hidden = el.dataset.step !== name; };
+	const shareError = (text) => { $("share-error").textContent = text || ""; $("share-error").hidden = !text; };
+	const uploadMessages = {
+		QUOTA_EXCEEDED: "Your account has no room for this file: it allows 1 GB and 100 shared files.",
+		TOO_LARGE: "The file or one of its images is larger than allowed (50 MB for a .pen, 25 MB for an image or font).",
+		UPLOAD_INCOMPLETE: "Some files did not arrive. Try again.",
+		EXPIRED: "The upload took too long. Try again.",
+		TOO_MANY_REQUESTS: "Too many uploads in a row. Wait a few minutes and try again.",
+	};
+	const nextFrame = () => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+
+	async function openShare() {
+		$("export-dialog").hidden = true;
+		shareError("");
+		shareDialog.hidden = false;
+		const name = new URLSearchParams(location.search).get("name") || (info && info.title && info.title !== "." ? info.title : "Untitled");
+		$("share-heading").textContent = updateId ? "Upload a new version" : "Share by link";
+		$("share-go").textContent = updateId ? "Upload new version" : "Upload and get link";
+		$("share-hint").textContent = updateId
+			? "Replaces what the file's links show with this file, its images, fonts and libraries. The links stay the same."
+			: "Uploads this file with the images, fonts and libraries it uses. Anyone with the link can view it, on any device, without an account.";
+		step("busy");
+		$("share-progress").textContent = "Checking your account…";
+		let me = null;
+		try { me = await PenUpload.api("GET", "/api/me"); } catch (e) { if (e.status !== 401) { step("form"); return shareError(e.message); } }
+		if (!me) return step("signin");
+		$("share-name").value = name.replace(/\.pen$/i, "");
+		step("form");
+		$("share-name").focus();
+	}
+
+	async function runShare() {
+		const name = $("share-name").value.trim();
+		if (!name) return shareError("Give the file a name.");
+		shareError("");
+		step("busy");
+		const ctx = {
+			docPath, read,
+			info: () => info,
+			page: (i) => ex.viewer_set_page(i),
+			select: (uid) => ex.viewer_select(uid),
+			exportCanvas: (uid, scale) => exportCanvas(uid, scale),
+			frame: nextFrame,
+		};
+		try {
+			const r = await PenUpload.upload(ctx, { name, docId: updateId, progress: (t) => { $("share-progress").textContent = t; } });
+			$("share-url").value = r.link.url || "";
+			const miss = r.missing.length;
+			$("share-missing").textContent = miss ? `${miss} ${miss === 1 ? "file the document refers to was" : "files the document refers to were"} not found and are not included.` : "";
+			$("share-missing").hidden = !miss;
+			step("done");
+			try { await navigator.clipboard.writeText(r.link.url); $("share-copy").textContent = "Copied"; } catch (e) {}
+		} catch (e) {
+			console.error(e);
+			step("form");
+			shareError(uploadMessages[e.reason] || uploadMessages[e.code] || (e.status === 401 ? "You are signed out. Sign in and try again." : e.message));
+		}
+	}
+
+	$("share-btn").addEventListener("click", () => (shareDialog.hidden ? openShare() : (shareDialog.hidden = true)));
+	$("share-go").addEventListener("click", runShare);
+	$("share-name").addEventListener("keydown", (e) => { if (e.key === "Enter") runShare(); });
+	$("share-copy").addEventListener("click", async () => {
+		try { await navigator.clipboard.writeText($("share-url").value); $("share-copy").textContent = "Copied"; }
+		catch (e) { $("share-url").select(); }
+	});
+	for (const b of shareDialog.querySelectorAll("[data-close]")) b.addEventListener("click", () => { shareDialog.hidden = true; $("share-copy").textContent = "Copy"; });
+
 	// ---------------------------------------------------------------- start
 
 	// ---------------------------------------------------------------- share pages
@@ -525,6 +603,8 @@
 		zoomTo: (uid) => ex.viewer_zoom_to(uid),
 		exportPng: (uid, scale) => exportPng(uid, scale),
 		exportCanvas: (uid, scale) => exportCanvas(uid, scale), // (tests: the picture without the download)
+		shareOpen: () => openShare(),
+		shareRun: () => runShare(),
 	};
 
 	const params = new URLSearchParams(location.search);

@@ -16,6 +16,6 @@ command -v wasm-ld >/dev/null 2>&1 || { echo "build_web.sh: wasm-ld not found (b
 mkdir -p build/web
 # --export-table: wgpu.js calls the module's callbacks through its function table
 odin build src/web -target:js_wasm32 -out:build/web/viewer.wasm -extra-linker-flags:"--export-table" "${@:--o:speed}"
-cp web/index.html web/viewer.js web/viewer.css web/sw.js web/manifest.webmanifest build/web/
+cp web/index.html web/viewer.js web/upload.js web/viewer.css web/sw.js web/manifest.webmanifest build/web/
 cp "$(odin root)/core/sys/wasm/js/odin.js" build/web/
 cp src/wgpu/wgpu.js build/web/

@@ -37,6 +37,7 @@
 	<span id="owner" hidden></span>
 	<span class="spacer"></span>
 	<span id="themes"></span>
+	<button id="share-btn" class="btn" type="button" hidden aria-haspopup="dialog">Share</button>
 	<button id="export" class="btn" type="button" disabled aria-haspopup="dialog">Export</button>
 	<a id="share-download" class="btn" hidden download>Download</a>
 	<a id="get-app" class="btn primary" href="/" hidden>Get the app</a>
@@ -140,9 +141,31 @@
 	</div>
 </div>
 
+<div id="share-dialog" class="popover share-pop" role="dialog" aria-labelledby="share-heading" hidden>
+	<h2 id="share-heading">Share by link</h2>
+	<div data-step="form">
+		<label class="field">Name<input id="share-name" type="text" maxlength="200" autocomplete="off"></label>
+		<p class="hint" id="share-hint">Uploads this file with the images, fonts and libraries it uses. Anyone with the link can view it, on any device, without an account.</p>
+		<div class="row end"><button class="btn" type="button" data-close>Cancel</button><button id="share-go" class="btn primary" type="button">Upload and get link</button></div>
+	</div>
+	<div data-step="signin" hidden>
+		<p class="hint">Sign in to share files by link. It opens in a new tab, and this file stays open here: come back and press Share again.</p>
+		<div class="row end"><button class="btn" type="button" data-close>Cancel</button><a class="btn primary" href="/signin?next=/account" target="_blank" rel="noopener">Sign in</a></div>
+	</div>
+	<div data-step="busy" hidden><p class="hint" id="share-progress">Preparing…</p></div>
+	<div data-step="done" hidden>
+		<p class="hint">Anyone with this link can view the file.</p>
+		<div class="row"><input id="share-url" type="text" readonly><button id="share-copy" class="btn primary" type="button">Copy</button></div>
+		<p class="hint" id="share-missing" hidden></p>
+		<div class="row end"><a class="btn" href="/files" target="_blank" rel="noopener">My files</a><button class="btn" type="button" data-close>Done</button></div>
+	</div>
+	<p class="share-error" id="share-error" role="alert" hidden></p>
+</div>
+
 <noscript><div class="card-wrap"><div class="card"><h1>JavaScript is off</h1><p>The viewer runs the app's engine in WebAssembly, which needs JavaScript.</p></div></div></noscript>
 <script src="odin.js" defer></script>
 <script src="wgpu.js" defer></script>
+<script src="upload.js" defer></script>
 <script src="viewer.js" defer></script>
 </body>
 </html>
