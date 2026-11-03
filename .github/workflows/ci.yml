@@ -52,6 +52,7 @@ jobs:
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: web-viewer-builds
         run: |
           KEY=$(node site/scripts/viewer-key.mjs)
@@ -74,8 +75,10 @@ jobs:
           # as the sign that the archive is complete
           if gh release upload "$TAG" "$NAME"; then
             gh release upload "$TAG" "$NAME.sha256"
-          else
+          elif gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$NAME"; then
             echo "another run uploaded $NAME"
+          else
+            exit 1
           fi
           # keep the newest 100 builds (two files each)
           gh release view "$TAG" --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[200:] | .[].name' \
