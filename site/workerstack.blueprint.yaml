@@ -74,6 +74,9 @@ resources:
       - exportName: version
         physicalName: version
         system: false
+      - exportName: viewMetric
+        physicalName: view_metric
+        system: false
       - exportName: workspacePlan
         physicalName: workspace_plan
         system: false
@@ -161,6 +164,11 @@ api:
       effect: read
       method: GET
       path: /api/version
+    - handle: viewMetric
+      operationId: viewMetric
+      effect: mutation
+      method: POST
+      path: /api/metrics/view
 background:
   jobs: []
   cron:

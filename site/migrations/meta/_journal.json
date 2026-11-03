@@ -15,6 +15,13 @@
       "when": 1793649799244,
       "tag": "0001_married_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793693801697,
+      "tag": "0002_tired_firebrand",
+      "breakpoints": true
     }
   ]
 }
