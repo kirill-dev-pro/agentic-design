@@ -6,6 +6,7 @@ import "core:os"
 import "core:strings"
 import "vendor:glfw"
 import "engine"
+import nvg "nanovg"
 
 // The desktop host of the interface: the window and its input through GLFW. Events arrive
 // through callbacks between two PollEvents calls; this module turns them into the per-frame
@@ -196,6 +197,12 @@ platform_set_cursor :: proc(cur: Cursor) {
 	if cur == pf.cursor do return
 	pf.cursor = cur
 	glfw.SetCursor(pf.window, pf.cursors[cur])
+}
+
+// The renderer on the window (the browser host creates it before app_start, since a page
+// gets its GPU through promises).
+platform_gpu_create :: proc() -> ^nvg.Context {
+	return engine.gpu_create(platform_gpu_surface())
 }
 
 // What the renderer needs from the window: the GL context is current (GL), or the

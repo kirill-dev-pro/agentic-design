@@ -164,7 +164,7 @@ app_start :: proc(path: string) -> bool {
 			if xok && yok do platform_set_window_pos(x, y)
 		}
 	}
-	app.vg = engine.gpu_create(platform_gpu_surface())
+	app.vg = platform_gpu_create()
 	if app.vg == nil {
 		fmt.eprintln("could not start the renderer")
 		return false
