@@ -17,7 +17,7 @@
 	media.addEventListener("change", label);
 	label();
 
-	fetch("https://api.github.com/repos/kirill-dev-pro/agentic-design/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
+	if (document.querySelector("[data-download]")) fetch("https://api.github.com/repos/kirill-dev-pro/agentic-design/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
 		.then(function (r) { return r.ok ? r.json() : null; })
 		.then(function (release) {
 			if (!release) return;

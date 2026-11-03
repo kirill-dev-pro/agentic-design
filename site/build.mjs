@@ -55,7 +55,7 @@ for (const rel of files.sort((a, b) => order(a) - order(b))) {
 		data = Buffer.from(data.toString().replace(/<link rel="stylesheet" href="\/(styles\.[0-9a-f]{10}\.css)">/, (_, css) =>
 			"<style>" + fs.readFileSync(path.join(out, css), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\n\s*/g, "\n") + "</style>"));
 	}
-	if (plain.has(rel) || /\.txt$/.test(rel)) {
+	if (plain.has(rel) || /\.(txt|html)$/.test(rel)) {
 		write(rel, data);
 	} else {
 		const name = hashed(rel, data);
