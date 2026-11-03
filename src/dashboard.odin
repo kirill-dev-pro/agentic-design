@@ -3,7 +3,6 @@ package agentic_design
 import "engine"
 
 import "core:fmt"
-import "core:os"
 import "core:slice"
 import "core:strings"
 import "core:time"
@@ -84,9 +83,9 @@ Dash_Entry :: struct {
 dashboard_entries :: proc() -> []Dash_Entry {
 	out := make([dynamic]Dash_Entry, context.temp_allocator)
 	if dash_files {
-		infos, err := os.read_all_directory_by_path(app.files_dir, context.temp_allocator)
+		infos, err := fs_list(app.files_dir, context.temp_allocator)
 		if err == nil {
-			slice.sort_by(infos, proc(a, b: os.File_Info) -> bool {return a.modification_time._nsec > b.modification_time._nsec})
+			slice.sort_by(infos, proc(a, b: Fs_File_Info) -> bool {return a.modification_time._nsec > b.modification_time._nsec})
 			for info in infos {
 				if info.type == .Directory || !strings.has_suffix(info.name, ".pen") do continue
 				path := fmt.tprintf("%s/%s", app.files_dir, info.name)
@@ -96,7 +95,7 @@ dashboard_entries :: proc() -> []Dash_Entry {
 		return out[:]
 	}
 	for r in recents {
-		if !os.exists(r.path) do continue
+		if !fs_exists(r.path) do continue
 		append(&out, Dash_Entry{r.path, engine.file_title(r.path), fmt.tprintf("Opened %s", ago(r.time))})
 	}
 	return out[:]

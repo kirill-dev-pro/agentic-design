@@ -2,19 +2,18 @@ package agentic_design
 
 import "core:c"
 import "core:fmt"
-import "core:os"
 import "core:strings"
 import "engine"
 
 // Copies an image next to the document (images/) and adds a rectangle filled with it.
 place_image :: proc(src: string, at: [2]f32) -> bool {
 	if app.tab < 0 || !engine.is_image_file(src) do return false
-	dir := fmt.tprintf("%s/images", os.dir(app.file_path))
-	_ = os.make_directory_all(dir)
-	name := os.base(src)
+	dir := fmt.tprintf("%s/images", fs_dir(app.file_path))
+	_ = fs_mkdir_all(dir)
+	name := fs_base(src)
 	dst := fmt.tprintf("%s/%s", dir, name)
-	if !os.exists(dst) {
-		if err := os.copy_file(dst, src); err != nil {
+	if !fs_exists(dst) {
+		if err := fs_copy(dst, src); err != nil {
 			set_status("Could not copy %s: %v", name, err)
 			return false
 		}

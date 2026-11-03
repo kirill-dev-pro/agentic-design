@@ -5,7 +5,6 @@ import "engine"
 import "core:encoding/json"
 import "core:fmt"
 import "core:hash"
-import "core:os"
 import "core:strings"
 import "core:time"
 import nvg "nanovg"
@@ -92,7 +91,7 @@ open_in_tab :: proc(path: string) -> bool {
 			return true
 		}
 	}
-	data, rerr := os.read_entire_file(abs, context.temp_allocator)
+	data, rerr := fs_read(abs, context.temp_allocator)
 	if rerr != nil do return false
 	append(&app.tabs, Tab{zoom = 1, cam = {-80, -60}})
 	tab_activate(len(app.tabs) - 1)
@@ -139,18 +138,18 @@ rename_document :: proc(new_title: string) -> bool {
 	title := strings.trim_space(new_title)
 	if title == "" || strings.contains(title, "/") do return false
 	if strings.has_suffix(title, ".pen") do title = title[:len(title) - 4]
-	new_path := fmt.aprintf("%s/%s.pen", os.dir(app.file_path), title)
+	new_path := fmt.aprintf("%s/%s.pen", fs_dir(app.file_path), title)
 	if new_path == app.file_path {
 		delete(new_path)
 		return true
 	}
-	if os.exists(new_path) {
-		set_status("%s already exists", os.base(new_path))
+	if fs_exists(new_path) {
+		set_status("%s already exists", fs_base(new_path))
 		delete(new_path)
 		return false
 	}
 	if app.dirty do save_document(app.file_path)
-	if err := os.rename(app.file_path, new_path); err != nil {
+	if err := fs_rename(app.file_path, new_path); err != nil {
 		set_status("Rename failed: %v", err)
 		delete(new_path)
 		return false
@@ -174,7 +173,7 @@ Recent :: struct {
 recents: [dynamic]Recent
 
 support_dir :: proc() -> string {
-	home, _ := os.user_home_dir(context.temp_allocator)
+	home, _ := fs_home(context.temp_allocator)
 	return fmt.tprintf("%s/Library/Application Support/Agentic Design", home)
 }
 
@@ -182,7 +181,7 @@ recents_load :: proc() {
 	// test windows show no recent files, so a scripted or fuzzed run cannot open (and
 	// autosave) the user's documents from the dashboard
 	if pf.quiet do return
-	data, err := os.read_entire_file(fmt.tprintf("%s/recents.json", support_dir()), context.temp_allocator)
+	data, err := fs_read(fmt.tprintf("%s/recents.json", support_dir()), context.temp_allocator)
 	if err != nil do return
 	root, perr := json.parse_string(string(data), .JSON, false, context.temp_allocator)
 	if perr != nil do return
@@ -199,7 +198,7 @@ recents_load :: proc() {
 
 recents_save :: proc() {
 	dir := support_dir()
-	_ = os.make_directory_all(dir)
+	_ = fs_mkdir_all(dir)
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, "[\n")
 	for r, i in recents {
@@ -209,7 +208,7 @@ recents_save :: proc() {
 		fmt.sbprintf(&b, `,"time":%d}}`, r.time)
 	}
 	strings.write_string(&b, "\n]\n")
-	_ = os.write_entire_file(fmt.tprintf("%s/recents.json", dir), strings.to_string(b))
+	_ = fs_write(fmt.tprintf("%s/recents.json", dir), strings.to_string(b))
 }
 
 recents_touch :: proc(path: string) {
@@ -277,7 +276,7 @@ thumbs_render :: proc() {
 		for p in paths do delete(p)
 		delete(paths)
 	}
-	_ = os.make_directory_all(fmt.tprintf("%s/thumbs", support_dir()))
+	_ = fs_mkdir_all(fmt.tprintf("%s/thumbs", support_dir()))
 	for path in paths {
 		if path == app.file_path && app.tab >= 0 && !app.dirty {
 			// the open document was just saved: it is what the file holds, already parsed,
@@ -292,7 +291,7 @@ thumbs_render :: proc() {
 			thumb_write(path)
 			app.page_hidden = shown
 		} else {
-			data, err := os.read_entire_file(path, context.temp_allocator)
+			data, err := fs_read(path, context.temp_allocator)
 			if err != nil do continue
 			tmp: engine.Document
 			if !engine.doc_load(&tmp, string(data)) do continue
@@ -327,7 +326,7 @@ thumb_write :: proc(path: string) {
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
 	scale := min(560 / r[2], 360 / r[3], 2)
 	if pixels, w, h, rok := render_region(r, scale, nil, {0.157, 0.157, 0.157, 1}); rok {
-		if png, pok := engine.png_encode(pixels, w, h); pok do _ = os.write_entire_file(thumb_path(path), png)
+		if png, pok := engine.png_encode(pixels, w, h); pok do _ = fs_write(thumb_path(path), png)
 	}
 }
 
@@ -335,7 +334,7 @@ thumb_image :: proc(path: string) -> int {
 	if img, has := thumbs[path]; has do return img
 	file := thumb_path(path)
 	img := 0
-	if os.exists(file) do img = nvg.CreateImagePath(app.vg, strings.clone_to_cstring(file, context.temp_allocator), {})
+	if fs_exists(file) do img = nvg.CreateImagePath(app.vg, strings.clone_to_cstring(file, context.temp_allocator), {})
 	thumbs[strings.clone(path)] = img
 	return img
 }

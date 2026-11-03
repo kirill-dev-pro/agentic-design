@@ -3,7 +3,6 @@ package agentic_design
 import "base:intrinsics"
 import "core:encoding/json"
 import "core:fmt"
-import "core:os"
 import "core:slice"
 import "core:strings"
 import "engine"
@@ -12,9 +11,9 @@ import "engine"
 // "fonts", as pen.dev's "Add custom fonts" does, so the file shows them in both apps and on
 // any machine (an undoable change to the document).
 import_font_files :: proc(paths: []string) -> (count: int) {
-	dir := fmt.tprintf("%s/fonts", os.dir(app.file_path))
+	dir := fmt.tprintf("%s/fonts", fs_dir(app.file_path))
 	// make_directory_all fails on a folder that exists: a second import used to stop here
-	if err := os.make_directory_all(dir); err != nil && !os.is_dir(dir) {
+	if err := fs_mkdir_all(dir); err != nil && !fs_is_dir(dir) {
 		set_status("Could not create %s", dir)
 		return
 	}
@@ -24,13 +23,13 @@ import_font_files :: proc(paths: []string) -> (count: int) {
 	}
 	for p in paths {
 		if !engine.is_font_file(p) do continue
-		data, err := os.read_entire_file(p, context.temp_allocator)
+		data, err := fs_read(p, context.temp_allocator)
 		if err != nil do continue
-		to := fmt.tprintf("%s/%s", dir, os.base(p))
-		if os.write_entire_file(to, data) != nil do continue
+		to := fmt.tprintf("%s/%s", dir, fs_base(p))
+		if fs_write(to, data) != nil do continue
 		count += 1
 		if strings.has_suffix(strings.to_lower(to, context.temp_allocator), ".ttc") do continue // pen.dev reads no collections
-		url := fmt.tprintf("./fonts/%s", os.base(p))
+		url := fmt.tprintf("./fonts/%s", fs_base(p))
 		infos := engine.font_file_infos(to)
 		if len(infos) == 0 do continue
 		for i := len(list) - 1; i >= 0; i -= 1 {
@@ -47,7 +46,7 @@ import_font_files :: proc(paths: []string) -> (count: int) {
 	engine.fonts_sort_names()
 	push_undo()
 	engine.doc_set_header(&app.doc, "fonts", list if len(list) > 0 else nil)
-	engine.fonts_add_declared(list, os.dir(app.file_path)) // the families count as the document's now (lint, font menu)
+	engine.fonts_add_declared(list, fs_dir(app.file_path)) // the families count as the document's now (lint, font menu)
 	mark_dirty()
 	set_status("Added %d font file%s to the document (fonts/ next to it)", count, "" if count == 1 else "s")
 	return
@@ -61,7 +60,7 @@ api_add_fonts :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	if arr, ok := params["paths"].(json.Array); ok {
 		for v in arr {
 			p := engine.absolute_path(string(v.(json.String) or_else ""))
-			if !os.exists(p) do return fmt.tprintf("no such file: %s", p)
+			if !fs_exists(p) do return fmt.tprintf("no such file: %s", p)
 			if !engine.is_font_file(p) do return fmt.tprintf("%s is not a .ttf, .otf, .ttc or .woff file (woff2 is not supported)", p)
 			append(&paths, p)
 		}
