@@ -6,6 +6,7 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:hash"
 import "core:strings"
+import "core:thread"
 import "core:time"
 import nvg "nanovg"
 
@@ -266,16 +267,59 @@ thumb_request :: proc(path: string) {
 	append(&thumb_queue, strings.clone(path))
 }
 
+THUMB_GAP :: 250 * time.Millisecond
+thumb_last: time.Time
+thumb_waking: bool // a wake-up for the next preview is on its way
+
+// A frame after THUMB_GAP (the window sleeps without input).
+thumb_wake_later :: proc() {
+	if thumb_waking do return
+	thumb_waking = true
+	thread.create_and_start(proc() {
+			time.sleep(THUMB_GAP)
+			thumb_waking = false
+			platform_wake()
+		}, self_cleanup = true)
+}
+
+thumb_empty: map[string]bool // nothing on the first page to draw
+thumb_tried: map[string]i64 // path -> the file's modification time a preview was asked for
+
+// A preview for a file shown on the dashboard: drawn when there is none or the file
+// changed after it was drawn, once per version of the file.
+thumb_ensure :: proc(path: string, modified: i64) {
+	if t, ok := thumb_tried[path]; ok && t == modified do return
+	if st, err := fs_stat(thumb_path(path), context.temp_allocator); err == nil && st.modification_time._nsec / 1_000_000_000 >= modified {
+		thumb_tried[strings.clone(path)] = modified
+		return
+	}
+	if path not_in thumb_tried do thumb_tried[strings.clone(path)] = modified
+	else do thumb_tried[path] = modified
+	thumb_request(path)
+}
+
+thumb_pending :: proc(path: string) -> bool {
+	for q in thumb_queue do if q == path do return true
+	return false
+}
+
 // Renders queued thumbnails from the saved files. Called between frames, outside
 // nanovg frames, because it draws with the main context.
 thumbs_render :: proc() {
 	if len(thumb_queue) == 0 do return
-	paths := thumb_queue
-	thumb_queue = {}
-	defer {
-		for p in paths do delete(p)
-		delete(paths)
+	// The open document's preview after a save is drawn at once. Others (the dashboard's) one
+	// at a time, THUMB_GAP apart, so a dashboard full of new files never holds the window up
+	// or keeps the cores busy (decision 82).
+	first := thumb_queue[0]
+	if !(first == app.file_path && app.tab >= 0) && time.since(thumb_last) < THUMB_GAP {
+		thumb_wake_later()
+		return
 	}
+	paths := [1]string{first}
+	ordered_remove(&thumb_queue, 0)
+	defer delete(paths[0])
+	defer thumb_last = time.now()
+	if len(thumb_queue) > 0 do thumb_wake_later()
 	_ = fs_mkdir_all(fmt.tprintf("%s/thumbs", support_dir()))
 	for path in paths {
 		if path == app.file_path && app.tab >= 0 && !app.dirty {
@@ -321,7 +365,10 @@ thumbs_render :: proc() {
 // Draws the shown page of app.doc, all of it, small, into the thumbnail file of `path`.
 thumb_write :: proc(path: string) {
 	r, ok := bounds_of(all_uids(true))
-	if !ok do return
+	if !ok {
+		if path not_in thumb_empty do thumb_empty[strings.clone(path)] = true
+		return
+	}
 	pad: f32 = 24
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
 	scale := min(560 / r[2], 360 / r[3], 2)

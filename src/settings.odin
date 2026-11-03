@@ -23,6 +23,22 @@ Settings :: struct {
 	auto_update:  bool, // check for updates at launch and daily (update.odin)
 	export_dir:   string, // the folder of the last export (export_ui.odin)
 	last_seen_version: string, // the version whose "What's new" was shown (whats_new.odin)
+	dash_sort:    Dash_Sort, // the dashboard's order of all files (dashboard.odin)
+	dash_hidden:  [dynamic]string, // files and folders kept off the dashboard (files_index.odin)
+}
+
+Dash_Sort :: enum i32 {
+	Modified,
+	Opened,
+	Name,
+	Created,
+}
+
+DASH_SORT_KEYS := [Dash_Sort]string {
+	.Modified = "modified",
+	.Opened   = "opened",
+	.Name     = "name",
+	.Created  = "created",
 }
 
 settings := Settings {
@@ -59,19 +75,36 @@ settings_load :: proc() {
 	if b, ok := obj["autoUpdate"].(json.Boolean); ok do settings.auto_update = bool(b)
 	if s, ok := obj["exportFolder"].(json.String); ok do settings.export_dir = strings.clone(string(s))
 	if s, ok := obj["lastSeenVersion"].(json.String); ok do settings.last_seen_version = strings.clone(string(s))
+	if s, ok := obj["dashboardSort"].(json.String); ok {
+		for k in Dash_Sort do if DASH_SORT_KEYS[k] == string(s) do settings.dash_sort = k
+	}
+	if arr, ok := obj["dashboardHidden"].(json.Array); ok {
+		for v in arr do if s, sok := v.(json.String); sok do append(&settings.dash_hidden, strings.clone(string(s)))
+	}
 }
 
 // Test windows keep the user's settings as they are (whats_new.odin's test, in a sandboxed
 // home, is the exception).
 settings_save :: proc(in_test_window := false) {
-	if pf.quiet && !in_test_window do return
+	if pf.quiet && !in_test_window && !settings_test_writes() do return
 	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version),
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]),
 	)
 	_ = fs_write(settings_path(), text)
+}
+
+json_string_array :: proc(items: []string) -> string {
+	b := strings.builder_make(context.temp_allocator)
+	strings.write_byte(&b, '[')
+	for it, i in items {
+		if i > 0 do strings.write_string(&b, ", ")
+		engine.json_write_string(&b, it)
+	}
+	strings.write_byte(&b, ']')
+	return strings.to_string(b)
 }
 
 json_quote :: proc(s: string) -> string {

@@ -2070,3 +2070,30 @@ browser; the socket's `cloud` method reports the sign-in URL, so a test plays th
 on the site is shared as a new file the next time. `AGENTIC_CLOUD_URL` points a window at
 another site (local development).
 
+## NN. The dashboard lists every .pen file on the Mac
+
+**Problem.** The dashboard showed only files opened in the app (Recents, at most 40) and the
+files of one folder, most without a preview. Agents create and edit files the app never
+opened.
+
+**Decision.** All files (the default view) is every `.pen` under the home folder, from two
+sources merged with the recents: Spotlight (`mdfind -onlyin ~`, 0.14 s), and a background
+walk of the home folder, because Spotlight skips folders the user excluded (here `~/Temp`).
+The walk skips `~/Library`, hidden folders, `node_modules`, `build`, `dist`, `target`,
+`vendor`, `Pods`, `DerivedData`, `tmp`, `Caches` and bundles, follows no symlinks and sleeps
+2 ms every 48 folders: on this Mac 15 600 folders and 53 files in 1.9 s, 1.0 s of CPU, once
+per 10 minutes at most while the dashboard is shown. Sort (Last modified by default, Last
+opened, Name, Created) is kept in `settings.json`. Recents stays as the second view, the
+files opened in the app by last opened: one list with two orders would bury what the user
+just had open under files agents touched. Previews are drawn for the cards in view only,
+one every 250 ms, and again when a file changed after its preview (by modification time).
+Remove from list and Hide this folder keep files and folders off the list
+(`dashboardHidden`); Move to Trash uses NSFileManager `trashItemAtURL`, after a
+confirmation, never deletes, and refuses a file open in a tab.
+
+**Consequences.** Copies of designs in other tools' working folders (repository clones,
+agents' workspaces) show up too, until hidden with one click. Test windows index nothing
+unless `AGENTIC_FILES_ROOT` names a folder (the socket's `dashboard` method drives the
+view); a test that moves a file to the Trash keeps it on a disk image so the user's Trash
+is not touched.
+

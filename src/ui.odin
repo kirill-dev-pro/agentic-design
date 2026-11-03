@@ -1177,7 +1177,7 @@ field_apply :: proc() {
 	if ui.focus_uid == 0 {
 		if variables_table_apply(ui.focus, text) do return
 		if settings_field_apply(ui.focus, text) do return
-		if ui.focus == "vt.search" || ui.focus == "comp.search" || ui.focus == "layers.search" do return
+		if ui.focus == "vt.search" || ui.focus == "comp.search" || ui.focus == "layers.search" || ui.focus == "dash.search" do return
 		if ui.focus == "picker.hex" || ui.focus == "picker.alpha" {
 			picker_apply_text(ui.focus, text)
 			return
