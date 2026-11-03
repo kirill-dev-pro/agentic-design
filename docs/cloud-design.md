@@ -880,19 +880,17 @@ user asks.
 - **Separation of user content:** a cookieless origin, a media type allowlist, `nosniff`,
   and sandboxed SVG (§4.4).
 - **GDPR.**
-  - **Export my data:** one zip with every document the user owns as `.pen` plus assets,
-    its versions on request, comments, and a JSON of the account, workspaces, links and
-    audit events. It is built by a background job and offered as a download link valid
-    for 24 hours.
-  - **Delete my account:** signs out every device, then deletes after 30 days (it can be
-    cancelled until then):
-    - the database rows;
-    - documents in the personal workspace;
-    - their R2 prefixes and assets;
-    - each room's storage (`deleteAll`).
-
-    Documents in team workspaces stay with the team. The user's name in their history
-    becomes "Deleted user".
+  - **Export my data** (built in M1): one zip, streamed on request, with `account.json`
+    (the account, workspaces, sessions, every file with its versions and links) and every
+    version of every file as `.pen` plus its images, fonts and libraries. Comments and
+    audit events join it when they exist. Very large accounts (M2) move to a background
+    job with a download link valid for 24 hours.
+  - **Delete my account** (built in M1): immediate and final after the password (or, for
+    accounts without one, a sign-in within the last day). It removes the user's own
+    workspace with every file, version, link and stored blob, and every session and
+    device. In M2 each room's storage goes too (`deleteAll`); documents in team workspaces
+    (M3) stay with the team, and the user's name in their history becomes "Deleted user".
+    Operators delete an account its owner cannot reach by adding it to `account_deletion`.
   - A privacy page lists the processors: Cloudflare, Bunderhost's database provider, the
     email provider.
 - **What agents can access.**
