@@ -73,13 +73,10 @@ jobs:
           sha256sum "$NAME" > "$NAME.sha256"
           # the .sha256 goes up last and only after this run's archive: the site build takes it
           # as the sign that the archive is complete
-          if gh release upload "$TAG" "$NAME"; then
-            gh release upload "$TAG" "$NAME.sha256"
-          elif gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$NAME"; then
-            echo "another run uploaded $NAME"
-          else
-            exit 1
-          fi
-          # keep the newest 100 builds (two files each)
-          gh release view "$TAG" --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[200:] | .[].name' \
+          # --clobber: an archive without its .sha256 is from a run that was cancelled between the
+          # two uploads (or one still uploading); this run's copy of the same sources replaces it
+          gh release upload "$TAG" "$NAME" --clobber
+          gh release upload "$TAG" "$NAME.sha256" --clobber
+          # keep the newest 30 builds (two files each, about 3 MB a build)
+          gh release view "$TAG" --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[60:] | .[].name' \
             | xargs -r -n 1 gh release delete-asset "$TAG" -y
