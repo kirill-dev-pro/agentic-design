@@ -8,6 +8,7 @@
 | [ui.md](ui.md) | The interface: regions, style tokens, behaviour rules, how to add panels and widgets |
 | [releasing.md](releasing.md) | Versions, the app bundle, update signing, the release workflow, secrets, Gatekeeper; testing an update locally |
 | [pen-dev-comparison.md](pen-dev-comparison.md) | Feature-by-feature comparison of the interface with pen.dev: what is on par, partial or missing |
+| [cloud-design.md](cloud-design.md) | The cloud (approved; M1 in progress): accounts, cloud documents and their sync model, share links, mobile viewing, multiplayer; backend on Workerstack, milestones and costs |
 
 Usage, shortcuts and the MCP tools are listed in the [top-level README](../README.md).
 

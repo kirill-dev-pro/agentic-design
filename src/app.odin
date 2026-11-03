@@ -110,6 +110,36 @@ app: App
 
 app_main :: proc(path: string) {
 	context.allocator = big_allocator() // memory.odin: big blocks go back to the system when freed
+	if !app_start(path) do return
+	active_until = platform_time() + 1
+	trimmed := false
+	for !platform_should_close() && exit_signal == {} {
+		free_all(context.temp_allocator)
+		engine.font_atlas_trim(app.vg)
+		wait := idle_wait()
+		if wait > 0.1 && !trimmed {
+			// the app is going quiet: hand back what the last burst of work freed
+			memory_trim()
+			trimmed = true
+		} else if wait == 0 do trimmed = false
+		if wait == 0 && shot.req == nil && !export_pending && !copy_png_pending {
+			// full rate, but never faster than the display: vsync does not hold back a
+			// window covered by others, and pointer events can come faster than frames.
+			// A capture waiting for its frame is not paced, and an agent request cuts the
+			// wait short (server.odin posts pace_wake): in a window started by an agent
+			// macOS stretched this sleep to ~130 ms, and every request and screenshot
+			// frame paid it (dogfooding D35).
+			if rest := frame_started + 1 / pf.refresh - platform_time(); rest > 0.0005 do _ = sync.sema_wait_with_timeout(&pace_wake, time.Duration(rest * 1e9))
+		}
+		platform_poll(wait)
+		app_frame()
+	}
+	app_stop()
+}
+
+// Everything before the first frame: the window, the renderer, fonts, settings, the
+// documents to open, the control socket. False when there is no window or renderer.
+app_start :: proc(path: string) -> bool {
 	engine.lod_off = os.get_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
 	use_big_allocator_for_temp()
 	posix_ignore_sigpipe()
@@ -125,7 +155,7 @@ app_main :: proc(path: string) {
 	}
 	if !platform_init(win.x, win.y, "Agentic Design") {
 		fmt.eprintln("could not create a window")
-		return
+		return false
 	}
 	// AGENTIC_WINDOW_POS=40,60 places the window (two test windows side by side)
 	if v := os.get_env("AGENTIC_WINDOW_POS", context.temp_allocator); v != "" {
@@ -138,7 +168,7 @@ app_main :: proc(path: string) {
 	app.vg = engine.gpu_create(platform_gpu_surface())
 	if app.vg == nil {
 		fmt.eprintln("could not start the renderer")
-		return
+		return false
 	}
 	// the engine draws with the window's NanoVG context, on the open document (tabs are
 	// swapped into app.doc), and skips the pages the window does not show
@@ -168,84 +198,74 @@ app_main :: proc(path: string) {
 	install_exit_handlers()
 	app_log("start: %s (port %d%s)", app.file_path, server_port(), ", opened by an agent" if pf.no_focus else "")
 
-	active_until = platform_time() + 1
-	trimmed := false
-	for !platform_should_close() && exit_signal == {} {
-		free_all(context.temp_allocator)
-		engine.font_atlas_trim(app.vg)
-		wait := idle_wait()
-		if wait > 0.1 && !trimmed {
-			// the app is going quiet: hand back what the last burst of work freed
-			memory_trim()
-			trimmed = true
-		} else if wait == 0 do trimmed = false
-		if wait == 0 && shot.req == nil && !export_pending && !copy_png_pending {
-			// full rate, but never faster than the display: vsync does not hold back a
-			// window covered by others, and pointer events can come faster than frames.
-			// A capture waiting for its frame is not paced, and an agent request cuts the
-			// wait short (server.odin posts pace_wake): in a window started by an agent
-			// macOS stretched this sleep to ~130 ms, and every request and screenshot
-			// frame paid it (dogfooding D35).
-			if rest := frame_started + 1 / pf.refresh - platform_time(); rest > 0.0005 do _ = sync.sema_wait_with_timeout(&pace_wake, time.Duration(rest * 1e9))
-		}
-		platform_poll(wait)
-		frame_started = platform_time()
-		frames_drawn += 1
-		if platform_had_input() do active_until = platform_time() + ACTIVE_AFTER_INPUT
-		fb := frame_size()
-		if added := engine.fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
-		if libraries_refresh() do set_status("A library changed on disk; its components were read again")
+	return true
+}
 
-		// drawing instances re-lays out their components in place, so refresh
-		// the boxes before requests read them and again before input
-		t0 := time.tick_now()
-		if app.needs_layout do engine.layout_invalidate()
+// One frame, once the platform has gathered its input (platform_poll): layout, agents'
+// requests, input, autosave, the renders that wait for a frame, and drawing. The desktop's
+// loop (app_main) calls it after pacing and idling; a browser host calls it from
+// requestAnimationFrame.
+app_frame :: proc() {
+	frame_started = platform_time()
+	frames_drawn += 1
+	if platform_had_input() do active_until = platform_time() + ACTIVE_AFTER_INPUT
+	fb := frame_size()
+	if added := engine.fonts_refresh(); added != "" do set_status("Fonts installed: %s", added)
+	if libraries_refresh() do set_status("A library changed on disk; its components were read again")
+
+	// drawing instances re-lays out their components in place, so refresh
+	// the boxes before requests read them and again before input
+	t0 := time.tick_now()
+	if app.needs_layout do engine.layout_invalidate()
+	engine.layout_document(&app.doc)
+	app.needs_layout = false
+	ran := process_requests()
+	if ran {
+		active_until = platform_time() + ACTIVE_AFTER_INPUT
+		agent_activity_touch()
+	}
+	agent_activity_tick()
+	update_tick()
+	if app.needs_layout do engine.layout_invalidate()
+	if ran || app.needs_layout {
 		engine.layout_document(&app.doc)
 		app.needs_layout = false
-		ran := process_requests()
-		if ran {
-			active_until = platform_time() + ACTIVE_AFTER_INPUT
-			agent_activity_touch()
-		}
-		agent_activity_tick()
-		update_tick()
-		if app.needs_layout do engine.layout_invalidate()
-		if ran || app.needs_layout {
-			engine.layout_document(&app.doc)
-			app.needs_layout = false
-		}
-		pages_sync()
-		build_draw_order()
-		t1 := time.tick_now()
-		handle_drops()
-		handle_open_requests()
-		handle_input()
-		if app.needs_layout {
-			engine.layout_invalidate()
-			engine.layout_document(&app.doc)
-			app.needs_layout = false
-		}
-		autosave()
-		t2 := time.tick_now()
-
-		presence_tick(platform_time())
-		if shot_pending() do render_screenshot()
-		thumbs_render()
-		export_render()
-		copy_png_render()
-
-		t3, t4, t5, t6 := frame_draw(fb, true)
-		app.perf = {
-			time.duration_milliseconds(time.tick_diff(t0, t1)), // layout x2 + requests
-			time.duration_milliseconds(time.tick_diff(t1, t2)), // input + layout
-			time.duration_milliseconds(time.tick_diff(t2, t3)), // canvas draw
-			time.duration_milliseconds(time.tick_diff(t3, t4)), // ui draw
-			time.duration_milliseconds(time.tick_diff(t4, t5)), // nvg flush
-			time.duration_milliseconds(time.tick_diff(t5, t6)), // swap
-			time.duration_milliseconds(time.tick_diff(t0, t6)),
-			f64(app.vg.fs.width),
-		}
 	}
+	pages_sync()
+	build_draw_order()
+	t1 := time.tick_now()
+	handle_drops()
+	handle_open_requests()
+	handle_input()
+	if app.needs_layout {
+		engine.layout_invalidate()
+		engine.layout_document(&app.doc)
+		app.needs_layout = false
+	}
+	autosave()
+	t2 := time.tick_now()
+
+	presence_tick(platform_time())
+	if shot_pending() do render_screenshot()
+	thumbs_render()
+	export_render()
+	copy_png_render()
+
+	t3, t4, t5, t6 := frame_draw(fb, true)
+	app.perf = {
+		time.duration_milliseconds(time.tick_diff(t0, t1)), // layout x2 + requests
+		time.duration_milliseconds(time.tick_diff(t1, t2)), // input + layout
+		time.duration_milliseconds(time.tick_diff(t2, t3)), // canvas draw
+		time.duration_milliseconds(time.tick_diff(t3, t4)), // ui draw
+		time.duration_milliseconds(time.tick_diff(t4, t5)), // nvg flush
+		time.duration_milliseconds(time.tick_diff(t5, t6)), // swap
+		time.duration_milliseconds(time.tick_diff(t0, t6)),
+		f64(app.vg.fs.width),
+	}
+}
+
+// After the last frame: the exit is logged, unsaved documents are written, the window closes.
+app_stop :: proc() {
 	if exit_signal != {} do app_log("exit: signal %v", exit_signal)
 	else do app_log("exit: window closed")
 	if app.dirty do save_document(app.file_path)
