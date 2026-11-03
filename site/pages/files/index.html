@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My files — Agentic Design</title>
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/app.css">
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body data-page="files">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+	<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+	<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+</defs></svg>
+<header class="nav">
+	<div class="nav-in">
+		<a class="logo" href="/" aria-label="Agentic Design, home">
+			<img class="mark light" src="/img/logo-32.png" srcset="/img/logo-64.png 2x, /img/logo-96.png 3x" width="32" height="32" alt=""><img class="mark dark" src="/img/logo-32-dark.png" srcset="/img/logo-64-dark.png 2x, /img/logo-96-dark.png 3x" width="32" height="32" alt="">
+			<span class="word">Agentic Design</span>
+		</a>
+		<nav class="links" aria-label="Pages">
+			<a href="/view/">Viewer</a>
+			<a href="/files" data-signed-in hidden>My files</a>
+		</nav>
+		<div class="nav-end">
+			<button class="theme" type="button" aria-label="Switch to dark theme" title="Light or dark">
+				<svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+				<svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+			</button>
+			<a class="btn ghost small" href="/account" data-signed-in hidden id="nav-account">Account</a>
+			<a class="btn ghost small" href="/signin" data-signed-out hidden>Sign in</a>
+		</div>
+	</div>
+</header>
+<main id="main" class="app">
+	<section class="files">
+		<div class="files-head">
+			<div>
+				<h1>My files</h1>
+				<p class="sub" id="files-usage"></p>
+			</div>
+			<a class="btn primary" href="/view/">Share a file</a>
+		</div>
+		<p class="files-hint">Open a .pen file in the viewer and press Share: it uploads the file with its images, fonts and libraries, and gives you a link anyone can open.</p>
+		<p class="form-error" id="files-error" role="alert" hidden></p>
+		<div id="files-empty" class="card empty" hidden>
+			<h2>No shared files yet</h2>
+			<p class="sub">Open a .pen file in the viewer, then press Share.</p>
+			<a class="btn primary" href="/view/">Open the viewer</a>
+		</div>
+		<ul id="files-list" class="files-grid"></ul>
+	</section>
+
+	<dialog id="links-dialog" class="links-dialog">
+		<form method="dialog" class="links-top"><h2 id="links-title">Links</h2><button class="btn ghost small" value="close">Close</button></form>
+		<p class="sub">Anyone with a link can view the file, without an account. Revoking a link stops it at once.</p>
+		<ul id="links-list" class="links-list"></ul>
+		<p class="form-error" id="links-error" role="alert" hidden></p>
+		<button class="btn secondary" type="button" id="link-new">New link</button>
+	</dialog>
+</main>
+<script src="/main.js" defer></script>
+<script src="/app.js" defer></script>
+</body>
+</html>

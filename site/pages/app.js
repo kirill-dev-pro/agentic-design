@@ -215,7 +215,132 @@ const App = (() => {
 		});
 	}
 
-	const pages = { signin, signup, account };
+	// ---------------------------------------------------------------- my files
+
+	const el = (tag, props = {}, ...kids) => {
+		const n = Object.assign(document.createElement(tag), props);
+		n.append(...kids.filter((k) => k !== null && k !== undefined));
+		return n;
+	};
+	const when = (iso) => {
+		const d = new Date(iso), days = (Date.now() - d) / 864e5;
+		if (days < 1 / 24) return "just now";
+		if (days < 1) return `${Math.round(days * 24)} h ago`;
+		if (days < 7) return `${Math.round(days)} d ago`;
+		return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+	};
+	const linkMessages = {
+		EMAIL_NOT_VERIFIED: "A public link needs a verified email. Links shared by URL work without it.",
+		QUOTA_EXCEEDED: "Your account allows no more links right now.",
+	};
+	// The viewer URL of the owner's own copy (cookie, same origin; the contract, §3)
+	const ownerUrl = (f) => "/view/?file=" + encodeURIComponent(f.docUrl || `/api/docs/${f.id}/v/${f.versionId}/doc.pen`);
+	const tokenOf = (url) => (url || "").split("/s/")[1] || "";
+
+	async function files() {
+		const m = await me();
+		if (!m) return requireSignIn();
+		const use = m.workspace.usage, ent = m.workspace.entitlements;
+		$("#files-usage").textContent = `${use.sharedFiles} of ${ent.sharedFiles} files · ${bytes(use.storageBytes)} of ${bytes(ent.storageBytes)}`;
+		const list = $("#files-list");
+		const showError = (text) => { $("#files-error").textContent = text || ""; $("#files-error").hidden = !text; };
+
+		async function load() {
+			let data;
+			try { data = await api("GET", "/api/docs"); }
+			catch (e) { return showError(say(e)); }
+			$("#files-empty").hidden = data.files.length > 0;
+			list.replaceChildren(...data.files.map(card));
+		}
+
+		function card(f) {
+			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
+				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null);
+			const nLinks = f.links.length;
+			const btn = (label, onClick, cls = "btn secondary") => { const b = el("button", { type: "button", className: cls, textContent: label }); b.addEventListener("click", onClick); return b; };
+			const copy = btn(nLinks ? "Copy link" : "Make a link", async () => {
+				try {
+					const link = f.links[0] || (await api("POST", `/api/docs/${f.id}/links`, {}));
+					await navigator.clipboard.writeText(link.url);
+					copy.textContent = "Copied";
+					if (!nLinks) load();
+				} catch (e) { showError(say(e)); }
+			}, "btn primary");
+			return el("li", { className: "file" },
+				thumb,
+				el("div", { className: "meta" },
+					el("span", { className: "name", textContent: f.name, title: f.name }),
+					el("span", { className: "when", textContent: `${when(f.updatedAt)} · ${bytes(f.sizeBytes)} · ${nLinks} ${nLinks === 1 ? "link" : "links"}` })),
+				el("div", { className: "actions" },
+					copy,
+					btn("Links", () => links(f, load)),
+					el("a", { className: "btn secondary", href: `/view/?update=${encodeURIComponent(f.id)}&name=${encodeURIComponent(f.name)}`, textContent: "New version", title: "Open the new version in the viewer and press Share" }),
+					btn("Rename", async () => {
+						const name = prompt("Name", f.name);
+						if (!name || name.trim() === f.name) return;
+						try { await api("PATCH", `/api/docs/${f.id}`, { name: name.trim() }); load(); } catch (e) { showError(say(e)); }
+					}),
+					btn("Delete", async () => {
+						if (!confirm(`Delete “${f.name}”? Its links stop working at once.`)) return;
+						try { await api("DELETE", `/api/docs/${f.id}`); load(); } catch (e) { showError(say(e)); }
+					}, "btn danger")));
+		}
+
+		await load();
+	}
+
+	// The links of one file: copy, settings, expiry, revoke, a new one.
+	function links(f, reload) {
+		const dlg = $("#links-dialog");
+		$("#links-title").textContent = f.name;
+		const err = (text) => { $("#links-error").textContent = text || ""; $("#links-error").hidden = !text; };
+		err("");
+		const render = () => {
+			$("#links-list").replaceChildren(...(f.links.length ? f.links.map(row) : [el("li", { className: "sub", textContent: "No links. Make one to share the file." })]));
+		};
+		const patch = async (l, change) => {
+			err("");
+			try { Object.assign(l, await api("PATCH", `/api/links/${l.id}`, change)); }
+			catch (e) { err(linkMessages[e.reason] || say(e)); }
+			render();
+		};
+		function row(l) {
+			const url = el("input", { type: "text", value: l.url || "", readOnly: true });
+			const copyBtn = el("button", { type: "button", className: "btn primary small", textContent: "Copy" });
+			copyBtn.addEventListener("click", async () => { try { await navigator.clipboard.writeText(l.url); copyBtn.textContent = "Copied"; } catch (e) { url.select(); } });
+			const check = (label, key) => {
+				const box = el("input", { type: "checkbox", checked: l[key] });
+				box.addEventListener("change", () => patch(l, { [key]: box.checked }));
+				return el("label", {}, box, label);
+			};
+			const vis = el("select", {}, el("option", { value: "link", textContent: "Anyone with the link" }), el("option", { value: "public", textContent: "Public (search engines too)" }));
+			vis.value = l.visibility;
+			vis.addEventListener("change", () => patch(l, { visibility: vis.value }));
+			const exp = el("input", { type: "date", value: l.expiresAt ? l.expiresAt.slice(0, 10) : "" });
+			exp.addEventListener("change", () => patch(l, { expiresAt: exp.value ? new Date(exp.value + "T23:59:59").toISOString() : null }));
+			const revoke = el("button", { type: "button", className: "btn danger small", textContent: "Revoke" });
+			revoke.addEventListener("click", async () => {
+				if (!confirm("Revoke this link? Anyone who has it can no longer open the file.")) return;
+				try { await api("DELETE", `/api/links/${l.id}`); f.links = f.links.filter((x) => x !== l); render(); reload(); } catch (e) { err(say(e)); }
+			});
+			const embed = l.allowEmbed && l.url
+				? el("input", { type: "text", readOnly: true, className: "embed", value: `<iframe src="${location.origin}/embed/${tokenOf(l.url)}" width="800" height="450" style="border:0" allowfullscreen loading="lazy"></iframe>`, title: "Embed code" })
+				: null;
+			return el("li", { className: "link" },
+				el("div", { className: "url" }, url, copyBtn),
+				el("div", { className: "opts" }, vis, check("Allow download", "allowDownload"), check("Allow embedding", "allowEmbed"), el("label", {}, "Expires", exp)),
+				embed,
+				el("div", { className: "foot" }, el("span", { textContent: `${l.viewCount} ${l.viewCount === 1 ? "view" : "views"} · made ${when(l.createdAt)}` }), revoke));
+		}
+		$("#link-new").onclick = async () => {
+			err("");
+			try { f.links.unshift(await api("POST", `/api/docs/${f.id}/links`, {})); render(); reload(); } catch (e) { err(linkMessages[e.reason] || say(e)); }
+		};
+		render();
+		dlg.showModal();
+	}
+
+	const pages = { signin, signup, account, files };
 
 	document.addEventListener("DOMContentLoaded", async () => {
 		const page = document.body.dataset.page;
