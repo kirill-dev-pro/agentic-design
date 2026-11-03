@@ -37,10 +37,21 @@ function page(status: number, body: string) {
 			'content-type': 'text/html; charset=utf-8',
 			'cache-control': 'no-store',
 			'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' http://127.0.0.1:*; frame-ancestors 'none'",
-			'referrer-policy': 'no-referrer',
+			// same-origin, not no-referrer: under no-referrer the browser sends `Origin: null` on
+			// the Allow form's POST, which the check below must refuse. The redirect to the
+			// loopback is cross-origin, so it still carries no Referer.
+			'referrer-policy': 'same-origin',
 			'x-content-type-options': 'nosniff',
 		},
 	})
+}
+
+/** A POST from a page of this site: its Origin, or, where a browser sends `null` or none,
+ *  Fetch Metadata's Sec-Fetch-Site. A request with neither is refused. */
+export function sameOriginPost(request: Request, site: string): boolean {
+	const origin = request.headers.get('origin')
+	if (origin && origin !== 'null') return origin === site
+	return request.headers.get('sec-fetch-site') === 'same-origin'
 }
 
 type AuthApp = App & { auth: { api: { getSession(o: { headers: Headers }): Promise<any> } } }
@@ -67,8 +78,7 @@ export async function handleAppAuth(app: AuthApp, request: Request): Promise<Res
 	}
 	if (request.method !== 'POST') return page(405, '<h1>Not allowed</h1>')
 	// A form post from this site only (SameSite=Lax keeps cookies off cross-site posts too).
-	const origin = request.headers.get('origin')
-	if (origin !== new URL(appUrl(app, request)).origin) return page(403, '<h1>Not allowed</h1>')
+	if (!sameOriginPost(request, new URL(appUrl(app, request)).origin)) return page(403, '<h1>Not allowed</h1>')
 	const code = randomToken()
 	await app.db.insert(appAuthCode).values({
 		codeHash: await sha256Hex(code),
