@@ -37,6 +37,7 @@
 	<span id="owner" hidden></span>
 	<span class="spacer"></span>
 	<span id="themes"></span>
+	<button id="frames-btn" class="btn" type="button" hidden aria-pressed="false" title="One frame at a time">Frames</button>
 	<button id="share-btn" class="btn" type="button" hidden aria-haspopup="dialog">Share</button>
 	<button id="export" class="btn" type="button" disabled aria-haspopup="dialog">Export</button>
 	<a id="share-download" class="btn" hidden download>Download</a>
@@ -87,6 +88,11 @@
 			<button id="info-parent" class="btn small" type="button" title="Shift Enter">Parent</button>
 			<button id="info-export" class="btn small" type="button">PNG</button>
 		</div>
+	</div>
+	<div id="frame-nav" hidden>
+		<button id="frame-prev" class="icon-btn" type="button" aria-label="Previous frame"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+		<span id="frame-label"></span>
+		<button id="frame-next" class="icon-btn" type="button" aria-label="Next frame"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
 	</div>
 	<div id="zoombar">
 		<button id="zoom-out" class="icon-btn" type="button" title="Zoom out (−)" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>

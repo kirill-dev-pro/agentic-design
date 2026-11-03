@@ -27,7 +27,7 @@ foreign page {
 	page_fetch :: proc(paths: string) ---
 	// what the page shows: {"title", "pages": [names], "page", "themes": [{"name",
 	// "values", "value"}], "zoom", "draw_ms", "missing": [paths], "frames": [{"uid",
-	// "name"}] (the page's top-level layers), "sel": {"uid", "id", "name", "type", "x",
+	// "name", "box": [x, y, w, h]}] (the page's top-level layers), "sel": {"uid", "id", "name", "type", "x",
 	// "y", "w", "h", "component"} or null, "fonts": [{"family", "missing"}]}
 	page_info :: proc(json: string) ---
 	page_error :: proc(message: string) ---
@@ -322,7 +322,8 @@ report :: proc() {
 		k += 1
 		fmt.sbprintf(&b, `{{"uid":%d,"name":`, n.uid)
 		engine.json_write_string(&b, engine.node_label(n))
-		strings.write_byte(&b, '}')
+		box := engine.node_page_box(n)
+		fmt.sbprintf(&b, `,"box":[%s,%s,%s,%s]}}`, num(box[0]), num(box[1]), num(box[2]), num(box[3]))
 	}
 	strings.write_string(&b, `],"sel":`)
 	n: ^engine.Node

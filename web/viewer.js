@@ -281,6 +281,7 @@
 		}
 		placeThemes();
 		syncAddress();
+		if (ex) frameModeSync();
 
 		$("zoom").textContent = Math.round(info.zoom * 100) + "%";
 
@@ -622,6 +623,49 @@
 	else if (params.has("sample")) openSample();
 	else showWelcome();
 
+	// ---------------------------------------------------------------- frame by frame
+
+	// On a phone a design is reviewed one top-level frame at a time: fitted to the width, a
+	// swipe or the arrows go to the next one (the share page starts this way on phones).
+	let frameMode = false, frameIndex = 0, framePage = -1;
+	const phone = () => matchMedia("(pointer: coarse)").matches && innerWidth <= 720;
+
+	function showFrame(i) {
+		const frames = (info && info.frames) || [];
+		if (!frames.length) return;
+		frameIndex = (i + frames.length) % frames.length;
+		const [x, y, w, h] = frames[frameIndex].box || [0, 0, 0, 0];
+		if (w > 0 && h > 0) {
+			const cw = canvas.clientWidth, ch = canvas.clientHeight, pad = 12;
+			const zoom = Math.min((cw - 2 * pad) / w, 4);
+			const top = h * zoom + 2 * pad < ch ? y - (ch / zoom - h) / 2 : y - pad / zoom;
+			ex.viewer_view(zoom, x - pad / zoom, top);
+		}
+		$("frame-label").textContent = `${frameIndex + 1} / ${frames.length} · ${frames[frameIndex].name}`;
+	}
+
+	function setFrameMode(on) {
+		frameMode = on && !!(info && info.frames && info.frames.length);
+		$("frame-nav").hidden = !frameMode;
+		$("frames-btn").setAttribute("aria-pressed", frameMode ? "true" : "false");
+		if (frameMode) showFrame(frameIndex);
+		else ex.viewer_fit();
+	}
+
+	// (called on every report: the first one with frames, and page changes)
+	function frameModeSync() {
+		const frames = (info && info.frames) || [];
+		$("frames-btn").hidden = frames.length < 2;
+		if (!frames.length) return;
+		if (framePage === -1 && share && phone()) { framePage = info.page; setFrameMode(true); return; }
+		if (frameMode && info.page !== framePage) { framePage = info.page; frameIndex = 0; showFrame(0); }
+		else if (framePage === -1) framePage = info.page;
+	}
+
+	$("frames-btn").addEventListener("click", () => setFrameMode(!frameMode));
+	$("frame-prev").addEventListener("click", () => showFrame(frameIndex - 1));
+	$("frame-next").addEventListener("click", () => showFrame(frameIndex + 1));
+
 	// ---------------------------------------------------------------- pointer and keys
 
 	function at(e) {
@@ -664,6 +708,7 @@
 		canvas.setPointerCapture(e.pointerId);
 		pointers.set(e.pointerId, at(e));
 		press = pointers.size === 1 && e.button === 0 ? { at: at(e), deep: e.metaKey || e.ctrlKey } : null;
+		swipe = pointers.size === 1 ? { at: at(e), time: e.timeStamp } : null;
 		if (pointers.size === 2) pinch = spread()[0];
 		$("export-dialog").hidden = true;
 	});
@@ -687,7 +732,18 @@
 		ex.viewer_pan(x - px, y - py);
 	});
 	let lastTap = null; // a touch tap, for double taps: { at, time }
+	let swipe = null; // where a one-finger gesture began, for frame swipes
 	const release = (e) => {
+		// in frame mode, a quick sideways swipe goes to the next or previous frame
+		if (frameMode && swipe && e.type === "pointerup" && pointers.size === 1) {
+			const [x, y] = at(e);
+			const dx = x - swipe.at[0], dy = y - swipe.at[1];
+			if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy) && e.timeStamp - swipe.time < 600) {
+				showFrame(frameIndex + (dx < 0 ? 1 : -1));
+				press = null;
+			}
+		}
+		if (pointers.size <= 1) swipe = null;
 		if (press && e.type === "pointerup") {
 			const [x, y] = press.at;
 			if (e.pointerType === "touch" && lastTap && e.timeStamp - lastTap.time < 350 && Math.hypot(x - lastTap.at[0], y - lastTap.at[1]) < 30) {
@@ -721,6 +777,7 @@
 			else if (!$("open-menu").hidden) closeMenu();
 			else ex.viewer_select(0);
 		} else if (e.metaKey || e.ctrlKey || e.altKey) return;
+		else if (frameMode && (e.key === "ArrowRight" || e.key === "ArrowLeft")) showFrame(frameIndex + (e.key === "ArrowRight" ? 1 : -1));
 		else if (e.key === "0" || (e.key === "1" && e.shiftKey) || e.key === "!") ex.viewer_fit();
 		else if ((e.key === "2" && e.shiftKey) || e.key === "@" || e.key === "f") ex.viewer_zoom_to(0);
 		else if (e.key === "Enter" && e.shiftKey) ex.viewer_select_parent();

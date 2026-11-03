@@ -174,3 +174,16 @@ body.share #side .private { display: none; }
 .share-pop .hint { margin: 0 0 12px; color: #c9c9c9; line-height: 1.5; }
 .share-pop .row { margin-bottom: 10px; }
 .share-error { margin: 8px 0 0; color: var(--error); line-height: 1.45; }
+
+/* ---------------------------------------------------------------- frame by frame (phones) */
+#frame-nav {
+	position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 2;
+	display: flex; align-items: center; gap: 2px; padding: 3px; max-width: calc(100vw - 24px);
+	background: rgba(36, 36, 36, .97); border: 1px solid var(--line); border-radius: 10px;
+}
+#frame-label { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; font-size: 12px; }
+#frames-btn[aria-pressed="true"] { background: var(--sel); border-color: var(--sel); color: #fff; }
+body:has(#frame-nav:not([hidden])) #zoombar { display: none; }
+@media (max-width: 720px) {
+	#frames-btn { padding: 0 8px; }
+}
