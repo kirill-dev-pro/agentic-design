@@ -1,7 +1,7 @@
 version: 2
 generator:
   name: workerstack
-  version: 0.2.7
+  version: 0.2.9
 application:
   framework: bun-ssr
   scripts:
