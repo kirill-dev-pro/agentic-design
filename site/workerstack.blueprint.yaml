@@ -41,6 +41,9 @@ resources:
       - exportName: account
         physicalName: account
         system: false
+      - exportName: appAuthCode
+        physicalName: app_auth_code
+        system: false
       - exportName: asset
         physicalName: asset
         system: false
@@ -94,6 +97,11 @@ environment:
     sensitive: true
 api:
   operations:
+    - handle: appToken
+      operationId: appToken
+      effect: mutation
+      method: POST
+      path: /api/app-auth/token
     - handle: commitVersion
       operationId: commitVersion
       effect: mutation
