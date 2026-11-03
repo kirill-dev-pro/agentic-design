@@ -34,6 +34,7 @@ draw_ui :: proc() {
 	draw_settings_sheet(vg)
 	draw_shortcuts_sheet(vg)
 	draw_onboarding(vg)
+	draw_whats_new(vg)
 	draw_status(vg)
 	widgets_end_frame(vg)
 }

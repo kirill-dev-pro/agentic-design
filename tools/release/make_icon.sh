@@ -32,4 +32,6 @@ for s in 128 256 512; do
 	px "$BIG" $((s * 2)) "icon_${s}x${s}@2x.png"
 done
 iconutil -c icns "$SET" -o assets/icon/AppIcon.icns
+# the "What's new" sheet draws the icon at 56 pt (src/whats_new.odin)
+sips -z 112 112 "$BIG" --out assets/icon/icon-112.png >/dev/null
 echo "wrote assets/icon/AppIcon.icns (16, 32 px from $(basename "$SMALL"); 64 px and up from $(basename "$BIG"))"

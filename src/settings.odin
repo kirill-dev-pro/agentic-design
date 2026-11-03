@@ -22,6 +22,7 @@ Settings :: struct {
 	agent_cursors: bool, // agents' cursors, flashes and placeholder glow (presence.odin)
 	auto_update:  bool, // check for updates at launch and daily (update.odin)
 	export_dir:   string, // the folder of the last export (export_ui.odin)
+	last_seen_version: string, // the version whose "What's new" was shown (whats_new.odin)
 }
 
 settings := Settings {
@@ -35,6 +36,7 @@ settings := Settings {
 }
 
 settings_open, shortcuts_open: bool
+settings_found: bool // settings.json existed at launch (not a first run)
 
 settings_path :: proc() -> string {
 	return fmt.tprintf("%s/settings.json", support_dir())
@@ -46,6 +48,7 @@ settings_load :: proc() {
 	v, perr := json.parse_string(string(data), .JSON, false, context.temp_allocator)
 	if perr != nil do return
 	obj, _ := v.(json.Object)
+	settings_found = true
 	settings.onboarded = obj["onboarded"].(json.Boolean) or_else false
 	if f, ok := obj["nudge"].(json.Float); ok do settings.nudge = f32(f)
 	if f, ok := obj["nudgeBig"].(json.Float); ok do settings.nudge_big = f32(f)
@@ -55,16 +58,18 @@ settings_load :: proc() {
 	if b, ok := obj["agentCursors"].(json.Boolean); ok do settings.agent_cursors = bool(b)
 	if b, ok := obj["autoUpdate"].(json.Boolean); ok do settings.auto_update = bool(b)
 	if s, ok := obj["exportFolder"].(json.String); ok do settings.export_dir = strings.clone(string(s))
+	if s, ok := obj["lastSeenVersion"].(json.String); ok do settings.last_seen_version = strings.clone(string(s))
 }
 
-// Test windows keep the user's settings as they are.
-settings_save :: proc() {
-	if pf.quiet do return
+// Test windows keep the user's settings as they are (whats_new.odin's test, in a sandboxed
+// home, is the exception).
+settings_save :: proc(in_test_window := false) {
+	if pf.quiet && !in_test_window do return
 	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir),
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version),
 	)
 	_ = fs_write(settings_path(), text)
 }
@@ -163,6 +168,10 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	// updates (update.odin)
 	label(vg, x, y + 10, "Updates", TEXT_FG, 13)
 	label(vg, x + 150, y + 10, fmt.tprintf("Version %s", VERSION), TEXT_DIM, 12)
+	if button(vg, {x + w - 100, y - 4, 100, 28}, "What's new") {
+		whats_new_show()
+		return
+	}
 	y += 28
 	if checkbox(vg, {x, y, w, 22}, "Check for updates automatically", settings.auto_update) {
 		settings.auto_update = !settings.auto_update

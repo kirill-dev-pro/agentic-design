@@ -32,6 +32,7 @@ those two do first.
 | Components tab | Every component of the file with a preview and search. Click inserts an instance in the view; drag drops it into the frame under the pointer; double click goes to the origin. |
 | Theme tab | Theme axis dropdowns (`+` adds a value, right-click renames one), the variable list and **Open variables table**: a sheet with a column per axis value, editable cells, search and add or delete. |
 | Tool strip | Move, Hand, Frame, Rectangle, Ellipse, Text and Image, each with a tooltip. |
+| What's new | A sheet on the first launch after an update (not on a fresh install, in test windows or windows an agent opened): the app icon, "Updated from X to Y · date", then New, Improved and Fixed with a count each, every skipped version merged; "All changes ↗" opens the GitHub release, Got it, ×, Esc and Enter close it. The app menu and Settings → Updates open it again. `src/whats_new.odin`. |
 | Inspector | pen.dev's order: header (Create component), instance, Alignment, Position (rotation, flips), Layout, Dimensions (Fill and Hug), Appearance (per-corner radius), Theme, Fill (list, gradients), Stroke, Effects (list), Typography, Context, Export, Selection colors. With nothing selected it shows page and document settings and the MCP connect button. |
 
 ## Style

@@ -60,8 +60,27 @@ is compiled into the app (`UPDATE_FEED`, set by the workflow from `github.reposi
 1. Set the version in `src/version.odin` (`VERSION :: #config(VERSION, "0.2.0")`). It is
    the only place: Info.plist, `--version`, Settings and the update manifest take it from
    there, and the workflow refuses a tag that does not match.
-2. Write the notes in `docs/releases/v<version>.md` (Markdown; they become the release
-   text and the manifest's `notes`).
+2. Write the notes in `docs/releases/v<version>.md`. They become the release text and the
+   manifest's `notes`, and the app compiles them in for its "What's new" sheet
+   (`src/whats_new.odin`), so they keep this shape:
+
+   ```markdown
+   <!-- released: 2026-11-03 -->
+   One paragraph for the GitHub release (the sheet does not show it).
+
+   ## New
+   - A headline: one sentence, what the user gets.
+     An optional detail line, indented by two spaces.
+
+   ## Improved
+   - …
+
+   ## Fixed
+   - …
+   ```
+
+   Only `## New`, `## Improved` and `## Fixed` are read; leave out a section with nothing in
+   it. Backticks and `**` are dropped in the sheet. Set the date on the day of the tag.
 3. Commit, then tag and push:
 
    ```sh

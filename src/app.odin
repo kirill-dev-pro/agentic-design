@@ -194,6 +194,7 @@ app_start :: proc(path: string) -> bool {
 	update_title()
 	server_start()
 	onboarding_maybe_start()
+	whats_new_launch() // before the first app_log line: app.log tells a first run from an update
 	install_exit_handlers()
 	app_log("start: %s (port %d%s)", app.file_path, server_port(), ", opened by an agent" if pf.no_focus else "")
 

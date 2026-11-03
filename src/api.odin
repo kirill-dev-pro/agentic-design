@@ -101,6 +101,9 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if params["close"].(json.Boolean) or_else false do onboarding.open = false
 		else do onboarding_start(step)
 		fmt.sbprintf(&b, `{{"open":%v,"step":%d}}`, onboarding.open, onboarding.step)
+	case "whats_new":
+		// the "What's new" sheet (tests): {"open": true}, {"menu": true} or {"close": true}, or its state
+		e = api_whats_new(&b, params["open"].(json.Boolean) or_else false, params["close"].(json.Boolean) or_else false, params["menu"].(json.Boolean) or_else false)
 	case "set_pages":
 		e = api_set_pages(&b, params)
 	case "presence":
@@ -300,7 +303,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 // Methods that do not depend on the document shown.
 document_free :: proc(method: string) -> bool {
 	switch method {
-	case "open", "window", "update", "onboarding", "perf", "memory", "input", "presence":
+	case "open", "window", "update", "onboarding", "whats_new", "perf", "memory", "input", "presence":
 		return true
 	}
 	return false

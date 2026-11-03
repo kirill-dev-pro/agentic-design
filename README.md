@@ -78,7 +78,9 @@ SHA-256 and size, the bundle id, the version and a valid code signature. Nothing
 installed until you click "Restart to update"; then the app waits for agents to finish
 their calls, swaps the new version in atomically and reopens your document. Updates
 downloaded by the app are not quarantined, so they start without the first-launch prompt.
-How releases are made: [docs/releasing.md](docs/releasing.md).
+The first launch after an update shows "What's new": the changes since the version you had,
+skipped versions included; the app menu ("What's New in Agentic Design…") and Settings →
+Updates open it again. How releases are made: [docs/releasing.md](docs/releasing.md).
 
 ## Build and run
 
@@ -260,6 +262,7 @@ Contributing).
 | `src/main.odin` | entry: editor, `mcp` mode or `--version` |
 | `src/version.odin` | the version (the one place it is written), bundle id and bundle paths |
 | `src/update.odin` | updates: signed manifest from GitHub Releases, download, verification, atomic install |
+| `src/whats_new.odin`, `docs/releases/` | "What's new" after an update, from the release notes compiled into the app |
 | `tools/release/` | the release build, `.app` bundle, update signing tool and icon ([docs/releasing.md](docs/releasing.md)) |
 | `src/platform.odin` | GLFW window and per-frame input state |
 | `src/app.odin` | main loop, draw order, offscreen renders, undo |

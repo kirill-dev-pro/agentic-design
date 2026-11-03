@@ -21,6 +21,7 @@ Platform_Host :: struct {
 platform_init :: proc(width, height: int, title: cstring) -> bool {
 	install_open_handler() // before glfwInit: a launch's files arrive while it finishes launching
 	if !glfw.Init() do return false
+	app_menu_install() // GLFW's application menu exists once it has finished launching
 	when engine.RENDERER == "gl" {
 		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, 3)
 		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, 2)

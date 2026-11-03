@@ -2021,3 +2021,27 @@ Start in `ssr` mode. `/view` and, later, `/edit` are folders of their own with a
 files and `/api/version` are unchanged. A future TanStack Start or Workerstack upgrade has
 to keep this entry (or a 404-page mode, if Workerstack gains one).
 
+## 80. "What's new" after an update, from the release notes compiled into the app
+
+**Problem.** Updates install silently on the user's consent and relaunch the app; nothing
+told the user what changed, and the release notes lived only on GitHub.
+
+**Decision.** `docs/releases/v<version>.md` has a fixed shape (a `released` date comment,
+then `## New`, `## Improved`, `## Fixed` with a headline per entry and an optional detail
+line) and is compiled into the binary with `#load_directory`; `src/whats_new.odin` parses
+it once. On launch the app compares `VERSION` with `lastSeenVersion` in `settings.json`: if
+newer, a sheet lists the entries of every version after the last one seen, merged per
+section, newest first, and the version is recorded at once (so it shows once, also after the
+updater's relaunch). A fresh install (no `settings.json` and no `app.log`) records the
+version without showing anything. Versions before 0.1.4 did not write the key: the last
+`update: A -> B` line of `app.log` gives the previous version, else the release before this
+one. Test windows (`AGENTIC_QUIET`) and windows an agent opened (`AGENTIC_NO_FOCUS`)
+neither show nor record it, so the user still gets it next time; the MCP server never sees
+it. The app menu (an item GLFW's menu did not have, added to its application delegate) and
+Settings → Updates open the current version's notes.
+
+**Consequences.** Release notes are now user interface: one sentence per headline, written
+for users, no internal names. A tester can run the launch decision in a quiet window with
+`AGENTIC_WHATS_NEW_TEST=1` and `HOME` set to a sandbox (refused with the real home, so the
+user's settings stay untouched); the socket's `whats_new` method reports the sheet, opens
+it, presses the menu item or closes it. The app has one, dark, theme; the sheet follows it.
