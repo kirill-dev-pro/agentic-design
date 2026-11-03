@@ -126,10 +126,12 @@ export async function countView(app: App, linkId: string) {
 
 // ---------------------------------------------------------------- files of a version
 
+// Every user file: never sniffed, never framed, no script when opened directly (decision 5).
 const SECURITY = {
 	'x-content-type-options': 'nosniff',
 	'referrer-policy': 'no-referrer',
 	'cross-origin-resource-policy': 'same-site',
+	'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
 }
 
 function plain(status: number, text: string, extra: Record<string, string> = {}) {
@@ -166,7 +168,6 @@ async function serveBlob(app: App, request: Request, workspaceId: string, m: Man
 		...SECURITY,
 		...cors(app),
 	}
-	if (hit.type === 'image/svg+xml') headers['content-security-policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
 	if (request.headers.get('if-none-match') === `"${hit.hash}"`) return new Response(null, { status: 304, headers })
 	return new Response(request.method === 'HEAD' ? null : res.body, { headers })
 }
