@@ -12,6 +12,7 @@
 import { createMemoryRateLimitStore, type RateLimitStore } from 'workerstack'
 import { createWorker, durableRateLimitStore, type ExecutionContextLike } from 'workerstack/workers'
 
+import { handleAppAuth } from './app-auth'
 import { handleBlobPut, type App } from './blobs'
 import { handleContent, handleOwnerContent, handlePage } from './share'
 import { backend } from './workerstack'
@@ -48,6 +49,7 @@ export default {
 			worker.withContext(ctx, async () => (await limited(env, request, kind)) ?? run((await worker.app(env as never)) as never))
 		if (/^\/(s|embed)\/[^/]+\/?$/.test(path))
 			return own('page', (app) => handlePage(app, request, env.ASSETS, path.startsWith('/s/') ? 's' : 'embed'))
+		if (path === '/auth/app') return own('page', (app) => handleAppAuth(app as never, request))
 		if (path.startsWith('/c/')) return own('content', (app) => handleContent(app, request))
 		if (path.startsWith('/api/blobs/')) return own('upload', (app) => handleBlobPut(app, request))
 		if (OWNER_FILES.test(path)) return own('content', (app) => handleOwnerContent(app, request))

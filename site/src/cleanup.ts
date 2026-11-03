@@ -7,7 +7,7 @@ import { and, eq, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm'
 import { blobKey, bucket, type App } from './blobs'
 import type { Manifest } from './files'
 import { blobsOf } from './files'
-import { asset, document, shareLink, version } from './schema'
+import { appAuthCode, asset, document, shareLink, version } from './schema'
 
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
@@ -35,6 +35,8 @@ export async function cleanup(app: Pick<App, 'db' | 'storage'>, now = Date.now()
 		await db.delete(version).where(inArray(version.docId, gone))
 		await db.delete(document).where(inArray(document.id, gone))
 	}
+
+	await db.delete(appAuthCode).where(lt(appAuthCode.expiresAt, new Date(now - HOUR)))
 
 	// blobs: per workspace, what its remaining versions name
 	const used = new Map<string, Set<string>>()

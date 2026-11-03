@@ -2,7 +2,7 @@
 // and GitHub from Bunderhost's managed sign-in (added by Workerstack when the platform
 // configures it), personal workspaces with a plan, and the API under /api. The Worker
 // entry (server.ts) also hands it the share pages.
-import { organization } from 'better-auth/plugins'
+import { bearer, organization } from 'better-auth/plugins'
 import { and, count, eq, isNull, sql, sum } from 'drizzle-orm'
 import { workerstack } from 'workerstack'
 import { libsql } from 'workerstack/libsql'
@@ -12,6 +12,7 @@ import { WorkerstackError } from 'workerstack'
 
 import { access } from './access'
 import type { App } from './blobs'
+import { exchangeCode } from './app-auth'
 import { cleanup } from './cleanup'
 import { fileRoutes } from './files'
 import * as schema from './schema'
@@ -31,7 +32,8 @@ export const backend = workerstack({
 		session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
 		// On in production only (Better Auth's default), with its stricter sign-in rules.
 		rateLimit: { window: 60, max: 10 },
-		plugins: [organization({ allowUserToCreateOrganization: false })],
+		// bearer: the Mac app sends its device session as Authorization: Bearer (src/app-auth.ts).
+		plugins: [organization({ allowUserToCreateOrganization: false }), bearer({ requireSignature: false })],
 		advanced: { database: { generateId: () => false } },
 		databaseHooks: {
 			user: {
@@ -102,6 +104,16 @@ export const backend = workerstack({
 					height,
 					html: `<iframe src="${site}/embed/${token}" width="${width}" height="${height}" style="border:0" allowfullscreen loading="lazy"></iframe>`,
 				}
+			}),
+
+		appToken: o.public
+			.route({ method: 'POST', path: '/api/app-auth/token' })
+			.input(v.object({ code: v.string(), verifier: v.string() }))
+			.handler(async ({ input, context }) => {
+				const out = await exchangeCode(context as never, input.code, input.verifier)
+				if (!out) throw new WorkerstackError('BAD_REQUEST', 'The code is not valid', { reason: 'INVALID_CODE' })
+				context.resHeaders?.set('cache-control', 'no-store')
+				return out
 			}),
 
 		viewMetric: o.public

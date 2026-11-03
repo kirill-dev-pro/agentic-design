@@ -201,3 +201,14 @@ export const viewMetric = sqliteTable(
 	},
 	(t) => [primaryKey({ columns: [t.day, t.webgpu, t.platform, t.standalone] })],
 )
+
+/** One-time codes of the Mac app's browser sign-in (src/app-auth.ts), kept two minutes. */
+export const appAuthCode = sqliteTable('app_auth_code', {
+	codeHash: text('codeHash').primaryKey(),
+	userId: typeid('user').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	challenge: text('challenge').notNull(),
+	device: text('device').notNull(),
+	expiresAt: timestamp('expiresAt').notNull(),
+	usedAt: timestamp('usedAt'),
+	createdAt: timestamp('createdAt').notNull(),
+})

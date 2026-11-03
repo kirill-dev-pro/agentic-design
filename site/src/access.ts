@@ -22,4 +22,5 @@ export const access = defineAccess(schema, {
 	asset: closed,
 	shareLink: closed,
 	viewMetric: closed,
+	appAuthCode: closed,
 })
