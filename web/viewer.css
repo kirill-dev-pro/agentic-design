@@ -141,3 +141,28 @@ body.with-side #stage { left: var(--side); }
 	.popover { right: 8px; left: 8px; width: auto; }
 	#export { display: none; }
 }
+
+/* ---------------------------------------------------------------- share pages (/s, /embed) */
+#owner { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+body.embed #bar, body.embed #side, body.embed #toggle-side { display: none !important; }
+body.embed #stage { inset: 0; left: 0 !important; }
+body.embed #info { display: none; }
+#embed-open {
+	position: absolute; left: 10px; bottom: 10px; z-index: 3; padding: 6px 10px; border-radius: 8px;
+	background: rgba(36, 36, 36, .92); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 12px;
+}
+#embed-open:hover { background: var(--field-hover); }
+#frames-view { position: absolute; inset: 0; z-index: 3; overflow-y: auto; background: var(--bg); padding: 24px 16px 48px; }
+.frames-head { max-width: 960px; margin: 0 auto 20px; }
+.frames-head h1 { margin: 0 0 6px; font-size: 22px; }
+.frames-head p { margin: 0 0 12px; color: var(--muted); line-height: 1.5; }
+#frames-list { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+#frames-list figure { margin: 0; }
+#frames-list img { display: block; width: 100%; height: auto; background: #fff; border-radius: 6px; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); }
+#frames-list figcaption { margin-top: 8px; color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+	body.share #get-app { display: none; }
+	#owner { display: none; }
+}
+
+body.share #side .private { display: none; }

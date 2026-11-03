@@ -86,6 +86,20 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	let html = rewrite(fs.readFileSync(path.join(viewer, "index.html"), "utf8"), vmap);
 	html = rewrite(html, map); // the site's shared assets (fonts, icons) by their hashed names
 	write("view/index.html", html);
+	// The share and embed pages' templates (/s/<token>, /embed/<token>; the M1 API contract,
+	// §6): the viewer's page without its own title and social tags, which the Worker writes
+	// in place of <!--ad:head--> with the link's data, and with absolute file URLs, since the
+	// page is served under /s/.
+	const template = (kind) => html
+		.replace(/<title>[\s\S]*?<\/title>\n?/, "")
+		.replace(/<meta name="description"[^>]*>\n?/, "")
+		.replace(/<link rel="canonical"[^>]*>\n?/, "")
+		.replace(/<meta (?:property="og:[^"]*"|name="twitter:[^"]*")[^>]*>\n?/g, "")
+		.replace(/<meta name="viewport"/, "<!--ad:head-->\n<meta name=\"viewport\"")
+		.replace(/(href|src)="(?!\/|https?:|#|data:|mailto:)([^"]+)"/g, '$1="/view/$2"')
+		.replace("<body>", `<body class="share${kind === "embed" ? " embed" : ""}">`);
+	write("_share.html", template("share"));
+	write("_embed.html", template("embed"));
 	for (const extra of fs.readdirSync(viewer)) {
 		// samples and other files the page links to by name
 		if (/^(index\.html|viewer\.(wasm|js|css)|odin\.js|wgpu\.js|sw\.js)$/.test(extra)) continue;

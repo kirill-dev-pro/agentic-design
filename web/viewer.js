@@ -14,10 +14,17 @@
 //   resolve as they would on that server.
 
 (async function () {
+	// where this script and its files live (the share pages load it from /view/)
+	const HERE = document.currentScript ? document.currentScript.src : location.href;
 	const $ = (id) => document.getElementById(id);
 	const canvas = $("canvas");
 	const body = document.body;
 	const SAMPLE = "samples/agentic-design/agentic-design.pen";
+	// A share page (/s/<token>, /embed/<token>): the site's Worker puts the link's data in
+	// #ad-share (the M1 API contract, §5 and §6).
+	const shareEl = document.getElementById("ad-share");
+	const share = shareEl ? JSON.parse(shareEl.textContent) : null;
+	const embed = body.classList.contains("embed");
 
 	const encoder = new TextEncoder();
 	const local = new Map(); // "/local/<n>/a/b.pen" -> bytes of a file the user gave
@@ -49,6 +56,7 @@
 	function hideMessage() { $("message").hidden = true; }
 
 	function showWelcome() {
+		if (share) return location.assign("/view/"); // a share page opens nothing else
 		hideMessage();
 		$("welcome").hidden = false;
 		setTimeout(() => $("welcome-files").closest("label").focus?.(), 0);
@@ -144,7 +152,7 @@
 	}
 
 	function openSample() {
-		openUrl(new URL(SAMPLE, location.href).href);
+		openUrl(new URL(SAMPLE, HERE).href);
 		history.replaceState(null, "", "?sample");
 	}
 
@@ -221,9 +229,11 @@
 		}
 		window.viewerInfo = info; // (for the console and tests)
 		const loaded = !!(info.frames && (info.frames.length || (info.pages || []).length));
-		const title = loaded && info.title !== "." ? info.title : "";
-		$("title").textContent = title || ".pen viewer";
-		document.title = title ? title + " — .pen viewer" : ".pen viewer — Agentic Design";
+		if (!share) {
+			const title = loaded && info.title !== "." ? info.title : "";
+			$("title").textContent = title || ".pen viewer";
+			document.title = title ? title + " — .pen viewer" : ".pen viewer — Agentic Design";
+		}
 		$("export").disabled = !loaded;
 		$("toggle-side").hidden = !loaded;
 		if (loaded && !body.dataset.sideSet) {
@@ -408,7 +418,67 @@
 
 	// ---------------------------------------------------------------- start
 
-	if (!navigator.gpu) return noGpu();
+	// ---------------------------------------------------------------- share pages
+
+	const SHARE_ERRORS = {
+		NOT_FOUND: ["This link does not exist", "Check that you have the whole link, or ask the person who sent it for a new one."],
+		REVOKED: ["This file is no longer shared", "The owner stopped sharing it. Ask them for a new link."],
+		EXPIRED: ["This link has expired", "Ask the person who sent it for a new link."],
+		EMBED_OFF: ["This file cannot be embedded", "The owner has not allowed it on other sites."],
+	};
+
+	// The bar on a share page: the file's name and owner, Download, the app.
+	function shareBar() {
+		document.title = `${share.name} · Agentic Design`;
+		$("title").textContent = share.name;
+		$("owner").textContent = "by " + share.owner.name;
+		$("owner").hidden = false;
+		$("open").closest(".menu-wrap").hidden = true;
+		if (share.download) {
+			$("share-download").href = share.download;
+			$("share-download").hidden = false;
+		}
+		$("get-app").hidden = false;
+		if (embed && share.url) {
+			$("embed-open").href = share.url;
+			$("embed-open").hidden = false;
+		}
+	}
+
+	// Without WebGPU: pictures of the frames, rendered when the file was shared.
+	function showFrames() {
+		const frames = (share.previews && share.previews.frames) || [];
+		if (!frames.length) {
+			return showMessage("This browser cannot show the design",
+				"The live viewer needs WebGPU (Safari 26, Chrome and Edge 113 or later), and this file was shared without pictures of its frames." + (share.download ? " You can download it and open it in the Agentic Design app." : ""),
+				{ error: true, actions: [...(share.download ? [["Download the file", share.download, true]] : []), ["Get Agentic Design", "/"]] });
+		}
+		hideMessage();
+		$("frames-title").textContent = share.name;
+		$("frames-list").replaceChildren(...frames.map((f) => {
+			const fig = document.createElement("figure");
+			const a = Object.assign(document.createElement("a"), { href: f.url, target: "_blank", rel: "noopener" });
+			const img = Object.assign(document.createElement("img"), { src: f.url, alt: f.name, loading: "lazy", decoding: "async", width: f.width, height: f.height });
+			a.append(img);
+			const cap = Object.assign(document.createElement("figcaption"), { textContent: f.name });
+			fig.append(a, cap);
+			return fig;
+		}));
+		$("frames-view").hidden = false;
+	}
+
+	if (share) {
+		body.classList.add("share");
+		if (share.error) {
+			const [title, text] = SHARE_ERRORS[share.error] || SHARE_ERRORS.NOT_FOUND;
+			document.title = title + " · Agentic Design";
+			$("open").closest(".menu-wrap").hidden = true;
+			return showMessage(title, text, { error: true, actions: [["Agentic Design", "/", true]] });
+		}
+		shareBar();
+	}
+
+	if (!navigator.gpu) return share ? showFrames() : noGpu();
 	showMessage("Loading the viewer…", "");
 	mem = new odin.WasmMemoryInterface();
 	let gpuFailed = false;
@@ -423,13 +493,13 @@
 			page_info: (ptr, len) => showInfo(JSON.parse(mem.loadString(ptr, len))),
 			page_error: (ptr, len) => {
 				const text = mem.loadString(ptr, len);
-				if (/WebGPU/.test(text)) { gpuFailed = true; return noGpu(); }
+				if (/WebGPU/.test(text)) { gpuFailed = true; return share ? showFrames() : noGpu(); }
 				showMessage("This file could not be opened", text, { error: true, actions: [["Open another file", () => showWelcome(), true]] });
 			},
 		},
 	};
 	try {
-		await odin.runWasm("viewer.wasm", null, imports, mem);
+		await odin.runWasm(new URL("viewer.wasm", HERE).href, null, imports, mem);
 	} catch (e) {
 		console.error(e);
 		return showMessage("The viewer could not start", String(e && e.message || e), { error: true, actions: [["Reload", () => location.reload(), true]] });
@@ -463,7 +533,11 @@
 		const i = pair.indexOf(":");
 		if (i > 0) setTheme(pair.slice(0, i), pair.slice(i + 1));
 	}
-	if (params.get("file")) open(new URL(params.get("file"), location.href).pathname);
+	if (share) {
+		// root-relative on this site today; absolute once files come from the content host
+		if (share.doc.url.startsWith("/")) open(share.doc.url);
+		else openUrl(share.doc.url);
+	} else if (params.get("file")) open(new URL(params.get("file"), location.href).pathname);
 	else if (params.get("url")) openUrl(params.get("url"));
 	else if (params.has("sample")) openSample();
 	else showWelcome();
@@ -658,6 +732,6 @@
 	}
 	// offline and instant reopening (sw.js)
 	if ("serviceWorker" in navigator && window.isSecureContext) {
-		navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});
+		navigator.serviceWorker.register(new URL("sw.js", HERE).href, { scope: new URL("./", HERE).href }).catch(() => {});
 	}
 })();
