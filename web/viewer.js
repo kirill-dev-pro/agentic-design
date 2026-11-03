@@ -25,6 +25,11 @@
 	const shareEl = document.getElementById("ad-share");
 	const share = shareEl ? JSON.parse(shareEl.textContent) : null;
 	const embed = body.classList.contains("embed");
+	// offline and instant reopening (/sw.js), first thing: the frame-picture fallback and the
+	// error pages return before the viewer starts
+	if ("serviceWorker" in navigator && window.isSecureContext) {
+		navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+	}
 
 	const encoder = new TextEncoder();
 	const local = new Map(); // "/local/<n>/a/b.pen" -> bytes of a file the user gave
@@ -924,9 +929,5 @@
 			const files = await Promise.all(params.files.map(async (h) => [h.name, await h.getFile()]));
 			addLocal(files);
 		});
-	}
-	// offline and instant reopening (sw.js)
-	if ("serviceWorker" in navigator && window.isSecureContext) {
-		navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
 	}
 })();
