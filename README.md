@@ -134,7 +134,7 @@ claude mcp add --scope user agentic-design -- /path/to/agentic-design/build/agen
 
 ## Editor
 
-Tabs hold open files; the Dashboard tab lists recent files with previews. The sidebar shows
+Tabs hold open files. The Dashboard tab lists every `.pen` file on the Mac (All files: found with Spotlight and a background scan of the home folder, sorted by last modified, last opened, name or created, with a search by name) and the files opened in the app (Recents), each with a preview. A click selects a card, a double click or Enter opens it; right-click for Show in Finder, Remove from list, Hide this folder and Move to Trash (also the Delete key; asks first, refuses a file open in a tab). The sidebar shows
 the document's pages (stored in the file header as `pages`; `+` adds one, double-click
 renames, right-click duplicates or deletes), the layer tree (double-click renames, the eye
 hides) and, on the Theme tab, the document's variables, which can be added, renamed and
@@ -285,7 +285,7 @@ Contributing).
 | `src/api.odin` | control API and screenshots |
 | `src/mcp.odin` | stdio MCP server |
 | `src/tabs.odin` | tabs, recent files, thumbnails |
-| `src/dashboard.odin` | the dashboard view |
+| `src/dashboard.odin`, `src/files_index.odin`, `src/trash_darwin.odin` | the dashboard: every .pen file on the Mac (Spotlight and a background scan), sorting, previews, hiding, Move to Trash |
 | `src/edit.odin` | grouping, alignment, clipboard, context menu |
 | `src/components_panel.odin`, `src/variables_table.odin` | the Components tab; the variables table |
 | `src/onboarding.odin`, `src/agents.odin` | the onboarding sheet; agent client detection and MCP registration |

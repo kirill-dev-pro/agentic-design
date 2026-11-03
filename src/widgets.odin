@@ -1372,7 +1372,13 @@ draw_dialog :: proc(vg: ^nvg.Context) {
 	if !d.open do return
 	fill_rect(vg, {0, 0, app.screen.x, app.screen.y}, {0, 0, 0, 0.45})
 	w: f32 = 380
-	h: f32 = 150
+	// as tall as the message needs (at least the old 150)
+	nvg.FontFace(vg, "ui")
+	nvg.FontSize(vg, 12)
+	nvg.TextAlign(vg, .LEFT, .TOP)
+	tb: [4]f32
+	nvg.TextBoxBounds(vg, 0, 0, w - 48, d.message, &tb)
+	h: f32 = max(150, 52 + (tb[3] - tb[1]) + 16 + 46)
 	r := Rect{(app.screen.x - w) / 2, (app.screen.y - h) / 2 - 40, w, h}
 	popup_shadow(vg, r, 12)
 	fill_rect(vg, r, {0.16, 0.16, 0.16, 1}, 12)

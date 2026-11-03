@@ -180,10 +180,19 @@ whats_new_mark_seen :: proc() {
 
 // AGENTIC_WHATS_NEW_TEST=1 in a window whose HOME is not the user's home directory.
 whats_new_testing :: proc() -> bool {
-	if os.get_env("AGENTIC_WHATS_NEW_TEST", context.temp_allocator) == "" do return false
+	return os.get_env("AGENTIC_WHATS_NEW_TEST", context.temp_allocator) != "" && home_sandboxed()
+}
+
+// HOME is set to a folder that is not the user's home directory (a test's sandbox).
+home_sandboxed :: proc() -> bool {
 	pw := posix.getpwuid(posix.getuid())
 	home, _ := fs_home(context.temp_allocator)
 	return pw != nil && home != "" && home != string(pw.pw_dir)
+}
+
+// A test window may write settings.json: AGENTIC_SETTINGS_TEST=1 with a sandboxed HOME.
+settings_test_writes :: proc() -> bool {
+	return os.get_env("AGENTIC_SETTINGS_TEST", context.temp_allocator) != "" && home_sandboxed()
 }
 
 // The update that brought this version: the last "update: A -> VERSION" in app.log.

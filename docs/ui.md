@@ -26,6 +26,7 @@ those two do first.
 
 | Region | Contents |
 | --- | --- |
+| Dashboard | All files (every `.pen` on the Mac: Spotlight plus a throttled scan of the home folder that skips Library, hidden folders, node_modules, build output, app bundles and tmp) and Recents (opened in the app). Search by name, a Sort menu (Last modified by default, Last opened, Name, Created; kept in settings.json), cards with the folder and a relative time, previews drawn one at a time for the cards in view. Click selects, double click or Enter opens; right-click: Open, Show in Finder, Remove from list, Hide this folder, Move to Trash… (Delete key too; a confirmation with the name and folder; refused for a file open in a tab). "Show N hidden items again" in the sidebar. |
 | Tab bar | The Dashboard, one tab per open file (tabs are files, never pages), and `+` for a new file. |
 | Sidebar | File name (double-click renames the file); Design, Components and Theme tabs; Pages (`+`, double-click renames, right-click for Rename, Duplicate or Delete…); layer tree. |
 | Layer tree | Eye toggle, inline rename, context menu, and icons for the node kind and flex direction. Instances show their component's name. Rows drag to reorder or into another frame or group. |

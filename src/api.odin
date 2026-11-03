@@ -101,6 +101,9 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if params["close"].(json.Boolean) or_else false do onboarding.open = false
 		else do onboarding_start(step)
 		fmt.sbprintf(&b, `{{"open":%v,"step":%d}}`, onboarding.open, onboarding.step)
+	case "dashboard":
+		// the dashboard's files (tests): files_index.odin api_dashboard
+		e = api_dashboard(&b, params)
 	case "cloud":
 		// sign-in and sharing (tests): cloud.odin api_cloud
 		e = api_cloud(&b, params)
@@ -306,7 +309,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 // Methods that do not depend on the document shown.
 document_free :: proc(method: string) -> bool {
 	switch method {
-	case "open", "window", "update", "onboarding", "whats_new", "cloud", "perf", "memory", "input", "presence":
+	case "open", "window", "update", "onboarding", "whats_new", "cloud", "dashboard", "perf", "memory", "input", "presence":
 		return true
 	}
 	return false
