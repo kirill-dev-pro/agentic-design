@@ -1,7 +1,10 @@
 # Builds what a change could break without anyone noticing: the browser viewer (the engine
-# for js_wasm32). The macOS app is built and checked by release.yml on tags; the viewer is
-# otherwise only built when the website deploys (Bunderhost, site/scripts/viewer.sh), after the
-# change is already on main.
+# for js_wasm32). The macOS app is built and checked by release.yml on tags.
+#
+# On a push it also uploads the compiled viewer (viewer.wasm, odin.js) to the web-viewer-builds
+# prerelease, named by a hash of its sources (site/scripts/viewer-key.mjs) with a .sha256 next
+# to it. The website build (Bunderhost, site/scripts/viewer.sh) fetches it from there rather than
+# downloading Odin and lld itself. A key that is there already is kept, not uploaded again.
 name: CI
 
 on:
@@ -20,6 +23,8 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write # the upload to the web-viewer-builds prerelease
     env:
       # the same Odin release as release.yml and site/scripts/viewer.sh, for Linux
       ODIN_VERSION: dev-2026-10
@@ -42,3 +47,36 @@ jobs:
           odin version
           sh tools/build_web.sh
           ls -l build/web/viewer.wasm
+
+      - name: Upload for the website build
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: web-viewer-builds
+        run: |
+          KEY=$(node site/scripts/viewer-key.mjs)
+          NAME="viewer-$KEY.tar.gz"
+          echo "key $KEY"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Viewer builds for the website" \
+              --notes "The browser viewer compiled by CI for each set of sources, which the website build fetches (site/scripts/viewer.sh). Not a release of the app." \
+              || gh release view "$TAG" >/dev/null
+          fi
+          if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$NAME.sha256"; then
+            echo "$NAME is there already"
+            exit 0
+          fi
+          cd "$RUNNER_TEMP"
+          tar czf "$NAME" -C "$GITHUB_WORKSPACE/build/web" viewer.wasm odin.js
+          sha256sum "$NAME" > "$NAME.sha256"
+          # the .sha256 goes up last and only after this run's archive: the site build takes it
+          # as the sign that the archive is complete
+          if gh release upload "$TAG" "$NAME"; then
+            gh release upload "$TAG" "$NAME.sha256"
+          else
+            echo "another run uploaded $NAME"
+          fi
+          # keep the newest 100 builds (two files each)
+          gh release view "$TAG" --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[200:] | .[].name' \
+            | xargs -r -n 1 gh release delete-asset "$TAG" -y
