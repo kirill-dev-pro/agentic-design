@@ -105,3 +105,9 @@ place_image_dialog :: proc() {}
 ask_save_path :: proc(name: string, types: []string) -> (path: string, ok: bool) {return}
 ask_folder :: proc() -> (dir: string, ok: bool) {return}
 reveal_in_finder :: proc(path: string) {}
+
+// dashboard.odin, files_index.odin: the web editor has no file system to list
+draw_dashboard :: proc(vg: ^nvg.Context) {}
+
+// whats_new.odin: settings are kept by the page
+settings_test_writes :: proc() -> bool {return false}
