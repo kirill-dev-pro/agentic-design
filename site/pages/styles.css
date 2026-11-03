@@ -318,6 +318,8 @@ h3 { font-size: var(--size-h3); font-weight: 600; line-height: 1.21; }
 	.board { width: 100%; max-width: 560px; align-self: center; }
 	.agents > .text { max-width: none; }
 	.dl-band { padding: 32px 24px; }
+	/* stacked: the code blocks take their own height (flex-basis 0 made them 0 tall) */
+	.pen > .code, .dl-band > .code, .dl-band > .text { flex: none; }
 	.footer-in { flex-direction: column; }
 }
 @media (max-width: 600px) {
