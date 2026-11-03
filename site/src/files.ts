@@ -8,6 +8,7 @@ import { WorkerstackError } from 'workerstack'
 import { blobKey, bucket, secretOf, sniffOk, TYPES, uploadTarget, appUrl, type App } from './blobs'
 import { randomToken, seal, sha256Hex, unseal } from './crypto'
 import { asset, document, shareLink, user, version } from './schema'
+import { docPath } from './share'
 import { currentWorkspace, type Workspace } from './workspaces'
 
 const VERSION_TTL_MS = 60 * 60 * 1000
@@ -116,10 +117,13 @@ async function fileJson(app: App, doc: typeof document.$inferSelect, request?: R
 		.where(and(eq(shareLink.docId, doc.id), isNull(shareLink.revokedAt)))
 		.orderBy(desc(shareLink.createdAt))
 	let thumbUrl: string | null = null
+	let docUrl: string | null = null
 	if (doc.headVersionId) {
 		const [ver] = await app.db.select({ manifest: version.manifest }).from(version).where(eq(version.id, doc.headVersionId))
 		const m = ver ? (JSON.parse(ver.manifest) as Manifest) : null
-		if (m?.previews.og) thumbUrl = `/api/docs/${doc.id}/v/${doc.headVersionId}/_ad/og.png`
+		const base = `/api/docs/${doc.id}/v/${doc.headVersionId}`
+		if (m?.previews.og) thumbUrl = `${base}/_ad/og.png`
+		if (m) docUrl = `${base}/${docPath(m)}`
 	}
 	return {
 		id: doc.id,
@@ -129,6 +133,7 @@ async function fileJson(app: App, doc: typeof document.$inferSelect, request?: R
 		sizeBytes: doc.sizeBytes,
 		versionId: doc.headVersionId,
 		thumbUrl,
+		docUrl,
 		links: await Promise.all(links.map((l: typeof shareLink.$inferSelect) => linkJson(app, l, request))),
 	}
 }
