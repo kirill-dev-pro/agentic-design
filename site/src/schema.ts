@@ -187,3 +187,17 @@ export const shareLink = sqliteTable(
 	},
 	(t) => [uniqueIndex('share_link_token_idx').on(t.tokenHash), index('share_link_doc_idx').on(t.docId)],
 )
+
+/** Share-page views per day by WebGPU support and platform (cloud-design §5.1). No IP, no
+ * user, no link: only counts. */
+export const viewMetric = sqliteTable(
+	'view_metric',
+	{
+		day: text('day').notNull(),
+		webgpu: integer('webgpu', { mode: 'boolean' }).notNull(),
+		platform: text('platform').notNull(),
+		standalone: integer('standalone', { mode: 'boolean' }).notNull(),
+		count: integer('count').notNull().default(0),
+	},
+	(t) => [primaryKey({ columns: [t.day, t.webgpu, t.platform, t.standalone] })],
+)

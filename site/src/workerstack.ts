@@ -3,7 +3,7 @@
 // configures it), personal workspaces with a plan, and the API under /api. The Worker
 // entry (server.ts) also hands it the share pages.
 import { organization } from 'better-auth/plugins'
-import { and, count, eq, isNull, sum } from 'drizzle-orm'
+import { and, count, eq, isNull, sql, sum } from 'drizzle-orm'
 import { workerstack } from 'workerstack'
 import { libsql } from 'workerstack/libsql'
 
@@ -102,6 +102,26 @@ export const backend = workerstack({
 					height,
 					html: `<iframe src="${site}/embed/${token}" width="${width}" height="${height}" style="border:0" allowfullscreen loading="lazy"></iframe>`,
 				}
+			}),
+
+		viewMetric: o.public
+			.route({ method: 'POST', path: '/api/metrics/view', successStatus: 204 })
+			.input(
+				v.object({
+					webgpu: v.boolean(),
+					platform: v.picklist(['ios', 'android', 'mac', 'windows', 'linux', 'other']),
+					standalone: v.optional(v.boolean(), false),
+				}),
+			)
+			.handler(async ({ input, context }) => {
+				const day = new Date().toISOString().slice(0, 10)
+				await context.db
+					.insert(schema.viewMetric)
+					.values({ day, webgpu: input.webgpu, platform: input.platform, standalone: input.standalone, count: 1 })
+					.onConflictDoUpdate({
+						target: [schema.viewMetric.day, schema.viewMetric.webgpu, schema.viewMetric.platform, schema.viewMetric.standalone],
+						set: { count: sql`${schema.viewMetric.count} + 1` },
+					})
 			}),
 
 		version: o.public
