@@ -74,9 +74,24 @@
 			</div>
 		</div>
 		<div class="card">
+			<h2>Your data</h2>
+			<p class="sub">A zip of your account and every shared file with all its versions, images, fonts and libraries.</p>
+			<a class="btn secondary" href="/api/account/export" download id="export-data">Download my data</a>
+		</div>
+		<div class="card">
 			<h2>Sign out</h2>
 			<p class="sub">Signs this browser out. Your shared files and links keep working.</p>
 			<button class="btn secondary" type="button" id="sign-out">Sign out</button>
+		</div>
+		<div class="card danger-zone">
+			<h2>Delete account</h2>
+			<p class="sub">Deletes your account at once and for good: every shared file and its versions, every link (they stop working), and every device signed in. This cannot be undone. Download your data first if you want a copy.</p>
+			<form id="delete-form" novalidate>
+				<label>Type your email to confirm<input name="confirmEmail" type="email" autocomplete="off" required></label>
+				<label id="delete-password-row">Password<input name="password" type="password" autocomplete="current-password"></label>
+				<p class="form-error" role="alert" hidden></p>
+				<button class="btn danger" type="submit">Delete my account</button>
+			</form>
 		</div>
 	</section>
 </main>

@@ -84,3 +84,5 @@ form .btn { align-self: flex-start; }
 .link .foot { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 12px; gap: 8px; flex-wrap: wrap; }
 .link .embed { font: 400 12px var(--mono); }
 @media (max-width: 600px) { .files-head { flex-direction: column; align-items: stretch; } }
+.danger-zone { border-color: color-mix(in srgb, #C0392B 35%, var(--border)); }
+.danger-zone .btn.danger { border-color: color-mix(in srgb, #C0392B 45%, var(--border)); }

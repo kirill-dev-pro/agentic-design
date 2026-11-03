@@ -208,6 +208,24 @@ const App = (() => {
 		$("#meter-storage").style.width = Math.min(100, (100 * use.storageBytes) / ent.storageBytes) + "%";
 		$("#meter-files").style.width = Math.min(100, (100 * use.sharedFiles) / ent.sharedFiles) + "%";
 
+		const del = $("#delete-form");
+		del.addEventListener("submit", async (ev) => {
+			ev.preventDefault();
+			formError(del, "");
+			if (del.confirmEmail.value.trim().toLowerCase() !== m.user.email.toLowerCase()) return formError(del, "Type the email of this account to confirm.");
+			if (!confirm("Delete your account, your shared files and all their links for good?")) return;
+			busy(del, true);
+			try {
+				await api("POST", "/api/account/delete", del.password.value ? { password: del.password.value } : {});
+				location.assign("/?deleted");
+			} catch (e) {
+				busy(del, false);
+				if (e.reason === "PASSWORD") formError(del, "The password is not right.");
+				else if (e.reason === "SESSION_NOT_FRESH") formError(del, "For your safety, sign out and sign in again, then delete the account within a day.");
+				else formError(del, say(e));
+			}
+		});
+
 		$("#sign-out").addEventListener("click", async (ev) => {
 			ev.target.disabled = true;
 			try { await api("POST", "/api/auth/sign-out", {}); } catch (e) {}
