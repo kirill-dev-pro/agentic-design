@@ -17,6 +17,9 @@ import { Room, type Batch, type Op, type Principal } from './room'
 const WIRE = 1
 const MAX_MESSAGE = 1024 * 1024
 const SNAPSHOT_AFTER_MS = 5_000
+/** A checkpoint (a version in storage) after this long without edits, or when the last editor leaves. */
+const CHECKPOINT_IDLE_MS = 30_000
+const RETRY_MAX_MS = 3600_000
 const LOG_DAYS = 7
 const PRESENCE_PER_SECOND = 20
 
@@ -37,6 +40,8 @@ export class DocRoom extends DurableObject {
 		sql.exec(`CREATE TABLE IF NOT EXISTS snapshot (
 			id INTEGER PRIMARY KEY CHECK (id = 1), seq INTEGER NOT NULL, pen TEXT NOT NULL,
 			sorts TEXT NOT NULL, tombstones TEXT NOT NULL, docId TEXT NOT NULL, at INTEGER NOT NULL)`)
+		sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)')
+		sql.exec('CREATE TABLE IF NOT EXISTS room_assets (path TEXT PRIMARY KEY, hash TEXT NOT NULL, size INTEGER NOT NULL, type TEXT NOT NULL)')
 		sql.exec(`CREATE TABLE IF NOT EXISTS ops (
 			seq INTEGER PRIMARY KEY, batch TEXT NOT NULL UNIQUE, author TEXT NOT NULL,
 			agent TEXT, at INTEGER NOT NULL, ops TEXT NOT NULL)`)
@@ -101,6 +106,20 @@ export class DocRoom extends DurableObject {
 		sql.exec('DELETE FROM ops WHERE seq <= ? AND at < ?', s.seq, Date.now() - LOG_DAYS * 86_400_000)
 	}
 
+	private meta(k: string): string | undefined {
+		return this.ctx.storage.sql.exec<{ v: string }>('SELECT v FROM meta WHERE k = ?', k).toArray()[0]?.v
+	}
+
+	private setMeta(k: string, v: string | number) {
+		this.ctx.storage.sql.exec('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v', k, String(v))
+	}
+
+	private joinedCount(except?: HibernatableWebSocket) {
+		return (this.ctx.getWebSockets() as HibernatableWebSocket[]).filter(
+			(s) => s !== except && (s.deserializeAttachment() as Attachment | null)?.joined,
+		).length
+	}
+
 	// ------------------------------------------------------------ requests from the Worker
 
 	async fetch(request: Request): Promise<Response> {
@@ -111,7 +130,13 @@ export class DocRoom extends DurableObject {
 		}
 		if (url.pathname === '/init' && request.method === 'POST') {
 			if (this.snapshotRow()) return Response.json({ ok: true, already: true })
-			const { pen, docId } = (await request.json()) as { pen: string; docId: string }
+			const { pen, docId, assets = [] } = (await request.json()) as {
+				pen: string
+				docId: string
+				assets?: { path: string; hash: string; size: number; type: string }[]
+			}
+			for (const a of assets)
+				this.ctx.storage.sql.exec('INSERT OR REPLACE INTO room_assets (path, hash, size, type) VALUES (?, ?, ?, ?)', a.path, a.hash, a.size, a.type)
 			const pc = await loadPencore(await pencoreModule())
 			const room = new Room(pc, pen, {})
 			this.writeSnapshot(room, docId)
@@ -193,6 +218,16 @@ export class DocRoom extends DurableObject {
 					Date.now(),
 					JSON.stringify(broadcast.ops),
 				)
+				for (const op of broadcast.ops)
+					if (op.op === 'asset')
+						this.ctx.storage.sql.exec(
+							`INSERT INTO room_assets (path, hash, size, type) VALUES (?, ?, 0, ?)
+							 ON CONFLICT(path) DO UPDATE SET hash = excluded.hash, type = excluded.type`,
+							op.path,
+							op.hash,
+							op.type,
+						)
+				this.setMeta('lastBatchAt', Date.now())
 				if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + SNAPSHOT_AFTER_MS)
 			}
 			// The ops row is written before either message leaves (the output gate holds them until it is durable).
@@ -218,6 +253,8 @@ export class DocRoom extends DurableObject {
 	async webSocketClose(socket: HibernatableWebSocket, code: number, reason: string) {
 		const att = socket.deserializeAttachment() as Attachment | null
 		if (att?.joined) this.broadcast(socket, { t: 'leave', author: att.who })
+		// The last one out: checkpoint soon rather than after the idle wait.
+		if (att?.joined && this.joinedCount(socket) === 0) await this.ctx.storage.setAlarm(Date.now() + 1000)
 		try {
 			socket.close(code, reason)
 		} catch {
@@ -225,9 +262,45 @@ export class DocRoom extends DurableObject {
 		}
 	}
 
+	/** The snapshot in the room's SQLite, then, when the document has rested, a checkpoint in storage. */
 	async alarm() {
 		const room = await this.load()
-		if (room) this.writeSnapshot(room)
+		if (!room) return
+		this.writeSnapshot(room)
+		const done = Number(this.meta('checkpointSeq') ?? 0)
+		if (room.seq <= done) return
+		const idleSince = Number(this.meta('lastBatchAt') ?? 0)
+		const due = idleSince + CHECKPOINT_IDLE_MS
+		if (this.joinedCount() > 0 && Date.now() < due) {
+			await this.ctx.storage.setAlarm(due)
+			return
+		}
+		const docId = this.snapshotRow()!.docId
+		const assets = this.ctx.storage.sql
+			.exec<{ path: string; hash: string; size: number; type: string }>('SELECT path, hash, size, type FROM room_assets ORDER BY path')
+			.toArray()
+		const seq = room.seq
+		const pen = room.pen()
+		try {
+			const { worker } = await import('../worker')
+			const { writeCheckpoint } = await import('./checkpoint')
+			const result = await worker.withContext(this.ctx as never, async () => {
+				const app = (await worker.app(this.env as never)) as never
+				return writeCheckpoint(app, { docId, seq, pen, assets: assets as never })
+			})
+			if (result === 'gone') {
+				for (const s of this.ctx.getWebSockets()) s.close(4410, 'GONE')
+				return
+			}
+			this.setMeta('checkpointSeq', seq)
+			this.setMeta('checkpointAttempts', 0)
+		} catch (error) {
+			// Turso or storage away: keep the snapshot here and try again later; the seq makes a retry safe.
+			const n = Number(this.meta('checkpointAttempts') ?? 0) + 1
+			this.setMeta('checkpointAttempts', n)
+			console.error('[DocRoom] checkpoint failed', String(error))
+			await this.ctx.storage.setAlarm(Date.now() + Math.min(60_000 * 2 ** (n - 1), RETRY_MAX_MS))
+		}
 	}
 
 	// ------------------------------------------------------------ helpers

@@ -122,6 +122,8 @@ export const document = sqliteTable(
 		kind: text('kind', { enum: ['shared', 'cloud'] }).notNull().default('shared'),
 		name: text('name').notNull(),
 		headVersionId: text('headVersionId'),
+		/** A cloud document's seq at its head version (written by its DocRoom; a write with a lower seq loses). */
+		headSeq: integer('headSeq'),
 		sizeBytes: integer('sizeBytes').notNull().default(0),
 		createdBy: typeid('user').notNull().references(() => user.id),
 		createdAt: timestamp('createdAt').notNull(),
@@ -139,6 +141,9 @@ export const version = sqliteTable(
 		docId: typeid('doc').notNull().references(() => document.id, { onDelete: 'cascade' }),
 		workspaceId: typeid('ws').notNull(),
 		status: text('status', { enum: ['pending', 'committed'] }).notNull().default('pending'),
+		/** upload: a file uploaded whole; checkpoint: a cloud document's state at `seq`, written by its DocRoom */
+		kind: text('kind', { enum: ['upload', 'checkpoint'] }).notNull().default('upload'),
+		seq: integer('seq'),
 		penHash: text('penHash').notNull(),
 		/** JSON: { assets: [{path, hash, size, type}], missing: [path], previews: {og?, frames} } */
 		manifest: text('manifest').notNull(),

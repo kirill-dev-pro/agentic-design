@@ -10,14 +10,14 @@
 // - anything else is a page that does not exist, answered with 404.html and status 404
 //   (not the landing page: search engines index soft 404s).
 import { createMemoryRateLimitStore, type RateLimitStore } from 'workerstack'
-import { createWorker, durableRateLimitStore, type ExecutionContextLike } from 'workerstack/workers'
+import { durableRateLimitStore, type ExecutionContextLike } from 'workerstack/workers'
 
 import { handleExport } from './account'
 import { handleAppAuth } from './app-auth'
 import { handleBlobPut, type App } from './blobs'
 import { handleRoom, ROOM_PATH } from './room/route'
 import { handleContent, handleOwnerContent, handlePage } from './share'
-import { backend } from './workerstack'
+import { worker } from './worker'
 
 type Env = {
 	ASSETS: { fetch(input: Request | string | URL): Promise<Response> }
@@ -25,7 +25,6 @@ type Env = {
 	DOC_ROOM?: Parameters<typeof handleRoom>[2]
 }
 
-const worker = createWorker(backend)
 export const { Scheduler, RealtimeHub, RateLimiter } = worker.durableObjects
 // Re-exported from its module under its declared name (the bundler renames worker.durableObjects' copies).
 export { DocRoom } from './room/doc-room'

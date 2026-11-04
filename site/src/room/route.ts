@@ -41,7 +41,7 @@ export async function handleRoom(app: App & { auth: any }, request: Request, ns:
 		const res = await bucket(app).get(blobKey(row.doc.workspaceId, m.pen.hash))
 		if (!res.ok) return new Response('The document could not be read', { status: 502 })
 		const pen = await res.text()
-		const init = await stub.fetch('https://room/init', { method: 'POST', body: JSON.stringify({ pen, docId }) })
+		const init = await stub.fetch('https://room/init', { method: 'POST', body: JSON.stringify({ pen, docId, assets: m.assets }) })
 		if (!init.ok) return new Response('The room could not start', { status: 502 })
 		if (row.doc.kind !== 'cloud') await app.db.update(document).set({ kind: 'cloud' }).where(eq(document.id, docId))
 	}

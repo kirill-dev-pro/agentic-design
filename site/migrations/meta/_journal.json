@@ -43,6 +43,13 @@
       "when": 1793707699551,
       "tag": "0005_delete_smoke_test_account",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793796147146,
+      "tag": "0006_yummy_thing",
+      "breakpoints": true
     }
   ]
 }
