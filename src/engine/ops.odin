@@ -633,3 +633,25 @@ op_write :: proc(b: ^strings.Builder, op: Op) {
 	}
 	strings.write_byte(b, '}')
 }
+
+// A deep copy of ops: ops made from a document (ops_diff, the editor) point into its nodes,
+// and applying them frees what a delete removes. Copy before applying or keeping them.
+ops_clone :: proc(ops: []Op, allocator := context.allocator) -> []Op {
+	out := make([]Op, len(ops), allocator)
+	for op, i in ops {
+		c := op
+		c.node = strings.clone(op.node, allocator)
+		c.key = strings.clone(op.key, allocator)
+		c.raw = strings.clone(op.raw, allocator)
+		c.parent = strings.clone(op.parent, allocator)
+		c.sort = strings.clone(op.sort, allocator)
+		c.slot = strings.clone(op.slot, allocator)
+		if op.props != nil {
+			props := make([]Prop, len(op.props), allocator)
+			for p, j in op.props do props[j] = Prop{strings.clone(p.key, allocator), strings.clone(p.raw, allocator)}
+			c.props = props
+		}
+		out[i] = c
+	}
+	return out
+}

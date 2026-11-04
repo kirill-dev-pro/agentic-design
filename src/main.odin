@@ -5,6 +5,7 @@ import "engine"
 
 import "core:encoding/json"
 import "core:fmt"
+import "core:math/rand"
 import "core:os"
 import "core:strconv"
 import "core:strings"
@@ -24,6 +25,13 @@ main :: proc() {
 	}
 	if len(os.args) > 1 && os.args[1] == "mcp" {
 		mcp_main()
+		return
+	}
+	if len(os.args) > 5 && os.args[1] == "cloud-sim" {
+		n, _ := strconv.parse_int(os.args[3])
+		steps, _ := strconv.parse_int(os.args[4])
+		seed, _ := strconv.parse_int(os.args[5])
+		cloud_sim_main(os.args[2], n, steps, seed)
 		return
 	}
 	if len(os.args) > 3 && os.args[1] == "cloud-diff" {
@@ -209,4 +217,175 @@ cloud_diff_main :: proc(before_path, after_path: string, verbose: bool) {
 		os.exit(1)
 	}
 	fmt.printfln("ok   %d ops, %d skipped; the result saves byte-identical", len(ops), len(res.skipped))
+}
+
+// agentic-design cloud-sim <start.pen> <clients> <steps> <seed>: a room and several clients in
+// one process (engine.Sync_Client and ops_apply), each making random edits that reach the room
+// and come back in random interleavings. Passes when, with everything delivered, every client
+// shows exactly the room's document.
+cloud_sim_main :: proc(start_path: string, nclients, steps, seed: int) {
+	data, err := os.read_entire_file(start_path, context.allocator)
+	if err != nil {
+		fmt.eprintln("cannot read", start_path)
+		os.exit(2)
+	}
+	r := rand.create(u64(seed))
+	context.random_generator = rand.default_random_generator(&r)
+	Msg :: struct {
+		kind:  enum {Ops, Ack, Nack},
+		batch: string,
+		seq:   int,
+		ops:   []engine.Op,
+	}
+	room: engine.Document
+	room_state: engine.Cloud_State
+	engine.doc_load(&room, string(data))
+	engine.sorts_assign(&room, &room_state)
+	seq := 0
+	clients := make([]engine.Sync_Client, nclients)
+	shown := make([]engine.Document, nclients)
+	shown_state := make([]engine.Cloud_State, nclients)
+	for i in 0 ..< nclients do engine.sync_init(&clients[i], string(data), 0, &shown[i], &shown_state[i], fmt.aprintf("c%d", i))
+	Inbound :: struct {
+		from:  int,
+		batch: string,
+		ops:   []engine.Op,
+	}
+	room_in := make([dynamic]Inbound)
+	outbox := make([][dynamic]Msg, nclients)
+	acks, nacks, edits := 0, 0, 0
+
+	rid :: proc() -> string {
+		a := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+		b := make([]u8, 10)
+		for &c in b do c = a[rand.int_max(len(a))]
+		return string(b)
+	}
+	// a random step on what client i sees
+	edit :: proc(doc: ^engine.Document, state: ^engine.Cloud_State) -> []engine.Op {
+		live := make([dynamic]^engine.Node, context.temp_allocator)
+		frames := make([dynamic]^engine.Node, context.temp_allocator)
+		for &n in doc.nodes do if !n.imported && !n.ghost {
+			append(&live, &n)
+			if n.kind == .Frame do append(&frames, &n)
+		}
+		if len(live) == 0 do return nil
+		n := live[rand.int_max(len(live))]
+		ops := make([dynamic]engine.Op)
+		switch rand.int_max(7) {
+		case 0, 1:
+			append(&ops, engine.Op{kind = .Set, node = n.id, key = "fill", raw = fmt.aprintf("\"#%06X\"", rand.int_max(0xFFFFFF))})
+		case 2:
+			append(&ops, engine.Op{kind = .Set, node = n.id, key = "opacity", raw = fmt.aprintf("%v", f32(rand.int_max(10)) / 10)})
+		case 3:
+			if len(frames) == 0 do return nil
+			p := frames[rand.int_max(len(frames))]
+			last := ""
+			for &m in doc.nodes do if m.parent == p.uid && m.slot_of == "" {
+				if k := state.sorts[m.id] or_else ""; k > last do last = k
+			}
+			id := rid()
+			props := make([]engine.Prop, 4)
+			props[0] = {"type", "\"rectangle\""}
+			props[1] = {"id", fmt.aprintf("\"%s\"", id)}
+			props[2] = {"width", "10"}
+			props[3] = {"height", "10"}
+			append(&ops, engine.Op{kind = .Create, node = id, parent = p.id, sort = strings.clone(engine.sort_between(last, "")), props = props})
+		case 4:
+			if n.parent == 0 do return nil // keep the top level
+			append(&ops, engine.Op{kind = .Delete, node = n.id})
+		case 5:
+			if len(frames) == 0 || n.parent == 0 do return nil
+			p := frames[rand.int_max(len(frames))]
+			if p.uid == n.uid || engine.is_descendant(doc, p.uid, n.uid) do return nil
+			append(&ops, engine.Op{kind = .Move, node = n.id, parent = p.id, sort = strings.clone(engine.sort_between("", state.sorts[n.id] or_else "a0"))})
+		case 6:
+			append(&ops, engine.Op{kind = .Hset, key = fmt.aprintf("variables/v%d", rand.int_max(5)), raw = fmt.aprintf("{{\"type\":\"number\",\"value\":%d}}", rand.int_max(100))})
+		}
+		return ops[:]
+	}
+	deliver_room :: proc(room: ^engine.Document, room_state: ^engine.Cloud_State, seq: ^int, in_: Inbound, outbox: [][dynamic]Msg, acks, nacks: ^int) {
+		res := engine.ops_apply(room, room_state, in_.ops)
+		if !res.ok {
+			append(&outbox[in_.from], Msg{kind = .Nack, batch = in_.batch})
+			nacks^ += 1
+			return
+		}
+		seq^ += 1
+		acks^ += 1
+		for i in 0 ..< len(outbox) {
+			if i == in_.from do append(&outbox[i], Msg{kind = .Ack, batch = in_.batch, seq = seq^})
+			else do append(&outbox[i], Msg{kind = .Ops, seq = seq^, ops = in_.ops})
+		}
+	}
+	deliver_client :: proc(c: ^engine.Sync_Client, m: Msg) {
+		switch m.kind {
+		case .Ops: engine.sync_remote(c, m.seq, m.ops)
+		case .Ack: engine.sync_ack(c, m.batch, m.seq)
+		case .Nack: engine.sync_nack(c, m.batch)
+		}
+	}
+	for _ in 0 ..< steps {
+		switch rand.int_max(3) {
+		case 0:
+			i := rand.int_max(nclients)
+			ops := engine.ops_clone(edit(&shown[i], &shown_state[i]))
+			if len(ops) == 0 do continue
+			res := engine.ops_apply(&shown[i], &shown_state[i], ops)
+			if !res.ok do continue
+			edits += 1
+			if os.get_env("AGENTIC_SIM_TRACE", context.temp_allocator) != "" {
+				for op in ops {
+					b := strings.builder_make(context.temp_allocator)
+					engine.op_write(&b, op)
+					fmt.printfln("c%d edit %d: %s", i, edits, strings.to_string(b))
+				}
+			}
+			id := engine.sync_local(&clients[i], ops)
+			append(&room_in, Inbound{i, id, ops})
+		case 1:
+			if len(room_in) == 0 do continue
+			// the room takes batches in arrival order per client, but clients interleave
+			k := rand.int_max(len(room_in))
+			for j in 0 ..< k do if room_in[j].from == room_in[k].from {k = j; break}
+			in_ := room_in[k]
+			ordered_remove(&room_in, k)
+			deliver_room(&room, &room_state, &seq, in_, outbox, &acks, &nacks)
+		case 2:
+			i := rand.int_max(nclients)
+			if len(outbox[i]) == 0 do continue
+			m := outbox[i][0]
+			ordered_remove(&outbox[i], 0)
+			deliver_client(&clients[i], m)
+		}
+		free_all(context.temp_allocator)
+	}
+	for len(room_in) > 0 {
+		in_ := room_in[0]
+		ordered_remove(&room_in, 0)
+		deliver_room(&room, &room_state, &seq, in_, outbox, &acks, &nacks)
+	}
+	for i in 0 ..< nclients do for len(outbox[i]) > 0 {
+		m := outbox[i][0]
+		ordered_remove(&outbox[i], 0)
+		deliver_client(&clients[i], m)
+	}
+	engine.pages_prune(&room)
+	want := engine.doc_serialize(&room)
+	bad := 0
+	for i in 0 ..< nclients {
+		engine.pages_prune(&shown[i])
+		got := engine.doc_serialize(&shown[i])
+		if got != want {
+			bad += 1
+			_ = os.write_entire_file(fmt.tprintf("/tmp/cloud-sim-client%d.pen", i), transmute([]u8)got)
+		}
+		if len(clients[i].pending) != 0 do bad += 1
+	}
+	if bad > 0 {
+		_ = os.write_entire_file("/tmp/cloud-sim-room.pen", transmute([]u8)want)
+		fmt.printfln("FAIL seed %d: %d of %d clients differ from the room (%d edits, %d acks, %d nacks)", seed, bad, nclients, edits, acks, nacks)
+		os.exit(1)
+	}
+	fmt.printfln("ok   seed %d: %d clients converge (%d edits, %d acks, %d nacks, seq %d)", seed, nclients, edits, acks, nacks, seq)
 }
