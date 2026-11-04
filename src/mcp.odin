@@ -17,7 +17,7 @@ import "core:time"
 // Agentic Design window over the local control socket and starts the window if needed.
 
 MCP_INSTRUCTIONS :: `Agentic Design is a native design canvas running on this Mac that edits .pen files (pencil.design). The user sees every change live.
-Start with open (the path of the .pen file you work on; "create": true starts a new one). Edits go only to that document: until a session has opened one, or a call passes "document": <path>, edits are refused instead of landing in whatever the window shows, and if the window shows another document (the user switched tabs, or it restarted), calls are refused until you open yours again. Every reply names the "file" it read or changed.
+Your session works on one document: the one the window shows when you first call a tool, the one you open, or the one a call names with "document": <path>. Any call (edits, get_document, screenshot) can pass "document" to work on another .pen file without showing it: it is read, changed and saved in place while the user keeps looking at theirs, and later calls stay on it. open shows a document in the window ("create": true starts a new one). If the window shows only the dashboard, open or name a document first. Every reply names the "file" it read or changed.
 Nodes are exchanged in the .pen format itself. A node has "type", "id" (a unique string, auto-generated if omitted) and properties:
 - types: frame (container; "layout": "none" | "horizontal" | "vertical", "gap", "padding" (n or [v,h] or [t,r,b,l]), "justifyContent", "alignItems", "clip"), group, rectangle, ellipse, path ("geometry": SVG path data), text ("content", "fontSize", "fontWeight" "400".."700", "textGrowth": "auto" | "fixed-width" | "fixed-width-height", "textAlign", "letterSpacing", "underline"), icon ("library": "lucide", "icon": "house"; its "fill" is the color), ref (instance of a node with "reusable": true; "ref": its id; "descendants": {"<id inside the component>": {"content": ...}} overrides its parts).
 - Design tokens: set_variables defines variables and theme axes; use them as "$name" in any property.
@@ -174,16 +174,18 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 	}
 	if name == "open" do file = ""
 	if file == "" && mcp_edits(name) {
+		// no document yet: the one the window shows, from now on this session's (decision 85)
 		shown := ""
 		if r, rok := app_request(`{"method":"window","params":{}}`); rok {
 			if v, perr := json.parse_string(r, .JSON, true, context.temp_allocator); perr == nil {
 				if vo, is_obj := v.(json.Object); is_obj do shown = string(vo["file"].(json.String) or_else "")
 			}
 		}
-		msg := "No document chosen for edits in this session, so nothing was changed. Call open with the path of the .pen file you mean to edit, or pass \"document\": <path> with this call."
-		if shown != "" do msg = fmt.tprintf("%s The window shows %s; open it to keep working there.", msg, shown)
-		tool_error(b, msg)
-		return
+		if shown == "" {
+			tool_error(b, "The window shows the dashboard, no document, so nothing was changed. Call open with the path of a .pen file (\"create\": true for a new one), or pass \"document\": <path> to work on a file without showing it.")
+			return
+		}
+		file = engine.absolute_path(shown)
 	}
 	file_json := ""
 	if file != "" {

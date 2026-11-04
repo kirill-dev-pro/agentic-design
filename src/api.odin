@@ -25,6 +25,21 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 	root, err := json.parse_string(req.body, .JSON, false, context.temp_allocator)
 	if err != nil do return api_error("invalid JSON request"), false
 	obj, _ := root.(json.Object)
+	// a request for a document the window does not show runs on it in place (decision 85)
+	method := string(obj["method"].(json.String) or_else "")
+	if f, has := obj["file"].(json.String); has && f != "" && !document_free(method) && !(app.tab >= 0 && same_file(string(f), app.file_path)) {
+		params, _ := obj["params"].(json.Object)
+		if method == "screenshot" && (params["view"].(json.Boolean) or_else false) {
+			return api_error(fmt.tprintf("A view screenshot shows the window, and the window shows %s. Take a screenshot of the document or of a layer instead (no \"view\").", app.file_path if app.tab >= 0 else "the dashboard")), false
+		}
+		t, e := background_find(string(f))
+		if e != "" do return api_error(e), false
+		background_enter(t)
+		response, deferred = api_dispatch_request(req, obj)
+		if deferred && shot.req == req do render_screenshot() // drawn now, while it is in `app`
+		background_leave(t)
+		return
+	}
 	before: map[int]Node_Sig
 	if presence_wants_signature(obj) do before = doc_signature(&app.doc)
 	response, deferred = api_dispatch_request(req, obj)
@@ -35,16 +50,6 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: string, deferred: bool) {
 	method := string(obj["method"].(json.String) or_else "")
 	params, _ := obj["params"].(json.Object)
-
-	// The document a request is for ("file", next to "method"): a request that names one is
-	// refused when the window shows another, so an agent's edits never fall back to whatever
-	// is open (after a restart, or when the user switched tabs). The MCP server sends it.
-	if f, has := obj["file"].(json.String); has && f != "" && !document_free(method) {
-		if app.tab < 0 || !same_file(string(f), app.file_path) {
-			shown := app.file_path if app.tab >= 0 else "no document"
-			return api_error(fmt.tprintf("This request is for %s, but the window shows %s. Nothing was changed. Call open with %s to work on it again (or open another file on purpose).", f, shown, f)), false
-		}
-	}
 
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, `{"ok":true,"result":`)
@@ -298,7 +303,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 	if e != "" do return api_error(e), false
 	// every answer says which document it read or changed (after the method: open and save
 	// may have changed it)
-	if app.tab >= 0 {
+	if app.file_path != "" {
 		strings.write_string(&b, `,"file":`)
 		engine.json_write_string(&b, app.file_path)
 	}

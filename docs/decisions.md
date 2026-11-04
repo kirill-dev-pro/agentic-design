@@ -2139,3 +2139,25 @@ interface could not be made larger.
 
 **Consequences.** Coordinates in tests that click the interface changed (tools/uidrive.py maps
 them). The designs are in app-ui.pen; the agent input at the bottom is not built yet.
+
+## 85. Agents work on documents the window does not show
+
+**Problem.** Decision 75 refused every request for a document the window did not show, so an
+agent could not look at or change another file while the user kept theirs open, and its
+first edit always cost an `open` that took over the user's view.
+
+**Decision.**
+
+- A request that names another document (`"file"`) runs on it in place
+  (`src/background_docs.odin`): the document of another tab, or one read from disk and kept
+  for three minutes, is swapped into `app` for that request alone, saved if it changed, and
+  swapped back. Requests run between frames, so nothing of it is drawn; the user's view,
+  selection and undo stay as they were. A screenshot of it is drawn at once; a `view`
+  screenshot (the window) is refused. Opening that file later keeps its undo history.
+- An MCP session without a document takes the one the window shows at its first edit; with
+  only the dashboard shown, the edit is refused. `open` still shows a document.
+- After a restart onto another file, a session's edits keep going to its own document,
+  in the background, instead of being refused.
+
+**Consequences.** tests/mcp/document_binding.py checks the new rules; the edits it once
+expected to be refused now land in their own file while the window shows another.

@@ -42,6 +42,7 @@ memory_trim :: proc() -> uint {return 0}
 // activity_darwin.odin, process_desktop.odin: agents
 agent_activity_touch :: proc() {}
 agent_activity_tick :: proc() {}
+background_tick :: proc() {}
 agent_process_gone :: proc(id: string) -> bool {return false}
 
 // open_events_darwin.odin: documents the system asks to open

@@ -92,6 +92,16 @@ open_in_tab :: proc(path: string) -> bool {
 			return true
 		}
 	}
+	when ODIN_OS != .JS {
+		// a document an agent was working on in the background: with its undo history
+		if t, ok := background_take(abs); ok {
+			append(&app.tabs, t)
+			tab_activate(len(app.tabs) - 1)
+			recents_touch(abs)
+			update_title()
+			return true
+		}
+	}
 	data, rerr := fs_read(abs, context.temp_allocator)
 	if rerr != nil do return false
 	append(&app.tabs, Tab{zoom = 1, cam = {-80, -60}})
