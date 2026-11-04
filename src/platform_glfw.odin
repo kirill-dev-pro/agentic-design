@@ -262,6 +262,8 @@ drop_callback :: proc "c" (window: glfw.WindowHandle, count: c.int, paths: [^]cs
 #assert(KEY_A == glfw.KEY_A)
 #assert(KEY_APOSTROPHE == glfw.KEY_APOSTROPHE)
 #assert(KEY_BACKSLASH == glfw.KEY_BACKSLASH)
+#assert(KEY_L == glfw.KEY_L)
+#assert(KEY_PERIOD == glfw.KEY_PERIOD)
 #assert(KEY_B == glfw.KEY_B)
 #assert(KEY_BACKSPACE == glfw.KEY_BACKSPACE)
 #assert(KEY_C == glfw.KEY_C)

@@ -194,7 +194,10 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 		engine.json_write_string(&fb, file)
 		file_json = strings.to_string(fb)
 	}
-	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s%s}}`, name, args_json, strings.to_string(agent), file_json)
+	// a run started from the window's agent input (agent_run.odin): its requests say so
+	run_json := ""
+	if run := os.get_env("AGENTIC_RUN", context.temp_allocator); run != "" do run_json = fmt.tprintf(`,"run":"%s"`, run)
+	request := fmt.tprintf(`{{"method":"%s","params":%s,"agent":%s%s%s}}`, name, args_json, strings.to_string(agent), file_json, run_json)
 	response, ok := app_request(request)
 	if !ok {
 		if !mcp_may_launch() do tool_error(b, fmt.tprintf("No Agentic Design window answers on port %d, and starting one is off (--no-launch or AGENTIC_NO_LAUNCH).", server_port()))

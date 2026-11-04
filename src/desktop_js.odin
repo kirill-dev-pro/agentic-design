@@ -43,6 +43,13 @@ memory_trim :: proc() -> uint {return 0}
 agent_activity_touch :: proc() {}
 agent_activity_tick :: proc() {}
 background_tick :: proc() {}
+agent_tick :: proc() {}
+agents_stop_all :: proc() {}
+agent_history_clear :: proc() {}
+agent_user_edit :: proc(path: string) {}
+agent_chrome_hit :: proc(p: [2]f32) -> bool {return false}
+draw_agent_input :: proc(vg: ^nvg.Context) {}
+agent_input_reserve :: proc() -> f32 {return 0}
 agent_process_gone :: proc(id: string) -> bool {return false}
 
 // open_events_darwin.odin: documents the system asks to open

@@ -227,6 +227,7 @@ app_frame :: proc() {
 	}
 	agent_activity_tick()
 	background_tick()
+	agent_tick()
 	update_tick()
 	share_tick()
 	if app.needs_layout do engine.layout_invalidate()
@@ -271,6 +272,7 @@ app_frame :: proc() {
 app_stop :: proc() {
 	if exit_signal != {} do app_log("exit: signal %v", exit_signal)
 	else do app_log("exit: window closed")
+	agents_stop_all() // the agents started from the input end with the window
 	if app.dirty do save_document(app.file_path)
 	for &t in app.tabs do if t.dirty && t.path != "" {
 		data := engine.doc_serialize(&t.doc)
@@ -454,6 +456,7 @@ push_undo :: proc() {
 	for s in app.redo_stack do engine.free_snapshot(s)
 	clear(&app.redo_stack)
 	mark_dirty()
+	agent_user_edit(app.file_path) // the user's own change ends an agent run's undo step here
 }
 
 undo :: proc() {

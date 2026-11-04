@@ -507,7 +507,7 @@ field_is_focused :: proc(uid: int, key: string) -> bool {
 // A text field bound to a node property (uid > 0) or an app setting (uid = 0);
 // commits on Enter, Tab or click-away. `plain` draws it without a box. Numeric
 // fields can be scrubbed by dragging their icon/prefix and stepped with ↑/↓.
-field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: string, plain := false, placeholder := "", icon := Icon.Select, numeric := false) {
+field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: string, plain := false, placeholder := "", icon := Icon.Select, numeric := false, bare := false) {
 	index := ui.field_count
 	ui.field_count += 1
 	focused := field_is_focused(uid, key)
@@ -517,10 +517,10 @@ field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: s
 		field_focus(uid, key, value)
 		focused = true
 	}
-	if !plain || focused || hover {
+	if !bare && (!plain || focused || hover) {
 		fill_rect(vg, r, nvg.Color{1, 1, 1, 0.1} if focused || hover else FIELD_BG, 6)
 	}
-	if focused do stroke_rect(vg, r, ACCENT, 6)
+	if focused && !bare do stroke_rect(vg, r, ACCENT, 6)
 
 	// prefix / icon zone (also the scrub handle for numbers)
 	tx := r.x + 10

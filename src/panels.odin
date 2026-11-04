@@ -71,7 +71,7 @@ chrome_hit :: proc(p: [2]f32) -> bool {
 			if in_rect(panel_rect(side), p) do return true
 		} else if in_rect(corner_button_rect(side), p) do return true
 	}
-	return in_rect(toolbar_rect(), p)
+	return in_rect(toolbar_rect(), p) || agent_chrome_hit(p)
 }
 
 // The pointer is on the canvas itself (not on a panel, the tool bar or the tab bar).

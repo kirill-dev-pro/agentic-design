@@ -27,6 +27,10 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 	obj, _ := root.(json.Object)
 	// a request for a document the window does not show runs on it in place (decision 85)
 	method := string(obj["method"].(json.String) or_else "")
+	// a request of an agent run started in the window (decision 86): refused once the run
+	// was stopped; its changes to a document are one undo step
+	run, run_ok := agent_run_of(obj)
+	if !run_ok do return api_error("This agent run was stopped in Agentic Design; nothing was changed."), false
 	if f, has := obj["file"].(json.String); has && f != "" && !document_free(method) && !(app.tab >= 0 && same_file(string(f), app.file_path)) {
 		params, _ := obj["params"].(json.Object)
 		if method == "screenshot" && (params["view"].(json.Boolean) or_else false) {
@@ -35,14 +39,18 @@ api_dispatch :: proc(req: ^Request) -> (response: string, deferred: bool) {
 		t, e := background_find(string(f))
 		if e != "" do return api_error(e), false
 		background_enter(t)
+		saved := agent_request_begin(run, app.file_path)
 		response, deferred = api_dispatch_request(req, obj)
 		if deferred && shot.req == req do render_screenshot() // drawn now, while it is in `app`
+		agent_request_end(run, app.file_path, method, strings.has_prefix(response, `{"ok":true`), saved)
 		background_leave(t)
 		return
 	}
 	before: map[int]Node_Sig
 	if presence_wants_signature(obj) do before = doc_signature(&app.doc)
+	saved := agent_request_begin(run, app.file_path)
 	response, deferred = api_dispatch_request(req, obj)
+	agent_request_end(run, app.file_path, method, strings.has_prefix(response, `{"ok":true`), saved)
 	presence_after_request(obj, before, deferred || strings.has_prefix(response, `{"ok":true`))
 	return
 }

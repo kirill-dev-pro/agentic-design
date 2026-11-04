@@ -137,7 +137,7 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	cols := max(int((app.screen.x - 2 * x0 + gap) / (280 + gap)), 1)
 	cw := (app.screen.x - 2 * x0 - gap * f32(cols - 1)) / f32(cols)
 	rows_n := (len(items) + cols - 1) / cols
-	dash.content_h = f32(rows_n) * (ch + gap) + 24
+	dash.content_h = f32(rows_n) * (ch + gap) + 24 + agent_input_reserve() // the agent input floats below
 	dash.scroll = clamp(dash.scroll - wheel_over(area), 0, max(dash.content_h - area.h, 0))
 	nvg.Save(vg)
 	nvg.Scissor(vg, area.x, area.y, area.w, area.h)

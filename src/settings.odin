@@ -355,8 +355,13 @@ draw_settings_canvas :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 }
 
 draw_settings_agents :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
-	box := settings_group(vg, x, w, y, "", 2)
-	cy := settings_row_text(vg, box, 0, "Connect agents", "Claude Code, Codex and other MCP clients edit the open file")
+	box := settings_group(vg, x, w, y, "", 3)
+	cy := settings_row_text(vg, box, 2, "Agent history", "The requests and answers kept for each file on this Mac")
+	if button(vg, {box.x + box.w - 14 - 120, cy - 14, 120, 28}, "Clear history") {
+		agent_history_clear()
+		set_status("Agent history cleared")
+	}
+	cy = settings_row_text(vg, box, 0, "Connect agents", "Claude Code, Codex and other MCP clients edit the open file")
 	if button(vg, {box.x + box.w - 14 - 120, cy - 14, 120, 28}, "Set up…") {
 		settings_open = false
 		onboarding_start(1)

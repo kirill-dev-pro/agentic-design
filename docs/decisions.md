@@ -2161,3 +2161,34 @@ first edit always cost an `open` that took over the user's view.
 
 **Consequences.** tests/mcp/document_binding.py checks the new rules; the edits it once
 expected to be refused now land in their own file while the window shows another.
+
+## 86. Ask an agent from the window
+
+**Problem.** Agents could change a design only from outside the app: a terminal or another
+editor with our MCP server. The user had to switch windows to ask for a change, and an
+agent's work came back as many undo steps.
+
+**Decision.**
+
+- A rounded input at the bottom centre of the canvas and of the dashboard (app-ui.pen,
+  "Agent input"; `src/agent_input.odin`) runs the user's own Claude Code or Codex headless,
+  signed in as the user already is (`src/agent_run.odin`): `claude -p --output-format
+  stream-json` or `codex exec --json`, with only our MCP server (`--strict-mcp-config`,
+  built-in tools off; Codex read-only with only our server, its tools approved). Nothing is
+  bundled and no key is stored. The guide sent with the prompt names the document shown and
+  the selection; on the dashboard it says no file is open and where to create a new design
+  (~/Documents/Agentic Design unless the user names another folder); a run that opens a file
+  goes on in that file's thread.
+- Each run has a token the MCP server passes with every request (`AGENTIC_RUN` → `"run"`).
+  The window refuses requests of a stopped run. A run's changes to a document are one undo
+  step until the user edits it by hand; the thread's Undo takes back the last run, and the
+  next request tells the agent it was undone.
+- The thread panel above the input shows the requests, what the agent says, its tool calls
+  folded by tool, and how the run ended (time, tool calls, cost). Send becomes Stop (⌘.):
+  SIGINT, then SIGKILL after 3 s. ⌘L focuses the input. Follow-ups resume the CLI's session.
+  Threads are kept per file in Application Support (never in the .pen); Settings → Agents
+  clears them. Quitting stops running agents.
+
+**Consequences.** tests/agent/input.py drives it with a stand-in CLI (fake_claude.py) that
+starts our MCP server from the config, as Claude Code does. Test windows show the input only
+with AGENTIC_AGENT_INPUT=1. The web editor has no input yet (it cannot start processes).

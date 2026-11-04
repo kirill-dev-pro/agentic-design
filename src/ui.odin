@@ -28,6 +28,7 @@ draw_ui :: proc() {
 		draw_inspector(vg)
 		draw_corner_buttons(vg)
 	}
+	draw_agent_input(vg)
 	draw_tab_bar(vg)
 	draw_component_drag_ghost(vg)
 	components_drag_update()
@@ -656,7 +657,7 @@ draw_inspector_content :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 
 	n, _ := engine.doc_find_uid(&app.doc, app.sel[0])
 	if n == nil do return
-	if ui.focus != "" && ui.focus_uid != n.uid do field_commit()
+	if ui.focus != "" && ui.focus_uid != n.uid && ui.focus != "agent.prompt" do field_commit() // (the agent input keeps its text)
 	if n.flow == .Connector do draw_connector_section(vg, n, x, right, y)
 	draw_node_properties(vg, n, x, right, y)
 }
@@ -1194,7 +1195,7 @@ field_apply :: proc() {
 	if ui.focus_uid == 0 {
 		if variables_table_apply(ui.focus, text) do return
 		if settings_field_apply(ui.focus, text) do return
-		if ui.focus == "vt.search" || ui.focus == "comp.search" || ui.focus == "layers.search" || ui.focus == "dash.search" do return
+		if ui.focus == "vt.search" || ui.focus == "comp.search" || ui.focus == "layers.search" || ui.focus == "dash.search" || ui.focus == "agent.prompt" do return
 		if ui.focus == "picker.hex" || ui.focus == "picker.alpha" {
 			picker_apply_text(ui.focus, text)
 			return
