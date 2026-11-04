@@ -225,3 +225,16 @@ export const accountDeletion = sqliteTable('account_deletion', {
 	requestedAt: timestamp('requestedAt').notNull(),
 	doneAt: timestamp('doneAt'),
 })
+
+/** Google/GitHub sign-in steps, to find where a sign-in goes (src/auth-trace.ts). No secrets. */
+export const authTrace = sqliteTable('auth_trace', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	at: timestamp('at').notNull(),
+	step: text('step').notNull(),
+	provider: text('provider'),
+	asked: text('asked'),
+	status: integer('status').notNull(),
+	location: text('location'),
+	hadStateCookie: integer('hadStateCookie', { mode: 'boolean' }).notNull(),
+	hadState: integer('hadState', { mode: 'boolean' }).notNull(),
+})

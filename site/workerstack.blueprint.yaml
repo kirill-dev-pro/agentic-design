@@ -53,6 +53,9 @@ resources:
       - exportName: asset
         physicalName: asset
         system: false
+      - exportName: authTrace
+        physicalName: auth_trace
+        system: false
       - exportName: _system.files
         physicalName: bunderstack_file_meta
         system: true

@@ -13,6 +13,7 @@ import { createMemoryRateLimitStore, type RateLimitStore } from 'workerstack'
 import { durableRateLimitStore, type ExecutionContextLike } from 'workerstack/workers'
 
 import { handleExport } from './account'
+import { traced, withAuthTrace } from './auth-trace'
 import { handleAppAuth } from './app-auth'
 import { handleBlobPut, type App } from './blobs'
 import { handleRoom, ROOM_PATH } from './room/route'
@@ -60,6 +61,10 @@ export default {
 		const room = ROOM_PATH.exec(path)
 		if (room) return own('page', (app) => handleRoom(app as never, request, env.DOC_ROOM, decodeURIComponent(room[1]!)))
 		if (OWNER_FILES.test(path)) return own('content', (app) => handleOwnerContent(app, request))
+		if (traced(path))
+			return worker.withContext(ctx, async () =>
+				withAuthTrace((await worker.app(env as never)) as never, request, (r) => worker.handler.fetch(r, env as never, ctx)),
+			)
 		if (path === '/api' || path.startsWith('/api/')) {
 			return worker.handler.fetch(request, env as never, ctx)
 		}

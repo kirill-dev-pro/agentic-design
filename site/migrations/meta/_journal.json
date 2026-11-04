@@ -50,6 +50,20 @@
       "when": 1793796147146,
       "tag": "0006_yummy_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793802387645,
+      "tag": "0007_nostalgic_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793802388182,
+      "tag": "0008_delete_test_accounts",
+      "breakpoints": true
     }
   ]
 }

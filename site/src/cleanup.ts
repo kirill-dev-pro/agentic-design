@@ -4,6 +4,7 @@
 // for a version still being committed is never taken away.
 import { and, eq, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm'
 
+import { pruneAuthTrace } from './auth-trace'
 import { blobKey, bucket, type App } from './blobs'
 import type { Manifest } from './files'
 import { blobsOf } from './files'
@@ -37,6 +38,8 @@ export async function cleanup(app: Pick<App, 'db' | 'storage'>, now = Date.now()
 	}
 
 	await db.delete(appAuthCode).where(lt(appAuthCode.expiresAt, new Date(now - HOUR)))
+
+	await pruneAuthTrace(app, now)
 
 	// blobs: per workspace, what its remaining versions name
 	const used = new Map<string, Set<string>>()

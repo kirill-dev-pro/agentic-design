@@ -24,4 +24,5 @@ export const access = defineAccess(schema, {
 	viewMetric: closed,
 	appAuthCode: closed,
 	accountDeletion: closed,
+	authTrace: closed,
 })
