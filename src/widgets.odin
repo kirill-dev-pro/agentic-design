@@ -89,6 +89,11 @@ UI :: struct {
 	// floating panels (panels.odin): the offset of the panel being drawn, and each panel's
 	// full height last frame (its header and content), which its height follows
 	origin:         [2]f32,
+	// the widget that took this frame's click, on screen (clicked): a widget that appears
+	// under the pointer in the same frame (a panel's corner button where its hide button
+	// was) does not get the click too
+	click_taken:    bool,
+	click_rect:     Rect,
 	side_full_h:    f32,
 	insp_full_h:    f32,
 }
@@ -98,6 +103,7 @@ ui: UI
 // Call before drawing any widget in a frame.
 widgets_begin_frame :: proc() {
 	ui.input_claimed = false
+	ui.click_taken = false
 	ui.field_count = 0
 	ui.cursor_hint = .Default
 	if ui.tooltip != "" {
@@ -187,10 +193,21 @@ wheel_over :: proc(r: Rect) -> f32 {
 	return pf.wheel.y * 30 + pf.scroll.y
 }
 
+// A click goes to one widget: the first drawn under the pointer, and the rects around it (a
+// row drawn after the buttons in it). The layout can change while a frame is drawn (a hidden
+// panel leaves a button where its own was), and a widget that only now appeared under the
+// pointer, or another one beside it, must not act on the same click.
 clicked :: proc(r: Rect) -> bool {
 	if ui_modal() && !ui.overlay_pass do return false
 	if ui.clip.w > 0 && !in_rect(ui.clip, app.mouse) do return false
-	return mouse_pressed(MOUSE_BUTTON_LEFT) && in_rect(r, app.mouse)
+	if !mouse_pressed(MOUSE_BUTTON_LEFT) || !in_rect(r, app.mouse) do return false
+	s := Rect{r.x + ui.origin.x, r.y + ui.origin.y, r.w, r.h}
+	if ui.click_taken {
+		t := ui.click_rect
+		return s.x <= t.x && s.y <= t.y && s.x + s.w >= t.x + t.w && s.y + s.h >= t.y + t.h
+	}
+	ui.click_taken, ui.click_rect = true, s
+	return true
 }
 
 // Column i of n equal columns inside r.
