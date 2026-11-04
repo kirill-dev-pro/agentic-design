@@ -22,7 +22,8 @@ import "core:time"
 // Test windows (AGENTIC_QUIET) index nothing unless AGENTIC_FILES_ROOT names a folder to
 // index instead of the home folder, so a fuzzed window never lists the user's files.
 
-FILES_RESCAN :: 10 * time.Minute
+FILES_RESCAN :: time.Minute // while the dashboard stays open
+FILES_RESCAN_ON_SHOW :: 15 * time.Second // coming back to the dashboard
 
 File_Item :: struct {
 	path:              string,
@@ -51,12 +52,14 @@ files_root :: proc() -> string {
 	return home
 }
 
-// Starts a scan if none ran for FILES_RESCAN (or `force`).
-files_refresh :: proc(force := false) {
+// Starts a scan if none ran for FILES_RESCAN, or FILES_RESCAN_ON_SHOW when the dashboard was just
+// shown (a file made elsewhere since then shows up), or `force`.
+files_refresh :: proc(force := false, shown := false) {
 	if sync.atomic_load(&files.running) do return
 	root := files_root()
 	if root == "" do return
-	if !force && files.scanned_at != {} && time.since(files.scanned_at) < FILES_RESCAN do return
+	wait := FILES_RESCAN_ON_SHOW if shown else FILES_RESCAN
+	if !force && files.scanned_at != {} && time.since(files.scanned_at) < wait do return
 	files.scanned_at = time.now()
 	sync.atomic_store(&files.running, true)
 	r := new(string)
