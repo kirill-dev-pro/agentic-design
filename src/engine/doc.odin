@@ -2017,7 +2017,7 @@ image_of :: proc(doc: ^Document, v: json.Value) -> (url: string, mode: Image_Mod
 		}
 		url = string(x["url"].(json.String) or_else "")
 		switch string(x["mode"].(json.String) or_else "cover") {
-		case "contain": mode = .Contain
+		case "contain", "fit": mode = .Contain // fit and fill: pen.dev's older names, which it reads as contain and cover
 		case "stretch": mode = .Stretch
 		}
 		return url, mode, url != ""
