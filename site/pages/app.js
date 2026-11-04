@@ -100,6 +100,8 @@ const App = (() => {
 				b.disabled = true;
 				try {
 					const r = await api("POST", "/api/auth/managed/sign-in", { provider: p.id, callbackURL: nextPath() });
+					// where to go if the provider's round trip ends on the home page instead (main.js)
+					try { sessionStorage.setItem("ad-next", JSON.stringify({ to: nextPath(), t: Date.now() })); } catch (e) {}
 					if (r && r.url) location.assign(r.url);
 				} catch (e) {
 					b.disabled = false;

@@ -17,6 +17,18 @@
 	media.addEventListener("change", label);
 	label();
 
+	// Back from Google or GitHub on the home page rather than where the sign-in was meant to
+	// lead (app.js noted it just before leaving): when there is a session, go there.
+	try {
+		var wanted = JSON.parse(sessionStorage.getItem("ad-next") || "null");
+		if (wanted) {
+			sessionStorage.removeItem("ad-next");
+			if (location.pathname === "/" && Date.now() - wanted.t < 10 * 60 * 1000 && typeof wanted.to === "string" && wanted.to.charAt(0) === "/" && wanted.to.charAt(1) !== "/" && wanted.to.charAt(1) !== "\\") {
+				fetch("/api/me", { credentials: "same-origin" }).then(function (r) { if (r.ok) location.replace(wanted.to); });
+			}
+		}
+	} catch (e) {}
+
 	if (document.querySelector("[data-download]")) fetch("https://api.github.com/repos/kirill-dev-pro/agentic-design/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
 		.then(function (r) { return r.ok ? r.json() : null; })
 		.then(function (release) {
