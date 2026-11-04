@@ -442,18 +442,21 @@ Each client undoes only its own steps. Remote edits never enter its stack.
 The goal: exporting a cloud document gives exactly the bytes the Mac app writes when it
 saves the same state. A file the app has saved survives upload and download byte for byte.
 
-- **Values are never re-encoded.** Each prop's raw JSON text is stored and relayed
-  verbatim, from the client's step diff through the server to every other client. Numbers
-  keep their digits (`1.0` stays `1.0`) and unknown keys their exact form. JSON objects are never round-tripped
-  through JavaScript in the Durable Object. Props are a list of pairs, because JavaScript
-  objects reorder integer-like keys.
-- **Order is kept.** A node's props keep their order: a new key is appended unless the
-  engine's rank logic places it (a generated `id` goes where `prop_rank` puts it), and an
-  existing key is replaced in place. The header follows pen-format.md. Children are
-  serialized in sort-key order.
+- **One canonical form.** The engine writes every `.pen` canonically: raw values as
+  compact JSON with object keys sorted, node props in the order `type`, `id`, `name`, then
+  alphabetical, header keys `version`, `themes`, `variables`, then alphabetical; that is
+  why a file the app has saved survives a round trip byte for byte. The room canonicalizes
+  every incoming value with the same code before it stores or relays it, so order never
+  depends on who wrote first. Children are serialized in sort-key order. (Corrects the
+  proposal's "values are never re-encoded": checked against `src/engine/pen.odin`.)
+- **Derived props** (layout's own writes: shapes that hug their text, connector routes,
+  load-time migrations) are never sent as ops; the room computes them at checkpoints with
+  `pencore` including layout. In cloud documents every client and the room lay out with
+  the document's embedded fonts plus the built-in fallback only, never installed fonts, so
+  they measure the same. The protocol: `cloud-ops.md` (S0, with Dev).
 - **One serializer.** The Durable Object serializes with the engine itself: the document
-  model and `pen.odin` (`doc_load`, `doc_serialize`; no GPU, fonts or layout) built as a
-  small `pencore.wasm` (a few hundred KB) that the Durable Object loads. The same code
+  model, `pen.odin` and layout with its fonts (no GPU or drawing) built as `pencore.wasm`,
+  which the Durable Object loads. The same code
   validates uploads. Byte stability then holds by construction, not by two implementations
   kept in step. `doc_serialize` is a function of this state only with rules a second
   implementation would get wrong (Dev):
