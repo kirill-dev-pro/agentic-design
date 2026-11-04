@@ -170,7 +170,13 @@ export class DocRoom extends DurableObject {
 		} catch {
 			return send(socket, { t: 'error', reason: 'BAD_MESSAGE' })
 		}
-		const room = await this.load()
+		let room: Room | null
+		try {
+			room = await this.load()
+		} catch (error) {
+			console.error('[DocRoom] cannot load the document', String(error))
+			return socket.close(1011, 'ENGINE_UNAVAILABLE')
+		}
 		if (!room) return socket.close(4410, 'GONE')
 
 		if (msg.t === 'hello') {

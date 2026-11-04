@@ -25,6 +25,8 @@ export async function loadPencore(source: WebAssembly.Module | BufferSource): Pr
 			: (await WebAssembly.instantiate(source, imports)).instance
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const x = instance.exports as any
+	if (typeof x.pc_open !== 'function')
+		throw new Error('[pencore] no engine in this build (pencore.wasm is the empty stand-in of a SKIP_VIEWER=1 build)')
 	mem = x.memory
 	x._start?.()
 	const put = (s: string): [number, number] => {
