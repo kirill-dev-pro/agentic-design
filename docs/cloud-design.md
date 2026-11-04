@@ -89,6 +89,20 @@ Taken when the proposal was approved (November 2026).
     `.pen`, 25 MB per asset, 100 shared files, and views rate-limited per link and per IP
     (§3.6).
 
+**Owner's decisions of 2026-11-04** (cloud documents and multiplayer start now, in
+parallel with the site; execution plan with Dev and Web):
+
+14. **A file is local or cloud, never both.** Share on a local file means "Copy to cloud":
+    it creates a cloud document, opens it and gives its link. The local file is not linked
+    to the copy, and the two may diverge. This retires M1's "upload a new version behind
+    the same link": M1 shared files become cloud documents (their latest upload is the
+    first checkpoint, their links keep working).
+15. **The hosted cloud agent is paid.** It runs on the service's side with its own LLM
+    provider: the agent input in the web editor, and one of the choices in the Mac app. It
+    is metered per account and checked against an entitlement. People's own agents (Claude
+    Code, Codex and others through the Mac app's MCP server) keep working on cloud documents
+    they can edit; whether that stays free is to be confirmed (§9).
+
 ---
 
 ## 1. Document types
@@ -1048,6 +1062,14 @@ it down:
 ## 9. Still open
 
 The other questions of the proposal are answered under [Decisions](#decisions).
+
+- **Cloud documents for free accounts.** Decision 2 makes cloud documents paid, and decision
+  14 turns M1's free shared files into cloud documents. Until billing exists, the proposal
+  is: every account may hold cloud documents (the `cloudDocs` entitlement on for the free
+  plan), and limits are set by entitlements once prices are known.
+- **People's own agents on cloud documents:** free (assumed by decision 15), or metered?
+- **The hosted agent:** LLM provider and model; the pricing unit (per request, per token, a
+  monthly allowance).
 
 1. **Billing**: provider, prices and trial, before M2 ships.
 2. **Team pricing**: per seat or per workspace, before M3.
