@@ -139,6 +139,16 @@ platform_gpu_create :: proc() -> ^nvg.Context {
 	return pf.vg
 }
 
+// The interface's fonts: a browser has no system fonts to read, so Noto Sans, built into the
+// engine (what the viewer draws text without a family with), serves as all three.
+platform_load_fonts :: proc(vg: ^nvg.Context) {
+	for name in ([3]string{"sans", "sans-bold", "ui"}) {
+		if inst, ok := engine.varfont_instance(engine.NOTO_SANS, 0, {{"wght", 700 if name == "sans-bold" else 400}}); ok {
+			nvg.CreateFontMem(vg, name, inst, true)
+		}
+	}
+}
+
 platform_time :: proc() -> f64 {
 	return time.duration_seconds(time.tick_since(pf.started))
 }

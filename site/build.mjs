@@ -102,7 +102,7 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	write("_embed.html", template("embed"));
 	for (const extra of fs.readdirSync(viewer)) {
 		// samples and other files the page links to by name
-		if (/^(index\.html|viewer\.(wasm|js|css)|upload\.js|odin\.js|wgpu\.js|sw\.js)$/.test(extra)) continue;
+		if (/^(index\.html|viewer\.(wasm|js|css)|upload\.js|odin\.js|wgpu\.js|sw\.js|edit)$/.test(extra)) continue;
 		const p = path.join(viewer, extra);
 		if (fs.statSync(p).isDirectory()) fs.cpSync(p, path.join(out, "view", extra), { recursive: true });
 		else write("view/" + extra, fs.readFileSync(p));
@@ -120,6 +120,25 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	const sample = path.join(here, "..", "designs", "sample");
 	if (fs.existsSync(sample)) fs.cpSync(sample, path.join(out, "view", "samples", "agentic-design"), { recursive: true });
 	console.log("viewer: included from", viewer);
+
+	// The browser editor (/edit, beta): the same engine runtime as the viewer (odin.js and
+	// wgpu.js, one hashed copy under /view for both), its own wasm, script and styles.
+	const edit = path.join(viewer, "edit");
+	if (fs.existsSync(path.join(edit, "editor.wasm"))) {
+		const emap = new Map([[`"odin.js"`, vmap.get(`"odin.js"`).replace(/"([^"]+)"/, '"/view/$1"')], [`"wgpu.js"`, vmap.get(`"wgpu.js"`).replace(/"([^"]+)"/, '"/view/$1"')]]);
+		for (const name of ["editor.wasm", "editor.css", "keys.js"]) {
+			const data = fs.readFileSync(path.join(edit, name));
+			const h = hashed(name, data);
+			emap.set(`"${name}"`, `"${h}"`);
+			write("edit/" + h, data);
+		}
+		const ejs = rewrite(fs.readFileSync(path.join(edit, "editor.js"), "utf8"), emap);
+		const ejsName = hashed("editor.js", ejs);
+		emap.set(`"editor.js"`, `"${ejsName}"`);
+		write("edit/" + ejsName, ejs);
+		write("edit/index.html", rewrite(rewrite(fs.readFileSync(path.join(edit, "index.html"), "utf8"), emap), map));
+		console.log("editor: included from", edit);
+	}
 } else {
 	console.log("viewer: not built (", viewer, "), /view is left out");
 }

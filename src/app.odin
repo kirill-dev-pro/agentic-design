@@ -357,16 +357,7 @@ idle_wait :: proc() -> f64 {
 }
 
 load_fonts :: proc(vg: ^nvg.Context) {
-	// mapped, not read into memory (map_file)
-	font :: proc(vg: ^nvg.Context, name, path: string) -> int {
-		data, ok := engine.map_file(path)
-		if !ok do return -1
-		return nvg.CreateFontMem(vg, name, data, false)
-	}
-	font(vg, "sans", "/System/Library/Fonts/Supplemental/Arial.ttf")
-	font(vg, "sans-bold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
-	// The interface uses the system font; fall back to Arial when it cannot be read.
-	if font(vg, "ui", "/System/Library/Fonts/SFNS.ttf") < 0 do font(vg, "ui", "/System/Library/Fonts/Supplemental/Arial.ttf")
+	platform_load_fonts(vg)
 }
 
 // Opens a document (in a tab); kept for callers that predate tabs.

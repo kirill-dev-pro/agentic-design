@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Editor (beta) — Agentic Design</title>
+<meta name="description" content="The Agentic Design editor in the browser: the same interface as the Mac app, on WebAssembly and WebGPU. A beta: files stay in your browser, and you download what you make.">
+<link rel="canonical" href="https://agentic-design.kcrz.dev/edit/">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1e1e1e">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="preload" href="editor.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<header id="bar">
+	<a class="home" href="/" title="Agentic Design">
+		<img class="mark" src="/img/logo-32-dark.png" srcset="/img/logo-64-dark.png 2x, /img/logo-96-dark.png 3x" width="26" height="26" alt="">
+	</a>
+	<span id="title">Editor</span>
+	<span class="beta">beta</span>
+	<span class="spacer"></span>
+	<label class="btn" id="open-label">Open…<input id="open-files" type="file" multiple hidden></label>
+	<button id="new" class="btn" type="button">New</button>
+	<button id="download" class="btn primary" type="button" disabled>Download .pen</button>
+</header>
+
+<main id="stage">
+	<canvas id="canvas" tabindex="0" aria-label="The design editor"></canvas>
+	<div id="welcome" class="card-wrap" hidden>
+		<div class="card">
+			<h1>Agentic Design in your browser</h1>
+			<p>The editor of the Mac app, running here in WebAssembly and WebGPU. Drop a .pen file, or the folder it is in so its images and fonts come along, or start a new design.</p>
+			<div class="row">
+				<label class="btn primary">Choose files<input id="welcome-files" type="file" multiple hidden></label>
+				<button id="welcome-new" class="btn" type="button">New design</button>
+				<a class="btn" href="/view/">Just look at a file</a>
+			</div>
+			<p class="private">A beta. Your files stay in this browser, and nothing is saved: use Download .pen to keep what you make. The Mac app has everything else.</p>
+		</div>
+	</div>
+	<div id="message" class="card-wrap" hidden><div class="card"><h1 id="message-title"></h1><p id="message-text"></p><div class="row" id="message-actions"></div></div></div>
+	<div id="loading" hidden>Loading the editor…</div>
+	<div id="drop" hidden><div>Drop to open</div></div>
+</main>
+
+<noscript><div class="card-wrap"><div class="card"><h1>JavaScript is off</h1><p>The editor runs in WebAssembly, which needs JavaScript.</p></div></div></noscript>
+<script src="odin.js" defer></script>
+<script src="wgpu.js" defer></script>
+<script src="keys.js" defer></script>
+<script src="editor.js" defer></script>
+</body>
+</html>

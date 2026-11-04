@@ -205,6 +205,20 @@ platform_gpu_create :: proc() -> ^nvg.Context {
 	return engine.gpu_create(platform_gpu_surface())
 }
 
+// The interface's fonts: the system's (read from the font files, mapped rather than read into
+// memory), Arial where the system font cannot be read.
+platform_load_fonts :: proc(vg: ^nvg.Context) {
+	font :: proc(vg: ^nvg.Context, name, path: string) -> int {
+		data, ok := engine.map_file(path)
+		if !ok do return -1
+		return nvg.CreateFontMem(vg, name, data, false)
+	}
+	font(vg, "sans", "/System/Library/Fonts/Supplemental/Arial.ttf")
+	font(vg, "sans-bold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
+	// The interface uses the system font; fall back to Arial when it cannot be read.
+	if font(vg, "ui", "/System/Library/Fonts/SFNS.ttf") < 0 do font(vg, "ui", "/System/Library/Fonts/Supplemental/Arial.ttf")
+}
+
 // What the renderer needs from the window: the GL context is current (GL), or the
 // window's content view has a CAMetalLayer to draw into (WebGPU).
 platform_gpu_surface :: proc() -> engine.Gpu_Surface {
