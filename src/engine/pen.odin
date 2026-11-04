@@ -42,6 +42,21 @@ doc_load :: proc(doc: ^Document, data: string) -> bool {
 	return true
 }
 
+// Where `key` goes among props kept in canonical order: by rank, then alphabetically.
+canonical_index :: proc(props: []Prop, key: string, rank: proc(key: string) -> int) -> int {
+	r := rank(key)
+	for p, i in props {
+		pr := rank(p.key)
+		if pr > r || (pr == r && p.key > key) do return i
+	}
+	return len(props)
+}
+
+// Adds a header entry at its canonical place (the loader's order).
+header_insert :: proc(doc: ^Document, key, raw: string) {
+	inject_at(&doc.header, canonical_index(doc.header[:], key, header_rank), Prop{strings.clone(key), strings.clone(raw)})
+}
+
 header_rank :: proc(key: string) -> int {
 	switch key {
 	case "version": return 0

@@ -75,7 +75,7 @@ doc_theme_axes_write :: proc(doc: ^Document) {
 		}
 		b := strings.builder_make(context.temp_allocator)
 		write_json_value(&b, obj)
-		append(&doc.header, Prop{strings.clone("themes"), strings.clone(strings.to_string(b))})
+		header_insert(doc, "themes", strings.to_string(b))
 	}
 	doc.version += 1
 	doc.axes_version = doc.version

@@ -73,7 +73,7 @@ doc_pages_write :: proc(doc: ^Document) {
 			strings.write_string(&b, "]}")
 		}
 		strings.write_byte(&b, ']')
-		append(&doc.header, Prop{strings.clone("pages"), strings.clone(strings.to_string(b))})
+		header_insert(doc, "pages", strings.to_string(b))
 	}
 	doc.version += 1
 	doc.pages_version = doc.version // the cache is still valid

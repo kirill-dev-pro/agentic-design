@@ -2070,7 +2070,7 @@ browser; the socket's `cloud` method reports the sign-in URL, so a test plays th
 on the site is shared as a new file the next time. `AGENTIC_CLOUD_URL` points a window at
 another site (local development).
 
-## NN. The dashboard lists every .pen file on the Mac
+## 82. The dashboard lists every .pen file on the Mac
 
 **Problem.** The dashboard showed only files opened in the app (Recents, at most 40) and the
 files of one folder, most without a preview. Agents create and edit files the app never
@@ -2097,3 +2097,16 @@ unless `AGENTIC_FILES_ROOT` names a folder (the socket's `dashboard` method driv
 view); a test that moves a file to the Trash keeps it on a disk image so the user's Trash
 is not touched.
 
+
+## 83. A property added by an edit goes to its canonical place
+
+**Problem.** Loading a `.pen` puts each node's properties in a fixed order (`type`, `id`, `name`, then alphabetical) and
+the header's keys too (`version`, `themes`, `variables`, then alphabetical), but a property added by an edit was
+appended at the end. A file edited and saved changed its bytes the next time it was opened and saved, and cloud
+documents (cloud-ops.md §1) need every client and the server to write the same bytes for the same state.
+
+**Decision.** `node_set_raw` inserts a new key where the loader would put it, and new header entries go through
+`header_insert` (`canonical_index` in `src/engine/pen.odin`).
+
+**Consequences.** What the app writes after an edit is what it writes after reopening the file. A file saved by an
+older version after edits is put in order once, on its next save (same JSON, keys moved).

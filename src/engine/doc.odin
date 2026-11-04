@@ -1203,7 +1203,10 @@ node_set_raw :: proc(n: ^Node, key, raw: string) {
 		delete(n.props[i].raw)
 		n.props[i].raw = strings.clone(raw)
 	} else {
-		append(&n.props, Prop{strings.clone(key), strings.clone(raw)})
+		// a new key goes where the loader would put it (prop_rank, then alphabetical), so a
+		// document saves to the same bytes before and after it is opened again; cloud
+		// documents rely on this canonical order (cloud-ops.md §1)
+		inject_at(&n.props, canonical_index(n.props[:], key, prop_rank), Prop{strings.clone(key), strings.clone(raw)})
 	}
 }
 
@@ -2126,7 +2129,7 @@ doc_write_variables :: proc(doc: ^Document, vars: json.Object) {
 		p.raw = strings.clone(strings.to_string(b))
 		found = true
 	}
-	if !found do append(&doc.header, Prop{strings.clone("variables"), strings.clone(strings.to_string(b))})
+	if !found do header_insert(doc, "variables", strings.to_string(b))
 	doc_resolve_vars(doc)
 	for &n in doc.nodes do node_refresh(doc, &n)
 }

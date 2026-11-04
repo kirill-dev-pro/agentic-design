@@ -185,7 +185,7 @@ doc_set_header :: proc(doc: ^Document, key: string, v: json.Value) {
 	if v == nil do return
 	b := strings.builder_make(context.temp_allocator)
 	write_json_value(&b, v)
-	append(&doc.header, Prop{strings.clone(key), strings.clone(strings.to_string(b))})
+	header_insert(doc, key, strings.to_string(b))
 }
 
 // "ui" from "ui:btn".
