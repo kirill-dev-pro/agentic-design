@@ -108,6 +108,9 @@ reveal_in_finder :: proc(path: string) {}
 
 // dashboard.odin, files_index.odin: the web editor has no file system to list
 draw_dashboard :: proc(vg: ^nvg.Context) {}
+draw_settings_account :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
+	label(vg, x, y^ + 10, "The cloud account is in the Mac app.", TEXT_DIM, 12)
+}
 
 // whats_new.odin: settings are kept by the page
 settings_test_writes :: proc() -> bool {return false}

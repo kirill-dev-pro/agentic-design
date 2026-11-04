@@ -280,12 +280,18 @@ app_stop :: proc() {
 
 // The window's size this frame: screen, framebuffer, pixel ratio and the canvas.
 frame_size :: proc() -> [2]i32 {
-	app.screen = platform_window_size()
+	// the interface scale (Settings, ⌘⌥+ ⌘⌥-) makes the window's units larger: the panels and
+	// text grow, and the canvas's zoom is shown and set in real pixels (view_zoom)
+	app.screen = platform_window_size() / ui_scale()
 	fb := platform_framebuffer_size()
 	app.dpr = f32(fb.x) / max(app.screen.x, 1)
-	app.mouse = pf.mouse
+	app.mouse = pf.mouse / ui_scale()
 	// the canvas fills the window under the tab bar; the panels float over it (panels.odin)
 	app.canvas = {0, TAB_H, app.screen.x, app.screen.y - TAB_H}
+	if p, ok := ui_rescale_center.?; ok {
+		ui_rescale_center = nil
+		app.cam = p - (canvas_center() - [2]f32{app.canvas.x, app.canvas.y}) / app.zoom
+	}
 	return fb
 }
 

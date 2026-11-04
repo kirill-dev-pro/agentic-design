@@ -20,6 +20,7 @@ handle_input :: proc() {
 	// A click anywhere outside a focused field commits it first.
 	if mouse_pressed(MOUSE_BUTTON_LEFT) && ui.focus != "" && !in_rect(ui.focus_rect, m) do field_commit()
 	if ui_modal() do return // an open menu, picker or dialog owns the pointer and keys
+	if ui_scale_keys() do return
 	if app.tab < 0 {
 		if mod_cmd() && key_pressed(KEY_N) do new_document()
 		update_cursor(false)
@@ -605,7 +606,7 @@ handle_shortcuts :: proc() {
 			append(&app.sel, ..all_uids(true))
 		case key_pressed(KEY_0), key_pressed(KEY_1):
 			// 100% around the middle of the view (⌘0 as in pen.dev)
-			zoom_at(canvas_center(), 1 / app.zoom)
+			zoom_at(canvas_center(), 1 / view_zoom())
 		case key_hit(KEY_EQUAL):
 			zoom_at(canvas_center(), 1.25)
 		case key_hit(KEY_MINUS):

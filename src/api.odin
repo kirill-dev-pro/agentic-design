@@ -854,7 +854,7 @@ inject_input :: proc(params: json.Object) {
 		pf.synthetic = true
 		pf.synthetic_pos = {f32(x), f32(params["y"].(json.Float) or_else 0)}
 		pf.mouse = pf.synthetic_pos
-		app.mouse = pf.mouse
+		app.mouse = pf.mouse / ui_scale()
 	}
 	if params["end"].(json.Boolean) or_else false do pf.synthetic = false
 	button :: proc(name: string) -> int {

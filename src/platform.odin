@@ -85,7 +85,7 @@ mouse_pressed :: proc(button: c.int) -> bool {
 }
 
 mouse_delta :: proc() -> [2]f32 {
-	return pf.mouse - pf.mouse_prev
+	return (pf.mouse - pf.mouse_prev) / ui_scale() // in the window's interface units
 }
 
 mod_cmd :: proc() -> bool {

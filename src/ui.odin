@@ -602,7 +602,7 @@ draw_view_controls :: proc(vg: ^nvg.Context) {
 		case 1, 2: export_code_ui(.HTML if pick == 1 else .React)
 		}
 	}
-	zoom_text := fmt.tprintf("%d%%", int(app.zoom * 100 + 0.5))
+	zoom_text := fmt.tprintf("%d%%", int(view_zoom() * 100 + 0.5))
 	zoom := Rect{export.x - 8 - 72, y, 72, 28}
 	if hovered(zoom) do fill_rect(vg, zoom, HOVER_BG, 6)
 	label(vg, zoom.x + 10, zoom.y + 14, zoom_text, TEXT_DIM, 12)
@@ -615,10 +615,10 @@ draw_view_controls :: proc(vg: ^nvg.Context) {
 			if r, rok := bounds_of(all_uids(true)); rok do zoom_to_rect(r)
 		case 1:
 			if r, rok := bounds_of(app.sel[:]); rok do zoom_to_rect(r)
-		case 2: zoom_at(c, 0.5 / app.zoom)
-		case 3: zoom_at(c, 1 / app.zoom)
-		case 4: zoom_at(c, 2 / app.zoom)
-		case 5: zoom_at(c, 4 / app.zoom)
+		case 2: zoom_at(c, 0.5 / view_zoom())
+		case 3: zoom_at(c, 1 / view_zoom())
+		case 4: zoom_at(c, 2 / view_zoom())
+		case 5: zoom_at(c, 4 / view_zoom())
 		}
 	}
 }

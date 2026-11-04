@@ -26,6 +26,7 @@ Settings :: struct {
 	dash_sort:    Dash_Sort, // the dashboard's order of all files (dashboard.odin)
 	dash_hidden:  [dynamic]string, // files and folders kept off the dashboard (files_index.odin)
 	hide_layers:    bool, // the editor's floating panels (panels.odin)
+	ui_scale:       f32, // the interface size, 0.9 to 1.3 (Settings, General)
 	hide_inspector: bool,
 }
 
@@ -44,6 +45,7 @@ DASH_SORT_KEYS := [Dash_Sort]string {
 }
 
 settings := Settings {
+	ui_scale     = 1,
 	nudge        = 1,
 	nudge_big    = 10,
 	pixel_grid   = true,
@@ -81,6 +83,7 @@ settings_load :: proc() {
 		for k in Dash_Sort do if DASH_SORT_KEYS[k] == string(s) do settings.dash_sort = k
 	}
 	if b, ok := obj["hideLayers"].(json.Boolean); ok do settings.hide_layers = bool(b)
+	if f, ok := obj["interfaceScale"].(json.Float); ok do settings.ui_scale = clamp(f32(f), UI_SCALES[0], UI_SCALES[len(UI_SCALES) - 1])
 	if b, ok := obj["hideInspector"].(json.Boolean); ok do settings.hide_inspector = bool(b)
 	if arr, ok := obj["dashboardHidden"].(json.Array); ok {
 		for v in arr do if s, sok := v.(json.String); sok do append(&settings.dash_hidden, strings.clone(string(s)))
@@ -94,8 +97,8 @@ settings_save :: proc(in_test_window := false) {
 	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector,
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v,\n  \"interfaceScale\": %s\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector, engine.num_text(ui_scale()),
 	)
 	_ = fs_write(settings_path(), text)
 }
@@ -161,13 +164,94 @@ sheet_begin :: proc(vg: ^nvg.Context, title: string, w, h: f32) -> (sheet: Rect,
 	return sheet, true
 }
 
+// Settings (app-ui.pen, "Settings · …"): sections on the left, the chosen one on the right.
+Settings_Section :: enum {
+	Account,
+	General,
+	Canvas,
+	Agents,
+	Updates,
+}
+
+SETTINGS_SECTION_NAMES := [Settings_Section]string {
+	.Account = "Account",
+	.General = "General",
+	.Canvas  = "Canvas",
+	.Agents  = "Agents",
+	.Updates = "Updates",
+}
+
+SETTINGS_SECTION_ICONS := [Settings_Section]string {
+	.Account = "circle-user",
+	.General = "sliders-horizontal",
+	.Canvas  = "frame",
+	.Agents  = "sparkles",
+	.Updates = "refresh-cw",
+}
+
+settings_section := Settings_Section.General
+
+// A switch at the right of a settings row; true when clicked.
+settings_switch :: proc(vg: ^nvg.Context, x, cy: f32, on: bool) -> bool {
+	r := Rect{x - 34, cy - 10, 34, 20}
+	fill_rect(vg, r, ACCENT if on else {1, 1, 1, 0.16}, 10)
+	k := r.x + 12 if !on else r.x + r.w - 12
+	nvg.BeginPath(vg)
+	nvg.Circle(vg, k + (0 if on else -2), cy, 8)
+	nvg.FillColor(vg, {1, 1, 1, 1})
+	nvg.Fill(vg)
+	return clicked(r)
+}
+
+// A group of rows in a rounded box: a small title above, `rows` rows of `row_h`.
+settings_group :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32, title: string, rows: int, row_h: f32 = 54) -> Rect {
+	if title != "" {
+		label(vg, x, y^ + 8, strings.to_upper(title, context.temp_allocator), TEXT_DIM, 10, true)
+		y^ += 22
+	}
+	box := Rect{x, y^, w, f32(rows) * row_h}
+	fill_rect(vg, box, {1, 1, 1, 0.03}, 10)
+	stroke_rect(vg, box, {1, 1, 1, 0.08}, 10)
+	for i in 1 ..< rows do fill_rect(vg, {x, y^ + f32(i) * row_h, w, 1}, {1, 1, 1, 0.07})
+	y^ += box.h + 20
+	return box
+}
+
+// A row's name and hint, at the left of row i of box.
+settings_row_text :: proc(vg: ^nvg.Context, box: Rect, i: int, name, hint: string, row_h: f32 = 54) -> (cy: f32) {
+	top := box.y + f32(i) * row_h
+	cy = top + row_h / 2
+	if hint == "" {
+		label(vg, box.x + 14, cy, name, TEXT_FG, 13)
+		return
+	}
+	label(vg, box.x + 14, cy - 8, name, TEXT_FG, 13)
+	label(vg, box.x + 14, cy + 10, hint, TEXT_DIM, 11)
+	return
+}
+
 draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	if !settings_open do return
 	saved_pass := ui.overlay_pass
 	ui.overlay_pass = true
 	defer ui.overlay_pass = saved_pass
-	sheet, open := sheet_begin(vg, "Settings", 460, 540)
-	if !open {
+	fill_rect(vg, {0, 0, app.screen.x, app.screen.y}, {0, 0, 0, 0.55})
+	w, h := min(app.screen.x - 64, f32(760)), min(app.screen.y - 64, f32(580))
+	sheet := Rect{(app.screen.x - w) / 2, (app.screen.y - h) / 2, w, h}
+	popup_shadow(vg, sheet, 14)
+	fill_rect(vg, sheet, {0.13, 0.13, 0.14, 1}, 14)
+	nav := Rect{sheet.x, sheet.y, 200, sheet.h}
+	nvg.Save(vg)
+	nvg.IntersectScissor(vg, nav.x, nav.y, nav.w, nav.h)
+	fill_rect(vg, sheet, {0.105, 0.105, 0.115, 1}, 14)
+	nvg.Restore(vg)
+	fill_rect(vg, {nav.x + nav.w, nav.y, 1, nav.h}, {1, 1, 1, 0.08})
+	stroke_rect(vg, sheet, {1, 1, 1, 0.08}, 14)
+	closing := false
+	close := Rect{sheet.x + sheet.w - 44, sheet.y + 14, 30, 30}
+	if lucide_button(vg, close, "x") || (key_pressed(KEY_ESCAPE) && ui.focus == "") do closing = true
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) do closing = true
+	if closing {
 		if ui.focus != "" do field_commit()
 		settings_open = false
 		return
@@ -176,59 +260,125 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	ui.clip = sheet
 	defer ui.clip = saved_clip
 
-	x, w := sheet.x + 24, sheet.w - 48
-	y := sheet.y + 64
-	label(vg, x, y + 14, "Nudge", TEXT_FG, 13)
-	label(vg, x + 150, y + 14, "Arrow", TEXT_DIM, 12)
-	field(vg, 0, "settings.nudge", "", {x + 200, y, 60, 28}, engine.num_text(settings.nudge), numeric = true)
-	label(vg, x + 280, y + 14, "⇧ Arrow", TEXT_DIM, 12)
-	field(vg, 0, "settings.nudge_big", "", {x + 340, y, 60, 28}, engine.num_text(settings.nudge_big), numeric = true)
-	y += 48
+	// sections
+	label(vg, nav.x + 18, nav.y + 30, "Settings", TEXT_FG, 15, true)
+	ny := nav.y + 52
+	for sec in Settings_Section {
+		r := Rect{nav.x + 10, ny, nav.w - 20, 30}
+		active := sec == settings_section
+		if active do fill_rect(vg, r, ACTIVE_BG, 7)
+		else if hovered(r) do fill_rect(vg, r, HOVER_BG, 7)
+		draw_lucide(vg, SETTINGS_SECTION_ICONS[sec], r.x + 17, r.y + 15, 14, TEXT_FG if active else TEXT_DIM, 1.6)
+		label(vg, r.x + 34, r.y + 15, SETTINGS_SECTION_NAMES[sec], TEXT_FG if active else TEXT_DIM, 13)
+		if clicked(r) && !active {
+			if ui.focus != "" do field_commit()
+			settings_section = sec
+		}
+		ny += 32
+	}
+	label(vg, nav.x + 18, nav.y + nav.h - 20, fmt.tprintf("Agentic Design %s", VERSION), TEXT_DIM, 11)
+
+	x := nav.x + nav.w + 24
+	cw := sheet.x + sheet.w - 24 - x
+	ob_text(vg, x, sheet.y + 30, SETTINGS_SECTION_NAMES[settings_section], 18, TEXT_FG, 600)
+	y := sheet.y + 60
+	switch settings_section {
+	case .Account: draw_settings_account(vg, x, cw, &y)
+	case .General: draw_settings_general(vg, x, cw, &y)
+	case .Canvas: draw_settings_canvas(vg, x, cw, &y)
+	case .Agents: draw_settings_agents(vg, x, cw, &y)
+	case .Updates: draw_settings_updates(vg, x, cw, &y)
+	}
+}
+
+draw_settings_general :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
+	box := settings_group(vg, x, w, y, "Interface", 1, 92)
+	label(vg, box.x + 14, box.y + 24, "Interface size", TEXT_FG, 13)
+	label(vg, box.x + 14, box.y + 42, "Panels, menus and text; the canvas keeps its zoom.", TEXT_DIM, 11)
+	label(vg, box.x + 14, box.y + 70, "⌘⌥+ and ⌘⌥− change it anywhere; ⌘⌥0 goes back to 100%.", TEXT_DIM, 11)
+	cell: f32 = 64
+	cx := box.x + box.w - 14 - cell * f32(len(UI_SCALES))
+	for s, i in UI_SCALES {
+		r := Rect{cx + f32(i) * cell, box.y + 12, cell - 4, 46}
+		on := abs(s - ui_scale()) < 0.01
+		if on do fill_rect(vg, r, ACTIVE_BG, 8)
+		else if hovered(r) do fill_rect(vg, r, HOVER_BG, 8)
+		label(vg, r.x + r.w / 2, r.y + 16, "Aa", TEXT_FG if on else TEXT_DIM, 11 * s + 1, true, .CENTER)
+		label(vg, r.x + r.w / 2, r.y + 34, fmt.tprintf("%d%%", int(s * 100 + 0.5)), TEXT_FG if on else TEXT_DIM, 10, false, .CENTER)
+		if clicked(r) do ui_scale_set(s)
+	}
+
+	box = settings_group(vg, x, w, y, "Window", 1)
+	cy := settings_row_text(vg, box, 0, "Layers and inspector", "Floating panels over the canvas; ⌘\\ hides and shows both")
+	shown := panel_shown(.Left) || panel_shown(.Right)
+	if settings_switch(vg, box.x + box.w - 14, cy, shown) do panels_toggle_all()
+}
+
+draw_settings_canvas :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
+	box := settings_group(vg, x, w, y, "Moving", 1)
+	cy := settings_row_text(vg, box, 0, "Nudge", "Arrow keys move by this much; ⇧ for the larger step")
+	fx := box.x + box.w - 14 - 60
+	field(vg, 0, "settings.nudge_big", "", {fx, cy - 14, 60, 28}, engine.num_text(settings.nudge_big), numeric = true)
+	label(vg, fx - 8, cy, "⇧", TEXT_DIM, 12, false, .RIGHT)
+	field(vg, 0, "settings.nudge", "", {fx - 30 - 60, cy - 14, 60, 28}, engine.num_text(settings.nudge), numeric = true)
+
 	Toggle :: struct {
 		name, hint: string,
 		value:      ^bool,
 	}
-	toggles := [4]Toggle {
+	toggles := [3]Toggle {
 		{"Pixel grid", "A grid of whole units at 800% and closer  ⌘'", &settings.pixel_grid},
 		{"Snap to pixels", "Dragging and resizing land on whole units", &settings.snap_pixels},
 		{"Smart guides", "Align to edges and centres of neighbours (hold ⌃ to skip)", &settings.smart_guides},
-		{"Agent cursors", "Show where agents work: their cursors, and flashes on what they change", &settings.agent_cursors},
 	}
-	for t in toggles {
-		if checkbox(vg, {x, y, w, 22}, t.name, t.value^) {
+	box = settings_group(vg, x, w, y, "Guides", len(toggles))
+	for t, i in toggles {
+		cy = settings_row_text(vg, box, i, t.name, t.hint)
+		if settings_switch(vg, box.x + box.w - 14, cy, t.value^) {
 			t.value^ = !t.value^
 			settings_save()
 		}
-		label(vg, x + 28, y + 34, t.hint, TEXT_DIM, 11)
-		y += 58
 	}
-	// updates (update.odin)
-	label(vg, x, y + 10, "Updates", TEXT_FG, 13)
-	label(vg, x + 150, y + 10, fmt.tprintf("Version %s", VERSION), TEXT_DIM, 12)
-	if button(vg, {x + w - 100, y - 4, 100, 28}, "What's new") {
+}
+
+draw_settings_agents :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
+	box := settings_group(vg, x, w, y, "", 2)
+	cy := settings_row_text(vg, box, 0, "Connect agents", "Claude Code, Codex and other MCP clients edit the open file")
+	if button(vg, {box.x + box.w - 14 - 120, cy - 14, 120, 28}, "Set up…") {
+		settings_open = false
+		onboarding_start(1)
+	}
+	cy = settings_row_text(vg, box, 1, "Agent cursors", "Show where agents work: their cursors, and flashes on what they change")
+	if settings_switch(vg, box.x + box.w - 14, cy, settings.agent_cursors) {
+		settings.agent_cursors = !settings.agent_cursors
+		settings_save()
+	}
+}
+
+draw_settings_updates :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
+	box := settings_group(vg, x, w, y, "", 3)
+	cy := settings_row_text(vg, box, 0, fmt.tprintf("Version %s", VERSION), "")
+	if button(vg, {box.x + box.w - 14 - 110, cy - 14, 110, 28}, "What's new") {
 		whats_new_show()
 		return
 	}
-	y += 28
-	if checkbox(vg, {x, y, w, 22}, "Check for updates automatically", settings.auto_update) {
+	cy = settings_row_text(vg, box, 1, "Update automatically", update_status_text())
+	if settings_switch(vg, box.x + box.w - 14, cy, settings.auto_update) {
 		settings.auto_update = !settings.auto_update
 		settings_save()
 	}
-	y += 34
-	status_x := x
+	cy = settings_row_text(vg, box, 2, "Check for an update", "")
+	bx := box.x + box.w - 14
 	#partial switch update_phase() {
 	case .Ready:
-		if button(vg, {x, y, 200, 28}, fmt.tprintf("Restart to update to %s", update.version)) do update_request_install()
-		status_x = x + 212
+		if button(vg, {bx - 210, cy - 14, 210, 28}, fmt.tprintf("Restart to update to %s", update.version), primary = true) do update_request_install()
 	case .Checking, .Downloading, .Installing, .Waiting_For_Agents:
 	case:
 		if update_allowed() && bundle_path() != "" {
-			if button(vg, {x, y, 120, 28}, "Check now") do update_check()
-			status_x = x + 132
+			if button(vg, {bx - 110, cy - 14, 110, 28}, "Check now") do update_check()
 		}
 	}
-	label(vg, status_x, y + 14, update_status_text(), TEXT_DIM, 11)
-	if button(vg, {x, sheet.y + sheet.h - 52, 180, 28}, "Show onboarding again") {
+	if button(vg, {x, y^, 180, 28}, "Show onboarding again") {
 		settings_open = false
 		onboarding_start(0)
 	}

@@ -141,3 +141,56 @@ draw_corner_buttons :: proc(vg: ^nvg.Context) {
 		if icon_button(vg, {b.x + 4, b.y + 4, b.w - 8, b.h - 8}, .Panel_Left if side == .Left else .Panel_Right, tip = tip) do panel_toggle(side)
 	}
 }
+
+// ---------------------------------------------------------------- interface size
+
+UI_SCALES := [4]f32{0.9, 1, 1.15, 1.3}
+
+ui_scale :: proc() -> f32 {
+	s := settings.ui_scale
+	return s if s >= UI_SCALES[0] && s <= UI_SCALES[len(UI_SCALES) - 1] else 1
+}
+
+// The page point at the view's centre while the interface size changes: the next frame
+// (with the new window units) puts it back there, at the same real zoom.
+ui_rescale_center: Maybe([2]f32)
+
+ui_scale_set :: proc(s: f32) {
+	if s == ui_scale() do return
+	if app.tab >= 0 {
+		ui_rescale_center = to_page(canvas_center())
+		app.zoom *= ui_scale() / s // the canvas keeps its zoom in real pixels
+	}
+	settings.ui_scale = s
+	settings_save()
+	set_status("Interface size %d%%", int(s * 100 + 0.5))
+}
+
+// ⌘⌥+ and ⌘⌥- step through the sizes; ⌘⌥0 goes back to 100%.
+ui_scale_step :: proc(dir: int) {
+	if dir == 0 {
+		ui_scale_set(1)
+		return
+	}
+	i := 1
+	for s, k in UI_SCALES do if abs(s - ui_scale()) < 0.01 do i = k
+	ui_scale_set(UI_SCALES[clamp(i + dir, 0, len(UI_SCALES) - 1)])
+}
+
+// The canvas's zoom in real pixels: what the zoom menu shows and sets (app.zoom is in the
+// window's units, which the interface size makes larger).
+view_zoom :: proc() -> f32 {
+	return app.zoom * ui_scale()
+}
+
+// The interface-size shortcuts, on the dashboard and in the editor; true when one acted.
+ui_scale_keys :: proc() -> bool {
+	if !mod_cmd() || !(key_down(KEY_LEFT_ALT) || key_down(KEY_RIGHT_ALT)) do return false
+	switch {
+	case key_hit(KEY_EQUAL): ui_scale_step(1)
+	case key_hit(KEY_MINUS): ui_scale_step(-1)
+	case key_pressed(KEY_0): ui_scale_step(0)
+	case: return false
+	}
+	return true
+}
