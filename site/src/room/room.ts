@@ -41,6 +41,8 @@ export type RoomOptions = {
 	agentsOff?: boolean
 	maxOpsPerBatch?: number
 	maxLiveNodes?: number
+	/** A batch id the room acknowledged before its in-memory map (the op log), with its seq. */
+	lookupBatch?: (batch: string) => number | undefined
 	/** Whether a blob is uploaded and ready in the workspace (cloud-design §3.5). */
 	hasAsset?: (hash: string) => boolean
 	/** How long tombstones are kept, ms (cloud-ops S2: 30 days). */
@@ -56,7 +58,7 @@ export class Room {
 	private readonly batches = new Map<string, number>()
 	private readonly tombstones = new Map<string, Tombstone>()
 	private liveNodes: number
-	private readonly opts: Required<Omit<RoomOptions, 'hasAsset'>> & Pick<RoomOptions, 'hasAsset'>
+	private readonly opts: Required<Omit<RoomOptions, 'hasAsset' | 'lookupBatch'>> & Pick<RoomOptions, 'hasAsset' | 'lookupBatch'>
 
 	constructor(
 		private readonly pc: Pencore,
@@ -81,7 +83,7 @@ export class Room {
 		const nack = (reason: string, detail?: Record<string, unknown>) => ({
 			reply: { t: 'nack', batch: b.batch, reason, ...(detail ? { detail } : {}) } as Nack,
 		})
-		const seen = this.batches.get(b.batch)
+		const seen = this.batches.get(b.batch) ?? this.opts.lookupBatch?.(b.batch)
 		if (seen !== undefined) return { reply: { t: 'ack', batch: b.batch, seq: seen } }
 		if (who.role === 'viewer') return nack('FORBIDDEN')
 		if (b.agent && this.opts.agentsOff) return nack('AGENTS_OFF')
@@ -123,6 +125,37 @@ export class Room {
 			reply: ack,
 			broadcast: { t: 'ops', seq: this.seq, batch: b.batch, author: who.userId, agent: b.agent ?? null, ops: r.ops ?? ops },
 		}
+	}
+
+	/** What the room needs to start again after an eviction: its text, sort keys, tombstones and seq. */
+	snapshot(): { pen: string; sorts: Record<string, string>; tombstones: [string, Tombstone][]; seq: number } {
+		const nodes = this.pc.state(this.h).nodes
+		const sorts: Record<string, string> = {}
+		for (const [id, n] of Object.entries(nodes)) sorts[id] = n.sort
+		return { pen: this.pc.serialize(this.h), sorts, tombstones: [...this.tombstones], seq: this.seq }
+	}
+
+	/** A room from a snapshot. */
+	static restore(
+		pc: Pencore,
+		snap: { pen: string; sorts: Record<string, string>; tombstones?: [string, Tombstone][]; seq: number },
+		opts: RoomOptions = {},
+	): Room {
+		const room = new Room(pc, snap.pen, snap.sorts, opts)
+		room.seq = snap.seq
+		for (const [id, t] of snap.tombstones ?? []) room.tombstones.set(id, t)
+		return room
+	}
+
+	/** Apply a batch the room already acknowledged (from its op log), without the checks: its ops are as applied. */
+	replay(seq: number, batch: string, ops: Op[]) {
+		const structural = ops.some((o) => o.op === 'create' || o.op === 'move' || o.op === 'delete')
+		const before = structural ? this.pc.state(this.h).nodes : null
+		const r = this.pc.apply(this.h, { ops })
+		if (!r.ok) throw new Error(`[room] replay of ${batch} (seq ${seq}) failed: ${r.reason}`)
+		this.seq = seq
+		this.batches.set(batch, seq)
+		if (before) this.updateTombstones(before, r.deleted ?? [], ops)
 	}
 
 	pen(): string {

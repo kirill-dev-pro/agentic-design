@@ -15,16 +15,20 @@ import { createWorker, durableRateLimitStore, type ExecutionContextLike } from '
 import { handleExport } from './account'
 import { handleAppAuth } from './app-auth'
 import { handleBlobPut, type App } from './blobs'
+import { handleRoom, ROOM_PATH } from './room/route'
 import { handleContent, handleOwnerContent, handlePage } from './share'
 import { backend } from './workerstack'
 
 type Env = {
 	ASSETS: { fetch(input: Request | string | URL): Promise<Response> }
 	RATE_LIMITER?: Parameters<typeof durableRateLimitStore>[0]
+	DOC_ROOM?: Parameters<typeof handleRoom>[2]
 }
 
 const worker = createWorker(backend)
 export const { Scheduler, RealtimeHub, RateLimiter } = worker.durableObjects
+// Re-exported from its module under its declared name (the bundler renames worker.durableObjects' copies).
+export { DocRoom } from './room/doc-room'
 
 const OWNER_FILES = /^\/api\/docs\/[^/]+\/v\/[^/]+\/.+/
 
@@ -54,6 +58,8 @@ export default {
 		if (path === '/auth/app') return own('page', (app) => handleAppAuth(app as never, request))
 		if (path.startsWith('/c/')) return own('content', (app) => handleContent(app, request))
 		if (path.startsWith('/api/blobs/')) return own('upload', (app) => handleBlobPut(app, request))
+		const room = ROOM_PATH.exec(path)
+		if (room) return own('page', (app) => handleRoom(app as never, request, env.DOC_ROOM, decodeURIComponent(room[1]!)))
 		if (OWNER_FILES.test(path)) return own('content', (app) => handleOwnerContent(app, request))
 		if (path === '/api' || path.startsWith('/api/')) {
 			return worker.handler.fetch(request, env as never, ctx)

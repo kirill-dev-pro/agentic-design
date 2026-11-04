@@ -15,6 +15,7 @@ import type { App } from './blobs'
 import { deleteOwnAccount, runAccountDeletions } from './account'
 import { exchangeCode } from './app-auth'
 import { cleanup } from './cleanup'
+import { DocRoom } from './room/doc-room'
 import { fileRoutes } from './files'
 import * as schema from './schema'
 import { countView, manifestOf, resolveToken, shareJson, tokenOfShareUrl } from './share'
@@ -56,6 +57,8 @@ export const backend = workerstack({
 		},
 	}),
 	rateLimit: { windowMs: 60_000, max: 120 },
+	// One DocRoom per cloud document, reached through env.DOC_ROOM (src/room/route.ts).
+	durableObjects: { DOC_ROOM: DocRoom },
 	jobs: (j) =>
 		j.define({
 			cleanup: j.cron({

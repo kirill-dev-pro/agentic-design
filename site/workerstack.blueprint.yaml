@@ -11,6 +11,9 @@ application:
     main: src/server.ts
     compatibilityDate: 2026-11-02
     assets: dist/client
+    durableObjects:
+      - binding: DOC_ROOM
+        className: DocRoom
 authentication:
   managedIdentity:
     protocolVersion: 2
