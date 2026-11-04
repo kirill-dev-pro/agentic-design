@@ -2110,3 +2110,32 @@ documents (cloud-ops.md §1) need every client and the server to write the same 
 
 **Consequences.** What the app writes after an edit is what it writes after reopening the file. A file saved by an
 older version after edits is put in order once, on its next save (same JSON, keys moved).
+
+## 84. The editor's panels float and hide; the interface has a size
+
+**Problem.** The docked sidebar, tool strip and inspector took 604 of 1440 points from the
+canvas whether or not they were in use, and on a large screen or with weaker eyes the 12-13 pt
+interface could not be made larger.
+
+**Decision.**
+
+- The layers panel and the inspector float over a canvas that fills the window
+  (`src/panels.odin`). Each hides with the button in its header, ⌘\ hides or shows both, and a
+  hidden panel leaves a button in its corner that outlines where the panel opens. The tools
+  are a bar at the bottom centre; zoom, Export and Share moved to the tab bar. A panel's
+  height follows its content. Double click a tab to rename its file.
+- The panels' contents are drawn where they were when docked: `panel_begin` moves the drawing
+  and the pointer by the panel's offset (`ui.origin`), and the widgets that keep a rect for
+  later (menus, the colour picker, tooltips, the focused field) add it back. Canvas input goes
+  through `canvas_hit`, which leaves out the floating chrome; zoom to fit and the view's
+  centre use the part of the canvas the panels leave open.
+- The dashboard has one header (All files | Recents, search, sort; Connect agents, New file,
+  Settings, the account) and cards that fill the width. A preview of a page much taller or
+  wider than the card shows its top left at least half the size that fills the card.
+- Settings has sections (Account, General, Canvas, Agents, Updates). The interface size
+  (90, 100, 115, 130%; ⌘⌥+ ⌘⌥- ⌘⌥0) divides the window into larger units, so panels and text
+  grow; the canvas keeps its zoom in real pixels (`view_zoom`), and changing the size keeps the
+  view's centre and zoom.
+
+**Consequences.** Coordinates in tests that click the interface changed (tools/uidrive.py maps
+them). The designs are in app-ui.pen; the agent input at the bottom is not built yet.

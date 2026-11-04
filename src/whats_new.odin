@@ -118,6 +118,7 @@ whats_new: struct {
 	rect:     Rect, // the sheet as last drawn (tests click its buttons)
 	icon:     int, // NanoVG image, 0 until first drawn
 	releases: [dynamic]Release, // parsed notes, newest first
+	opened_frame: int, // the click that opened it (in Settings) does not close it
 }
 
 // ---------------------------------------------------------------- the notes
@@ -291,6 +292,7 @@ whats_new_show :: proc() {
 	whats_new.pending = false
 	whats_new.open = true
 	whats_new.scroll = 0
+	whats_new.opened_frame = frames_drawn
 	platform_wake()
 }
 
@@ -382,7 +384,7 @@ draw_whats_new :: proc(vg: ^nvg.Context) {
 		whats_new_close()
 		return
 	}
-	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) {
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) && whats_new.opened_frame != frames_drawn {
 		whats_new_close()
 		return
 	}
