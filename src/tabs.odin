@@ -259,7 +259,7 @@ thumb_queue: [dynamic]string
 
 thumb_path :: proc(path: string) -> string {
 	h := hash.fnv64a(transmute([]u8)path)
-	return fmt.tprintf("%s/thumbs/%016x.png", support_dir(), h)
+	return fmt.tprintf("%s/thumbs/v2-%016x.png", support_dir(), h) // v2: cropped to stay readable
 }
 
 thumb_request :: proc(path: string) {
@@ -371,7 +371,15 @@ thumb_write :: proc(path: string) {
 	}
 	pad: f32 = 24
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
-	scale := min(560 / r[2], 360 / r[3], 2)
+	// all of the page when it is about the card's shape; a page much taller or wider shows
+	// its top left, at least half the size that fills the card, rather than all of it tiny
+	W, H :: f32(560), f32(360)
+	fit := min(W / r[2], H / r[3], 2)
+	scale := max(fit, min(max(W / r[2], H / r[3]), 2) * 0.5)
+	if scale > fit {
+		r[2] = min(r[2], W / scale)
+		r[3] = min(r[3], H / scale)
+	}
 	if pixels, w, h, rok := render_region(r, scale, nil, {0.157, 0.157, 0.157, 1}); rok {
 		if png, pok := engine.png_encode(pixels, w, h); pok do _ = fs_write(thumb_path(path), png)
 	}

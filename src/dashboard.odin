@@ -44,55 +44,84 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	files_poll()
 	fill_rect(vg, {0, TAB_H, app.screen.x, app.screen.y - TAB_H}, PANEL_BG)
 
-	// sidebar
-	fill_rect(vg, {LEFT_W - 1, TAB_H, 1, app.screen.y - TAB_H}, PANEL_LINE)
-	rows := [?]string{"All files", "Recents"}
-	for name, i in rows {
-		r := Rect{12, TAB_H + 16 + f32(i) * 34, LEFT_W - 24, 30}
+	// one header (app-ui.pen, "Dashboard · All files"): All files | Recents, search and sort
+	// on the left; New file, Connect agents, Settings and the account on the right
+	M :: f32(32)
+	ty := TAB_H + 18
+	seg := Rect{M, ty, 0, 30}
+	names := [2]string{"All files", "Recents"}
+	icons := [2]Icon{.Grid, .Clock}
+	widths: [2]f32
+	for name, i in names do widths[i] = text_width(vg, name, 12) + 40
+	seg.w = widths[0] + widths[1] + 6
+	fill_rect(vg, seg, FIELD_BG, 8)
+	sx := seg.x + 3
+	for name, i in names {
+		t := Rect{sx, seg.y + 3, widths[i], seg.h - 6}
 		active := dash.recents == (i == 1)
-		if active do fill_rect(vg, r, ACTIVE_BG, 6)
-		else if hovered(r) do fill_rect(vg, r, HOVER_BG, 6)
-		draw_icon(vg, .Grid if i == 0 else .File, r.x + 16, r.y + 15, TEXT_FG if active else TEXT_DIM, 14)
-		label(vg, r.x + 32, r.y + 15, name, TEXT_FG if active else TEXT_DIM, 13)
-		if clicked(r) && dash.recents != (i == 1) {
+		if active do fill_rect(vg, t, ACTIVE_BG, 6)
+		else if hovered(t) do fill_rect(vg, t, HOVER_BG, 6)
+		draw_icon(vg, icons[i], t.x + 15, t.y + t.h / 2, TEXT_FG if active else TEXT_DIM, 13)
+		label(vg, t.x + 28, t.y + t.h / 2, name, TEXT_FG if active else TEXT_DIM, 12)
+		if clicked(t) && dash.recents != (i == 1) {
 			dash.recents = i == 1
 			dash.scroll = 0
 		}
+		sx += widths[i]
 	}
-	// what the list is made of
+	x := seg.x + seg.w + 12
+	field(vg, 0, "dash.search", "", {x, ty + 1, 240, 28}, dash.search, placeholder = "Find files", icon = .Search)
+	if field_is_focused(0, "dash.search") {
+		if strings.to_string(ui.buf) != dash.search do dash.scroll = 0
+		set_string(&dash.search, strings.to_string(ui.buf))
+	}
+	x += 252
+	if !dash.recents {
+		if pick, ok := dropdown_menu(vg, "dash.sort", {x, ty + 1, 150, 28}, DASH_SORT_NAMES[:], int(settings.dash_sort)); ok && Dash_Sort(pick) != settings.dash_sort {
+			settings.dash_sort = Dash_Sort(pick)
+			settings_save()
+			dash.scroll = 0
+		}
+	}
+	rx := app.screen.x - M
+	// the account: its initial when signed in to the cloud
+	av := Rect{rx - 28, ty + 1, 28, 28}
+	if cloud_signed_in() {
+		who := cloud_text(&cloud.name)
+		if who == "" do who = cloud_text(&cloud.email)
+		fill_rect(vg, av, {0.47, 0.36, 0.95, 1}, 14)
+		initial := strings.to_upper(who[:1] if len(who) > 0 else "?", context.temp_allocator)
+		label(vg, av.x + 14, av.y + 14, initial, TEXT_FG, 12, true, .CENTER)
+		if hovered(av) do tooltip_request(who, av)
+	} else {
+		fill_rect(vg, av, FIELD_BG, 14)
+		draw_icon(vg, .User, av.x + 14, av.y + 14, TEXT_DIM, 14)
+		if hovered(av) do tooltip_request("Not signed in", av)
+	}
+	if clicked(av) do settings_open = true
+	gear := Rect{av.x - 8 - 28, ty + 1, 28, 28}
+	if icon_button(vg, gear, .Gear, tip = "Settings  ⌘,") do settings_open = true
+	newf := Rect{gear.x - 12 - 92, ty + 1, 92, 28}
+	if button(vg, newf, "New file", primary = true) do new_document()
+	conn := Rect{newf.x - 8 - 124, ty + 1, 124, 28}
+	if button(vg, conn, "Connect agents") do onboarding_start(1)
+	x0 := M
+	ty += 4
+
+	// what the list is made of, at the bottom left
 	status: string
 	switch {
 	case files_root() == "": status = "Test window: no files indexed"
 	case files.running: status = "Looking for .pen files…"
 	case: status = fmt.tprintf("%d files on this Mac", len(files.items))
 	}
-	label(vg, 24, app.screen.y - 24, status, TEXT_DIM, 11)
+	label(vg, M, app.screen.y - 18, status, TEXT_DIM, 11)
 	if n := len(settings.dash_hidden); n > 0 {
-		r := Rect{16, app.screen.y - 62, LEFT_W - 32, 26}
+		t := fmt.tprintf("Show %d hidden item%s again", n, "" if n == 1 else "s")
+		r := Rect{M + text_width(vg, status, 11) + 12, app.screen.y - 30, text_width(vg, t, 11) + 16, 24}
 		if hovered(r) do fill_rect(vg, r, HOVER_BG, 6)
-		label(vg, r.x + 8, r.y + 13, fmt.tprintf("Show %d hidden item%s again", n, "" if n == 1 else "s"), TEXT_DIM, 11)
+		label(vg, r.x + 8, r.y + 12, t, TEXT_DIM, 11)
 		if clicked(r) do files_unhide_all()
-	}
-
-	// header
-	x0 := LEFT_W + 48
-	label(vg, x0, TAB_H + 48, "Recents" if dash.recents else "All files", TEXT_FG, 24)
-	if button(vg, {app.screen.x - 48 - 96, TAB_H + 34, 96, 28}, "+ New file") do new_document()
-	if button(vg, {app.screen.x - 48 - 96 - 8 - 132, TAB_H + 34, 132, 28}, "Connect agents") do onboarding_start(1)
-	if button(vg, {app.screen.x - 48 - 96 - 8 - 132 - 8 - 96, TAB_H + 34, 96, 28}, "Settings") do settings_open = true
-	ty := TAB_H + 80
-	field(vg, 0, "dash.search", "", {x0, ty, 260, 28}, dash.search, placeholder = "Find files", icon = .Search)
-	if field_is_focused(0, "dash.search") {
-		if strings.to_string(ui.buf) != dash.search do dash.scroll = 0
-		set_string(&dash.search, strings.to_string(ui.buf))
-	}
-	if !dash.recents {
-		label(vg, x0 + 280, ty + 14, "Sort", TEXT_DIM, 12)
-		if pick, ok := dropdown_menu(vg, "dash.sort", {x0 + 314, ty, 160, 28}, DASH_SORT_NAMES[:], int(settings.dash_sort)); ok && Dash_Sort(pick) != settings.dash_sort {
-			settings.dash_sort = Dash_Sort(pick)
-			settings_save()
-			dash.scroll = 0
-		}
 	}
 
 	// the list
@@ -102,9 +131,11 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 		for it in items do if strings.contains(strings.to_lower(fs_base(it.path), context.temp_allocator), needle) do append(&kept, it)
 		items = kept[:]
 	}
-	area := Rect{LEFT_W, ty + 44, app.screen.x - LEFT_W, app.screen.y - ty - 44}
-	cw, ch, gap: f32 = 300, 236, 24
-	cols := max(int((app.screen.x - x0 - 48 + gap) / (cw + gap)), 1)
+	area := Rect{0, ty + 40, app.screen.x, app.screen.y - ty - 40 - 36}
+	gap: f32 = 24
+	ch: f32 = 236
+	cols := max(int((app.screen.x - 2 * x0 + gap) / (280 + gap)), 1)
+	cw := (app.screen.x - 2 * x0 - gap * f32(cols - 1)) / f32(cols)
 	rows_n := (len(items) + cols - 1) / cols
 	dash.content_h = f32(rows_n) * (ch + gap) + 24
 	dash.scroll = clamp(dash.scroll - wheel_over(area), 0, max(dash.content_h - area.h, 0))
