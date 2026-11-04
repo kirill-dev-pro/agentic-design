@@ -101,13 +101,14 @@ cloud_vectors_main :: proc(path: string) {
 		fmt.eprintln("not JSON:", path)
 		os.exit(1)
 	}
-	failed := 0
+	failed, room_only := 0, 0
 	vectors, _ := root.(json.Object)["vectors"].(json.Array)
 	for vv in vectors {
 		v, _ := vv.(json.Object)
 		name := string(v["name"].(json.String) or_else "?")
 		if v["room"].(json.Boolean) or_else false {
 			fmt.println("skip", name, "(room only: tombstones)")
+			room_only += 1
 			continue
 		}
 		doc: engine.Document
@@ -161,7 +162,7 @@ cloud_vectors_main :: proc(path: string) {
 			}
 		}
 	}
-	fmt.printfln("%d of %d vectors pass", len(vectors) - failed, len(vectors))
+	fmt.printfln("%d of %d vectors pass (%d room-only skipped)", len(vectors) - room_only - failed, len(vectors) - room_only, room_only)
 	if failed > 0 do os.exit(1)
 }
 
