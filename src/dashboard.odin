@@ -25,6 +25,7 @@ dash: struct {
 	menu_path:   string, // the card the context menu is for
 	trash_path:  string, // the file the confirmation is for
 	content_h:   f32,
+	drawn_frame: int, // the last frame the dashboard was drawn in
 }
 
 DASH_SORT_NAMES := [4]string{"Last modified", "Last opened", "Name", "Created"} // in Dash_Sort's order
@@ -37,7 +38,9 @@ set_string :: proc(s: ^string, v: string) {
 }
 
 draw_dashboard :: proc(vg: ^nvg.Context) {
-	files_refresh()
+	// coming back to the dashboard (it was not drawn last frame) looks again soon
+	files_refresh(shown = dash.drawn_frame != frames_drawn - 1)
+	dash.drawn_frame = frames_drawn
 	files_poll()
 	fill_rect(vg, {0, TAB_H, app.screen.x, app.screen.y - TAB_H}, PANEL_BG)
 
