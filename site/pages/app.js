@@ -280,46 +280,92 @@ const App = (() => {
 		$("#files-usage").textContent = `${use.sharedFiles} of ${ent.sharedFiles} files · ${bytes(use.storageBytes)} of ${bytes(ent.storageBytes)}`;
 		const list = $("#files-list");
 		const showError = (text) => { $("#files-error").textContent = text || ""; $("#files-error").hidden = !text; };
+		const icon = (name) => el("span", { className: "ico", innerHTML: `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>` });
+		let all = [], filter = "all";
 
 		async function load() {
 			let data;
 			try { data = await api("GET", "/api/docs"); }
 			catch (e) { return showError(say(e)); }
-			$("#files-empty").hidden = data.files.length > 0;
-			list.replaceChildren(...data.files.map(card));
+			all = data.files;
+			$("#files-empty").hidden = all.length > 0;
+			show();
 		}
 
+		// What the search, the filter and the sort leave of the files.
+		function show() {
+			const q = $("#files-search").value.trim().toLowerCase();
+			const sort = $("#files-sort").value;
+			const recent = Date.now() - 14 * 864e5;
+			const rows = all
+				.filter((f) => (!q || f.name.toLowerCase().includes(q)) && (filter !== "recent" || new Date(f.updatedAt) >= recent))
+				.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : new Date(b.updatedAt) - new Date(a.updatedAt));
+			$("#files-none").hidden = all.length === 0 || rows.length > 0;
+			list.replaceChildren(...rows.map(card));
+		}
+		$("#files-search").addEventListener("input", show);
+		$("#files-sort").addEventListener("change", show);
+		for (const b of document.querySelectorAll(".seg [data-filter]")) {
+			b.addEventListener("click", () => {
+				filter = b.dataset.filter;
+				for (const o of document.querySelectorAll(".seg [data-filter]")) o.setAttribute("aria-pressed", String(o === b));
+				show();
+			});
+		}
+
+		// the open actions menu closes on a click elsewhere and on Escape
+		let openMenu = null;
+		const closeMenu = () => { if (openMenu) { openMenu.menu.hidden = true; openMenu.button.setAttribute("aria-expanded", "false"); openMenu = null; } };
+		document.addEventListener("click", (e) => { if (openMenu && !openMenu.menu.parentNode.contains(e.target)) closeMenu(); });
+		document.addEventListener("keydown", (e) => { if (e.key === "Escape" && openMenu) { const b = openMenu.button; closeMenu(); b.focus(); } });
+
 		function card(f) {
-			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
-				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null);
 			const nLinks = f.links.length;
-			const btn = (label, onClick, cls = "btn secondary") => { const b = el("button", { type: "button", className: cls, textContent: label }); b.addEventListener("click", onClick); return b; };
-			const copy = btn(nLinks ? "Copy link" : "Make a link", async () => {
+			const views = f.links.reduce((n, l) => n + (l.viewCount || 0), 0);
+			const act = (label, onClick, cls = "") => { const b = el("button", { type: "button", role: "menuitem", className: cls, textContent: label }); b.addEventListener("click", () => { closeMenu(); onClick(); }); return b; };
+			const copy = act(nLinks ? "Copy link" : "Make a link", async () => {
 				try {
 					const link = f.links[0] || (await api("POST", `/api/docs/${f.id}/links`, {}));
 					await navigator.clipboard.writeText(link.url);
-					copy.textContent = "Copied";
+					showError("");
 					if (!nLinks) load();
 				} catch (e) { showError(say(e)); }
-			}, "btn primary");
+			});
+			const menu = el("div", { className: "cmenu", role: "menu", hidden: true },
+				el("a", { role: "menuitem", href: ownerUrl(f), textContent: "Open" }),
+				copy,
+				act("Links…", () => links(f, load)),
+				el("a", { role: "menuitem", href: `/view/?update=${encodeURIComponent(f.id)}&name=${encodeURIComponent(f.name)}`, textContent: "New version", title: "Open the new version in the viewer and press Share" }),
+				act("Rename", async () => {
+					const name = prompt("Name", f.name);
+					if (!name || name.trim() === f.name) return;
+					try { await api("PATCH", `/api/docs/${f.id}`, { name: name.trim() }); load(); } catch (e) { showError(say(e)); }
+				}),
+				act("Delete", async () => {
+					if (!confirm(`Delete “${f.name}”? Its links stop working at once.`)) return;
+					try { await api("DELETE", `/api/docs/${f.id}`); load(); } catch (e) { showError(say(e)); }
+				}, "danger"));
+			const more = el("button", { type: "button", className: "more", title: "Actions", innerHTML: '<svg class="ic" aria-hidden="true"><use href="#i-more"/></svg>' });
+			more.setAttribute("aria-label", `Actions for ${f.name}`);
+			more.setAttribute("aria-haspopup", "menu");
+			more.setAttribute("aria-expanded", "false");
+			more.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const was = openMenu && openMenu.menu === menu;
+				closeMenu();
+				if (!was) { menu.hidden = false; more.setAttribute("aria-expanded", "true"); openMenu = { menu, button: more }; }
+			});
+			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
+				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null,
+				el("span", { className: "badge-cloud" }, icon("cloud"), "Cloud"));
 			return el("li", { className: "file" },
+				el("div", { className: "file-top" },
+					el("div", { className: "meta" },
+						el("span", { className: "name", textContent: f.name, title: f.name }),
+						el("span", { className: "when" }, icon("cloud"), `Uploaded · ${when(f.updatedAt)} · ${bytes(f.sizeBytes)}`)),
+					el("div", { className: "more-wrap" }, more, menu)),
 				thumb,
-				el("div", { className: "meta" },
-					el("span", { className: "name", textContent: f.name, title: f.name }),
-					el("span", { className: "when", textContent: `${when(f.updatedAt)} · ${bytes(f.sizeBytes)} · ${nLinks} ${nLinks === 1 ? "link" : "links"}` })),
-				el("div", { className: "actions" },
-					copy,
-					btn("Links", () => links(f, load)),
-					el("a", { className: "btn secondary", href: `/view/?update=${encodeURIComponent(f.id)}&name=${encodeURIComponent(f.name)}`, textContent: "New version", title: "Open the new version in the viewer and press Share" }),
-					btn("Rename", async () => {
-						const name = prompt("Name", f.name);
-						if (!name || name.trim() === f.name) return;
-						try { await api("PATCH", `/api/docs/${f.id}`, { name: name.trim() }); load(); } catch (e) { showError(say(e)); }
-					}),
-					btn("Delete", async () => {
-						if (!confirm(`Delete “${f.name}”? Its links stop working at once.`)) return;
-						try { await api("DELETE", `/api/docs/${f.id}`); load(); } catch (e) { showError(say(e)); }
-					}, "btn danger")));
+				el("div", { className: "linkstate" }, icon("link"), nLinks ? `${views} ${views === 1 ? "view" : "views"} · link on` : "Link off"));
 		}
 
 		await load();

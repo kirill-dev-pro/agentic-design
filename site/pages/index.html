@@ -7,8 +7,8 @@
 <meta name="description" content="A free, open, native macOS editor for .pen files. Your agent reads the document, draws into it and screenshots the result over MCP, while you watch and edit the same canvas live.">
 <link rel="canonical" href="https://agentic-design.kcrz.dev/">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#FAFAF7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E0F12" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131314" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Agentic Design">
 <meta property="og:url" content="https://agentic-design.kcrz.dev/">
@@ -46,6 +46,8 @@
 		<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
 		<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
 		<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+		<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+		<symbol id="i-pen" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
 		<symbol id="i-pointer" viewBox="2 1 15 16.5"><path d="M2 1 L17 8.5 L10.2 10.6 L7.4 17.5 Z"/></symbol>
 	</defs>
 </svg>
@@ -61,45 +63,53 @@
 		<nav class="links" aria-label="Sections">
 			<a href="#what">What it is</a>
 			<a href="#agents">Agents</a>
-			<a href="#mcp">MCP tools</a>
-			<a href="#pen">.pen files</a>
-			<a href="/view/">Viewer</a>
+			<a href="#pen">Files</a>
+			<a href="#share">Share</a>
+			<a href="#mcp">MCP</a>
 			<a href="#download">Download</a>
 		</nav>
 		<div class="nav-end">
+			<a class="btn ghost small nav-viewer" href="/view/">
+				<svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Viewer
+			</a>
 			<button class="theme" type="button" aria-label="Switch to dark theme" title="Light or dark">
 				<svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
 				<svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
 			</button>
-			<a class="btn ghost small" href="https://github.com/kirill-dev-pro/agentic-design">
-				<svg class="ic" aria-hidden="true"><use href="#i-code"/></svg>Source
+			<a class="btn primary small" href="#download">
+				<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Download
 			</a>
 		</div>
-	</div>
-</header>
+	</header>
 
 <main id="main">
 	<section class="hero">
-		<p class="badge">Prototype · free and open · macOS</p>
+		<p class="badge">Free during the prototype · macOS · open .pen files</p>
 		<h1>A design canvas your agent can see</h1>
-		<p class="lede">Agentic Design is a native macOS editor for .pen files. Your agent reads the document, draws into it and screenshots the result over MCP, while you watch and edit the same canvas live.</p>
+		<p class="lede">Agentic Design is a native macOS editor for .pen files with MCP built in. Your agent draws on the same canvas you edit, and you watch it work, live.</p>
 		<div class="ctas">
 			<a class="btn primary" data-download href="https://github.com/kirill-dev-pro/agentic-design/releases/latest">
 				<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Download for macOS
 			</a>
-			<a class="btn secondary" href="#mcp">
-				<svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg>Connect an agent
+			<a class="btn secondary" href="/view/">
+				<svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Open the viewer
+			</a>
+			<a class="btn secondary" href="/edit/">
+				<svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Try the editor (beta)
 			</a>
 		</div>
-		<p class="fine"><span data-version>Apple Silicon</span> · macOS 14 or later · or <a href="/view/">open a .pen file in your browser</a></p>
+		<p class="fine"><span data-version>Apple Silicon</span> · macOS 14 or later</p>
 
 		<div class="art">
 			<!-- the app window, desktop -->
 			<svg class="mock mock-d" viewBox="0 0 1200 620" role="img" aria-label="The Agentic Design window: layers on the left, the canvas with cursors of Claude, Codex and you, the inspector on the right">
 				<rect class="f-surface" width="1200" height="620"/>
-				<rect class="f-surface2" width="1200" height="40"/>
+				<rect class="f-tab" width="1200" height="40"/>
 				<circle class="f-red" cx="21" cy="20" r="5"/><circle class="f-yellow" cx="37" cy="20" r="5"/><circle class="f-green" cx="53" cy="20" r="5"/>
-				<text class="t-tab" x="80" y="25">agentic-design-site.pen</text>
+				<text class="t-tab" x="84" y="25">Dashboard</text>
+				<rect class="f-surface" x="176" y="6" width="190" height="34" rx="8"/>
+				<text class="t-tab strong" x="192" y="28">Landing page</text>
+				<rect class="f-cloudbadge" x="294" y="14" width="56" height="18" rx="9"/><text class="t-cloud" x="304" y="27">Cloud</text>
 				<line class="s-border" x1="199.5" y1="40" x2="199.5" y2="620"/>
 				<text class="t-head" x="16" y="69">LAYERS</text>
 				<rect class="f-accentsoft" x="8" y="180" width="184" height="24" rx="6"/>
@@ -127,22 +137,28 @@
 					<rect x="976" y="362" width="100" height="26" rx="6"/><rect x="1084" y="362" width="100" height="26" rx="6"/>
 					<rect x="976" y="434" width="100" height="26" rx="6"/><rect x="1084" y="434" width="100" height="26" rx="6"/>
 				</g>
-				<rect class="f-accent" x="982" y="441" width="14" height="14" rx="3"/>
+				<rect class="p-accent" x="982" y="441" width="14" height="14" rx="3"/>
 				<svg x="200" y="40" width="760" height="580">
 					<rect class="f-canvas" width="760" height="580"/>
 					<text class="t-label" x="180" y="95">Hero</text>
 					<g transform="translate(180 100)">
-						<rect class="f-bg sh-soft" width="400" height="380" rx="4"/>
-						<rect class="f-accent" x="28" y="36" width="120" height="10" rx="5"/>
-						<rect class="f-text" x="28" y="64" width="310" height="22" rx="6"/>
-						<rect class="f-text" x="28" y="94" width="250" height="22" rx="6"/>
-						<rect class="f-border" x="28" y="132" width="340" height="9" rx="4"/>
-						<rect class="f-border" x="28" y="149" width="300" height="9" rx="4"/>
-						<rect class="f-accent" x="28" y="180" width="120" height="36" rx="8"/>
-						<rect class="f-surface2" x="158" y="180" width="100" height="36" rx="8"/>
-						<rect class="f-accentsoft" x="28" y="236" width="344" height="116" rx="10"/>
+						<rect class="p-bg sh-soft" width="400" height="380" rx="4"/>
+						<rect class="p-accent" x="28" y="36" width="120" height="10" rx="5"/>
+						<rect class="p-ink" x="28" y="64" width="310" height="22" rx="6"/>
+						<rect class="p-ink" x="28" y="94" width="250" height="22" rx="6"/>
+						<rect class="p-line" x="28" y="132" width="340" height="9" rx="4"/>
+						<rect class="p-line" x="28" y="149" width="300" height="9" rx="4"/>
+						<rect class="p-accent" x="28" y="180" width="120" height="36" rx="8"/>
+						<rect class="p-line" x="158" y="180" width="100" height="36" rx="8"/>
+						<rect class="p-soft" x="28" y="236" width="344" height="116" rx="10"/>
 						<rect class="s-claude" x="24.75" y="60.75" width="316.5" height="58.5" rx="2"/>
 						<rect class="s-codex" x="24.75" y="232.75" width="350.5" height="122.5" rx="12"/>
+					</g>
+					<g transform="translate(130 506)">
+						<rect class="f-surface s-border" x="0.5" y="0.5" width="499" height="43" rx="22"/>
+						<circle class="p-accent" cx="26" cy="22" r="5"/><text class="t-tab" x="42" y="27">Ask an agent to make a design…</text>
+						<rect class="f-surface2" x="318" y="8" width="118" height="28" rx="14"/><circle class="c-claude" cx="334" cy="22" r="5"/><text class="t-tab strong" x="346" y="27">Claude Code</text>
+						<circle class="f-text" cx="468" cy="22" r="15"/><path d="M468 29V16M462 22l6-6 6 6" fill="none" stroke="#141417" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 					</g>
 					<g class="cursor c-claude" transform="translate(510 200)"><use href="#i-pointer" width="17" height="18"/><rect x="14" y="18" width="57" height="21" rx="10"/><text x="22" y="33">Claude</text></g>
 					<g class="cursor c-codex" transform="translate(540 430)"><use href="#i-pointer" width="17" height="18"/><rect x="14" y="18" width="53" height="21" rx="10"/><text x="22" y="33">Codex</text></g>
@@ -159,15 +175,15 @@
 					<rect class="f-canvas" width="350" height="380"/>
 					<text class="t-label" x="45" y="35">Hero</text>
 					<g transform="translate(45 40)">
-						<rect class="f-bg sh-soft" width="260" height="300" rx="4"/>
-						<rect class="f-accent" x="28" y="36" width="120" height="10" rx="5"/>
-						<rect class="f-text" x="28" y="64" width="170" height="22" rx="6"/>
-						<rect class="f-text" x="28" y="94" width="110" height="22" rx="6"/>
-						<rect class="f-border" x="28" y="132" width="200" height="9" rx="4"/>
-						<rect class="f-border" x="28" y="149" width="160" height="9" rx="4"/>
-						<rect class="f-accent" x="28" y="180" width="120" height="36" rx="8"/>
-						<rect class="f-surface2" x="158" y="180" width="100" height="36" rx="8"/>
-						<rect class="f-accentsoft" x="28" y="236" width="204" height="36" rx="10"/>
+						<rect class="p-bg sh-soft" width="260" height="300" rx="4"/>
+						<rect class="p-accent" x="28" y="36" width="120" height="10" rx="5"/>
+						<rect class="p-ink" x="28" y="64" width="170" height="22" rx="6"/>
+						<rect class="p-ink" x="28" y="94" width="110" height="22" rx="6"/>
+						<rect class="p-line" x="28" y="132" width="200" height="9" rx="4"/>
+						<rect class="p-line" x="28" y="149" width="160" height="9" rx="4"/>
+						<rect class="p-accent" x="28" y="180" width="120" height="36" rx="8"/>
+						<rect class="p-line" x="158" y="180" width="100" height="36" rx="8"/>
+						<rect class="p-soft" x="28" y="236" width="204" height="36" rx="10"/>
 						<rect class="s-claude" x="24.75" y="60.75" width="176.5" height="58.5" rx="2"/>
 						<rect class="s-codex" x="24.75" y="232.75" width="210.5" height="42.5" rx="12"/>
 					</g>
@@ -212,9 +228,9 @@
 				<p class="sub">Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour.</p>
 			</div>
 			<ul class="checks">
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Claude in clay, Codex in green, named from the MCP client</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Frames marked placeholder glow while an agent works on them</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>A cursor outside the view waits at the edge, pointing the way</li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Claude in clay, Codex in green, named from the MCP client</span></li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Frames marked placeholder glow while an agent works on them</span></li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>A cursor outside the view waits at the edge, pointing the way</span></li>
 			</ul>
 		</div>
 		<svg class="board" viewBox="0 0 560 420" role="img" aria-label="A frame marked placeholder glows while Claude works on it; Codex waits nearby">
@@ -223,60 +239,34 @@
 			</defs>
 			<rect class="f-canvas" width="560" height="420"/>
 			<g transform="translate(60 60)">
-				<rect class="f-bg s-claude2" x="1" y="1" width="298" height="278" rx="6" filter="url(#glow)"/>
+				<rect class="p-bg s-claude2" x="1" y="1" width="298" height="278" rx="6" filter="url(#glow)"/>
 				<text class="t-ph" x="16" y="28">placeholder</text>
-				<rect class="f-text" x="16" y="44" width="180" height="16" rx="4"/>
-				<rect class="f-border" x="16" y="72" width="240" height="8" rx="4"/>
-				<rect class="f-border" x="16" y="88" width="200" height="8" rx="4"/>
-				<rect class="f-accentsoft" x="16" y="116" width="268" height="140" rx="8"/>
+				<rect class="p-ink" x="16" y="44" width="180" height="16" rx="4"/>
+				<rect class="p-line" x="16" y="72" width="240" height="8" rx="4"/>
+				<rect class="p-line" x="16" y="88" width="200" height="8" rx="4"/>
+				<rect class="p-soft" x="16" y="116" width="268" height="140" rx="8"/>
 			</g>
 			<g class="cursor c-claude" transform="translate(300 120)"><use href="#i-pointer" width="17" height="18"/><rect x="14" y="18" width="57" height="21" rx="10"/><text x="22" y="33">Claude</text></g>
 			<g class="cursor c-codex" transform="translate(400 320)"><use href="#i-pointer" width="17" height="18"/><rect x="14" y="18" width="53" height="21" rx="10"/><text x="22" y="33">Codex</text></g>
 		</svg>
 	</section>
 
-	<section class="section split tools" id="mcp">
-		<div class="text">
-			<div class="head">
-				<p class="eyebrow">MCP tools</p>
-				<h2>One command to connect</h2>
-				<p class="sub"><code>agentic-design mcp</code> is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click.</p>
-			</div>
-			<figure class="code">
-				<figcaption><i></i><i></i><i></i>Terminal</figcaption>
-				<pre><code>$ APP="/Applications/Agentic Design.app"
-$ claude mcp add --scope user agentic-design \
-    -- "$APP/Contents/MacOS/agentic-design" mcp</code></pre>
-			</figure>
-		</div>
-		<dl class="tool-list">
-			<div><dt>get_guide</dt><dd>What the document holds and how its parts are named</dd></div>
-			<div><dt>batch</dt><dd>Several edits as one undo step, all or nothing</dd></div>
-			<div><dt>create_nodes</dt><dd>.pen nodes in, ids out, with nested children</dd></div>
-			<div><dt>find_nodes</dt><dd>Layers by name, type, text, ref or variable</dd></div>
-			<div><dt>screenshot</dt><dd>A node, the canvas or the whole window, in any theme</dd></div>
-			<div><dt>lint</dt><dd>Hard-coded colours, missing fonts, text that does not fit</dd></div>
-			<div><dt>set_variables</dt><dd>Tokens, theme axes and the theme shown</dd></div>
-			<div><dt>set_libraries</dt><dd>Import other .pen files as libraries</dd></div>
-			<div><dt>export_code</dt><dd>HTML + CSS or React + Tailwind for the page</dd></div>
-		</dl>
-	</section>
-
-	<section class="section band split pen" id="pen">
+	<section class="section split pen" id="pen">
 		<div class="text">
 			<div class="head">
 				<p class="eyebrow">.pen files</p>
-				<h2>Speaks .pen, keeps the rest</h2>
-				<p class="sub">Documents are <a href="https://pencil.design">pencil.design</a> .pen files. The app reads and writes the format directly and keeps every property it does not understand, so files round-trip with pen.dev.</p>
+				<h2>An open format, in the app and in the browser</h2>
+				<p class="sub">Documents are <a href="https://pencil.design">pencil.design</a> .pen files: plain JSON on your disk. Open one in the <a href="/view/">browser viewer</a>, or try the <a href="/edit/">editor (beta)</a>; the app keeps every property it does not understand, so files round-trip.</p>
 			</div>
 			<ul class="checks">
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Frames, groups, shapes, paths, text and Lucide icons</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Flex layout: gap, padding, fit and fill</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Variables, theme axes and per-frame themes</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Components, instances, overrides and slots</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Gradients, several fills and shadows, blurs</li>
-				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Unknown properties kept as they are</li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Frames, shapes, text, icons, components, variables and themes</span></li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Flex layout: gap, padding, fit and fill</span></li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Open any file in the viewer at <a href="/view/">/view</a>, edit it at <a href="/edit/">/edit</a> (beta)</span></li>
 			</ul>
+			<div class="ctas">
+				<a class="btn secondary small" href="/view/"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Open the viewer</a>
+				<a class="btn secondary small" href="/edit/"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Try the editor (beta)</a>
+			</div>
 		</div>
 		<figure class="code">
 			<figcaption><i></i><i></i><i></i>hero.pen</figcaption>
@@ -292,32 +282,69 @@ $ claude mcp add --scope user agentic-design \
 		</figure>
 	</section>
 
-	<section class="section download" id="download">
-		<div class="dl-band">
-			<div class="text">
-				<div class="head">
-					<p class="eyebrow">Download</p>
-					<h2>Run it on your Mac</h2>
-					<p class="sub">Signed and notarized by Apple, for Macs with Apple Silicon on macOS 14 or later. The app keeps itself up to date, and the onboarding connects your agents.</p>
-				</div>
-				<div class="ctas">
-					<a class="btn primary" data-download href="https://github.com/kirill-dev-pro/agentic-design/releases/latest">
-						<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Download for macOS
-					</a>
-					<a class="btn secondary" href="/view/">
-						<svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Open a .pen in the browser
-					</a>
-				</div>
-				<p class="fine"><span data-version>Latest release</span> · <a href="https://github.com/kirill-dev-pro/agentic-design/releases">all releases</a></p>
+	<section class="section band split share" id="share">
+		<div class="text">
+			<div class="head">
+				<p class="eyebrow">Share and files</p>
+				<h2>Send a link, keep your files</h2>
+				<p class="sub">Upload a design and share it by link: anyone can look at it in the browser, no sign-in, and you decide whether they can download it. <a href="/files">My files</a> lists what you have uploaded.</p>
+			</div>
+			<ul class="checks">
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>A link per upload: turn it off any time</span></li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Allow download and embedding only when you want to</span></li>
+				<li><span class="dot"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Sign in to see and manage your files</span></li>
+			</ul>
+		</div>
+		<div class="sharebox" role="img" aria-label="The Share window: a link, Copy link, and the options Allow download and Allow embedding">
+			<div class="sharebox-head"><strong>Share</strong><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></div>
+			<div class="sharebox-row"><span class="sharebox-url">agentic-design.kcrz.dev/s/3zhnN5PEJ83L</span><span class="btn primary small">Copy link</span></div>
+			<div class="sharebox-opts"><span><i></i>Allow download</span><span><i></i>Allow embedding</span></div>
+			<p class="sharebox-note">The link shows the last version you uploaded.</p>
+		</div>
+	</section>
+
+	<section class="section split tools" id="mcp">
+		<div class="text">
+			<div class="head">
+				<p class="eyebrow">MCP</p>
+				<h2>One command to connect</h2>
+				<p class="sub"><code>agentic-design mcp</code> is a stdio MCP server. It forwards tool calls to the running window and opens the window itself when it is closed. The onboarding registers it with Claude Code, Codex, Cursor and six more clients in a click.</p>
 			</div>
 			<figure class="code">
-				<figcaption><i></i><i></i><i></i>Or build it yourself</figcaption>
-				<pre><code>$ brew install odin
-$ git clone \
-    https://github.com/kirill-dev-pro/agentic-design
-$ cd agentic-design &amp;&amp; ./build.sh
-$ ./build/agentic-design</code></pre>
+				<figcaption><i></i><i></i><i></i>Terminal</figcaption>
+				<pre><code>$ APP="/Applications/Agentic Design.app"
+$ claude mcp add --scope user agentic-design \
+    -- "$APP/Contents/MacOS/agentic-design" mcp</code></pre>
 			</figure>
+		</div>
+		<dl class="tool-list">
+			<div><dt>get_guide</dt><dd>What the document holds and how its parts are named</dd></div>
+			<div><dt>batch</dt><dd>Several edits as one undo step, all or nothing</dd></div>
+			<div><dt>screenshot</dt><dd>A node, the canvas or the whole window, in any theme</dd></div>
+			<div><dt>lint</dt><dd>Hard-coded colours, missing fonts, text that does not fit</dd></div>
+			<div><dt>set_variables</dt><dd>Tokens, theme axes and the theme shown</dd></div>
+			<div><dt>export_code</dt><dd>HTML + CSS or React + Tailwind for the page</dd></div>
+		
+	</section>
+
+	<section class="section download" id="download">
+		<div class="dl-band">
+			<div class="head">
+				<h2>Run it on your Mac</h2>
+				<p class="sub">Signed and notarized by Apple, for Macs with Apple Silicon on macOS 14 or later. The app keeps itself up to date, and the onboarding connects your agents.</p>
+			</div>
+			<div class="ctas">
+				<a class="btn primary" data-download href="https://github.com/kirill-dev-pro/agentic-design/releases/latest">
+					<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Download for macOS
+				</a>
+				<a class="btn secondary" href="/view/">
+					<svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Open the viewer
+				</a>
+				<a class="btn secondary" href="/edit/">
+					<svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Try the editor (beta)
+				</a>
+			</div>
+			<p class="fine"><span data-version>Latest release</span> · <a href="https://github.com/kirill-dev-pro/agentic-design/releases">all releases on GitHub</a></p>
 		</div>
 	</section>
 </main>
@@ -335,9 +362,9 @@ $ ./build/agentic-design</code></pre>
 			<a href="https://github.com/kirill-dev-pro/agentic-design/tree/main/docs">Docs</a>
 			<a href="https://github.com/kirill-dev-pro/agentic-design/releases">Releases</a>
 			<a href="/view/">Viewer</a>
+			<a href="/edit/">Editor (beta)</a>
 			<a href="https://github.com/kirill-dev-pro/agentic-design">GitHub</a>
 			<a href="https://pencil.design">pencil.design</a>
-			<a href="https://odin-lang.org">Odin</a>
 		</nav>
 	</div>
 </footer>
