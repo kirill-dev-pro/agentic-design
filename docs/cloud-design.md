@@ -101,7 +101,11 @@ parallel with the site; execution plan with Dev and Web):
     provider: the agent input in the web editor, and one of the choices in the Mac app. It
     is metered per account and checked against an entitlement. People's own agents (Claude
     Code, Codex and others through the Mac app's MCP server) keep working on cloud documents
-    they can edit; whether that stays free is to be confirmed (§9).
+    they can edit, free: they run on the person's computer and their own provider.
+16. **Cloud documents are free for now.** Until billing exists every account may hold and
+    edit cloud documents (the free plan's `cloudDocs` entitlement is on). Limits on storage,
+    number of documents and history come from entitlements once prices are set; nothing in
+    the code checks a plan's name.
 
 ---
 
@@ -1063,11 +1067,11 @@ it down:
 
 The other questions of the proposal are answered under [Decisions](#decisions).
 
-- **Cloud documents for free accounts.** Decision 2 makes cloud documents paid, and decision
-  14 turns M1's free shared files into cloud documents. Until billing exists, the proposal
-  is: every account may hold cloud documents (the `cloudDocs` entitlement on for the free
-  plan), and limits are set by entitlements once prices are known.
-- **People's own agents on cloud documents:** free (assumed by decision 15), or metered?
+- **People's own agents on the web.** The web editor's agent input runs the paid hosted
+  agent. Letting people connect their own agent to a cloud document without the Mac app is
+  the remote MCP endpoint of M5 (§6.5): their agent signs in with OAuth and edits through
+  the server; the tools that need layout or pixels then need the headless engine. Whether
+  and when to offer it is open.
 - **The hosted agent:** LLM provider and model; the pricing unit (per request, per token, a
   monthly allowance).
 

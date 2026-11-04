@@ -16,7 +16,8 @@ const MB = 1024 * 1024
 
 export const PLANS = {
 	free: {
-		cloudDocs: false,
+		// decision 16: cloud documents are free until billing exists
+		cloudDocs: true,
 		storageBytes: 1024 * MB,
 		sharedFiles: 100,
 		maxPenBytes: 50 * MB,
