@@ -30,7 +30,7 @@ export type Broadcast = { t: 'ops'; seq: number; batch: string; author: string; 
 /** The engine as pencore.mjs wraps it. */
 export type Pencore = {
 	open(pen: string, sorts?: Record<string, string>): number
-	apply(h: number, batch: { ops: Op[] }): { ok: boolean; reason?: string; skipped?: number[]; ops?: Op[] }
+	apply(h: number, batch: { ops: Op[] }): { ok: boolean; reason?: string; skipped?: number[]; deleted?: string[]; ops?: Op[] }
 	serialize(h: number): string
 	state(h: number): { nodes: Record<string, { parent: string; sort: string; slot: string }> }
 	close(h: number): void
@@ -115,7 +115,7 @@ export class Room {
 
 		this.seq += 1
 		this.batches.set(b.batch, this.seq)
-		if (before) this.updateTombstones(before)
+		if (before) this.updateTombstones(before, r.deleted ?? [], ops)
 		const ack: Ack = { t: 'ack', batch: b.batch, seq: this.seq }
 		if (r.skipped?.length) ack.skipped = r.skipped
 		if (rewritten.length) ack.rewritten = rewritten
@@ -145,12 +145,17 @@ export class Room {
 		return ''
 	}
 
-	private updateTombstones(before: Record<string, { parent: string }>) {
-		const after = this.pc.state(this.h).nodes
+	/** From the engine's `deleted` (each deleted node and its subtree) and the parents before the batch. */
+	private updateTombstones(before: Record<string, { parent: string }>, deleted: string[], ops: Op[]) {
 		const now = this.opts.now()
-		for (const [id, n] of Object.entries(before)) if (!(id in after)) this.tombstones.set(id, { parent: n.parent, at: now })
-		for (const id of Object.keys(after)) this.tombstones.delete(id)
+		for (const id of deleted) this.tombstones.set(id, { parent: before[id]?.parent ?? '', at: now })
+		let created = 0
+		for (const op of ops)
+			if (op.op === 'create') {
+				this.tombstones.delete(op.node)
+				created++
+			}
 		for (const [id, t] of this.tombstones) if (now - t.at > this.opts.tombstoneMs) this.tombstones.delete(id)
-		this.liveNodes = Object.keys(after).length
+		this.liveNodes += created - deleted.length
 	}
 }
