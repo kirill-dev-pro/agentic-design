@@ -1,8 +1,8 @@
 # Builds what a change could break without anyone noticing: the browser viewer (the engine
 # for js_wasm32). The macOS app is built and checked by release.yml on tags.
 #
-# On a push it also uploads the compiled viewer and editor (viewer.wasm, odin.js, edit/editor.wasm)
-# to the web-viewer-builds prerelease, named by a hash of its sources (site/scripts/viewer-key.mjs) with a .sha256 next
+# On a push it also uploads the compiled viewer, editor and server engine (viewer.wasm, odin.js,
+# edit/editor.wasm, pencore/pencore.wasm) to the web-viewer-builds prerelease, named by a hash of its sources (site/scripts/viewer-key.mjs) with a .sha256 next
 # to it. The website build (Bunderhost, site/scripts/viewer.sh) fetches it from there rather than
 # downloading Odin and lld itself. A key that is there already is kept, not uploaded again.
 name: CI
@@ -46,7 +46,8 @@ jobs:
         run: |
           odin version
           sh tools/build_web.sh
-          ls -l build/web/viewer.wasm build/web/edit/editor.wasm
+          sh tools/build_pencore.sh
+          ls -l build/web/viewer.wasm build/web/edit/editor.wasm build/pencore/pencore.wasm
 
       - name: Upload for the website build
         if: github.event_name == 'push'
@@ -69,7 +70,7 @@ jobs:
             exit 0
           fi
           cd "$RUNNER_TEMP"
-          tar czf "$NAME" -C "$GITHUB_WORKSPACE/build/web" viewer.wasm odin.js edit/editor.wasm
+          tar czf "$NAME" -C "$GITHUB_WORKSPACE/build/web" viewer.wasm odin.js edit/editor.wasm -C "$GITHUB_WORKSPACE/build" pencore/pencore.wasm
           sha256sum "$NAME" > "$NAME.sha256"
           # the .sha256 goes up last and only after this run's archive: the site build takes it
           # as the sign that the archive is complete

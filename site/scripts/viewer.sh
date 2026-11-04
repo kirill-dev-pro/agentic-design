@@ -1,7 +1,8 @@
 #!/bin/sh
 # Builds the browser viewer (../tools/build_web.sh -> ../build/web) before the site build.
 #
-# The compiled part (viewer.wasm, odin.js) comes from CI: .github/workflows/ci.yml compiles it
+# The compiled part (viewer.wasm, odin.js, the editor's editor.wasm, and the server engine
+# pencore.wasm that the Worker bundles from site/src/room/) comes from CI: .github/workflows/ci.yml compiles it
 # on every push and uploads it to the web-viewer-builds prerelease under a key, a hash of its
 # sources (scripts/viewer-key.mjs). Here it is fetched by that key and checked against its
 # sha256, so the site build downloads no toolchain. When this push's build is not uploaded yet,
@@ -11,7 +12,11 @@
 # limit. VIEWER_BUILD=local always compiles; SKIP_VIEWER=1 builds the site without /view.
 set -e
 cd "$(dirname "$0")/../.."
-[ "${SKIP_VIEWER:-}" = 1 ] && { echo "viewer: skipped"; exit 0; }
+# the Worker imports the server engine at build time: where there is none, an empty module
+# keeps the import resolving (the room says so when it is asked to run)
+PENCORE=site/src/room/pencore.wasm
+empty_pencore() { [ -f "$PENCORE" ] || { mkdir -p "$(dirname "$PENCORE")" && printf '\000asm\001\000\000\000' > "$PENCORE"; }; }
+[ "${SKIP_VIEWER:-}" = 1 ] && { empty_pencore; echo "viewer: skipped"; exit 0; }
 
 # the same Odin release as .github/workflows/ci.yml and release.yml
 ODIN_VERSION=dev-2026-10
@@ -40,8 +45,12 @@ if [ "${VIEWER_BUILD:-}" != local ]; then
 	rm -rf build/viewer-prebuilt && mkdir -p build/viewer-prebuilt
 	if node site/scripts/viewer-fetch.mjs "$key" build/viewer-prebuilt/viewer.tar.gz "$wait"; then
 		tar xzf build/viewer-prebuilt/viewer.tar.gz -C build/viewer-prebuilt
-		VIEWER_PREBUILT=$PWD/build/viewer-prebuilt sh tools/build_web.sh
-		exit 0
+		if [ -f build/viewer-prebuilt/pencore/pencore.wasm ]; then
+			VIEWER_PREBUILT=$PWD/build/viewer-prebuilt sh tools/build_web.sh
+			mkdir -p "$(dirname "$PENCORE")" && cp build/viewer-prebuilt/pencore/pencore.wasm "$PENCORE"
+			exit 0
+		fi
+		echo "viewer: the prebuilt archive has no pencore.wasm"
 	fi
 	echo "viewer: no prebuilt viewer for $key; compiling"
 fi
@@ -70,3 +79,5 @@ if ! command -v wasm-ld >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 &&
 fi
 export PATH
 limit 900 sh tools/build_web.sh || { echo "viewer: compiling failed or took over 15 minutes" >&2; exit 1; }
+limit 600 sh tools/build_pencore.sh || { echo "viewer: compiling pencore failed or took over 10 minutes" >&2; exit 1; }
+mkdir -p "$(dirname "$PENCORE")" && cp build/pencore/pencore.wasm "$PENCORE"

@@ -7,5 +7,8 @@ designs/fonts/
 src/wgpu/lib/
 dist/
 
+# the server engine the Worker bundles (site/scripts/viewer.sh puts it there)
+site/src/room/pencore.wasm
+
 # the website's JavaScript dependencies (site/)
 node_modules/
