@@ -54,3 +54,15 @@ button, input { font: inherit; color: inherit; }
 .card.error h1 { color: var(--error); }
 #loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); z-index: 2; pointer-events: none; }
 #drop { position: absolute; inset: 8px; z-index: 5; display: grid; place-items: center; border: 2px dashed var(--sel); border-radius: 12px; background: rgba(13, 153, 255, .12); pointer-events: none; font-size: 18px; font-weight: 600; }
+
+#saved { flex: none; color: var(--muted); font-size: 12px; white-space: nowrap; }
+#saved.error { color: var(--error); }
+#recent { margin: 0 0 14px; }
+#recent h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+#recent ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 190px; overflow: auto; }
+#recent li { display: flex; align-items: center; gap: 4px; }
+.recent-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; background: none; border: 0; border-radius: 7px; cursor: pointer; text-align: left; }
+.recent-open:hover, .recent-del:hover { background: var(--field); }
+.recent-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-when { flex: none; color: var(--muted); font-size: 12px; }
+.recent-del { flex: none; width: 28px; height: 28px; background: none; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; font-size: 16px; }

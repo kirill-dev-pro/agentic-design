@@ -30,5 +30,5 @@ else
 fi
 cp web/index.html web/viewer.js web/upload.js web/viewer.css web/sw.js build/web/
 cp src/wgpu/wgpu.js build/web/
-cp web/edit/index.html web/edit/editor.js web/edit/editor.css web/edit/keys.js build/web/edit/
+cp web/edit/index.html web/edit/editor.js web/edit/editor.css web/edit/keys.js web/edit/store.js build/web/edit/
 cp build/web/odin.js build/web/wgpu.js build/web/edit/

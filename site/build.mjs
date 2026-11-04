@@ -126,7 +126,7 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	const edit = path.join(viewer, "edit");
 	if (fs.existsSync(path.join(edit, "editor.wasm"))) {
 		const emap = new Map([[`"odin.js"`, vmap.get(`"odin.js"`).replace(/"([^"]+)"/, '"/view/$1"')], [`"wgpu.js"`, vmap.get(`"wgpu.js"`).replace(/"([^"]+)"/, '"/view/$1"')]]);
-		for (const name of ["editor.wasm", "editor.css", "keys.js"]) {
+		for (const name of ["editor.wasm", "editor.css", "keys.js", "store.js"]) {
 			const data = fs.readFileSync(path.join(edit, name));
 			const h = hashed(name, data);
 			emap.set(`"${name}"`, `"${h}"`);

@@ -22,8 +22,10 @@
 	</a>
 	<span id="title">Editor</span>
 	<span class="beta">beta</span>
+	<span id="saved" role="status" hidden></span>
 	<span class="spacer"></span>
 	<label class="btn" id="open-label">Open…<input id="open-files" type="file" multiple hidden></label>
+	<button id="open-folder" class="btn" type="button" hidden title="Edit the files of a folder in place">Open folder…</button>
 	<button id="new" class="btn" type="button">New</button>
 	<button id="download" class="btn primary" type="button" disabled>Download .pen</button>
 </header>
@@ -36,10 +38,15 @@
 			<p>The editor of the Mac app, running here in WebAssembly and WebGPU. Drop a .pen file, or the folder it is in so its images and fonts come along, or start a new design.</p>
 			<div class="row">
 				<label class="btn primary">Choose files<input id="welcome-files" type="file" multiple hidden></label>
+				<button id="welcome-folder" class="btn" type="button" hidden title="Edit the files of a folder in place">Open a folder</button>
 				<button id="welcome-new" class="btn" type="button">New design</button>
 				<a class="btn" href="/view/">Just look at a file</a>
 			</div>
-			<p class="private">A beta. Your files stay in this browser, and nothing is saved: use Download .pen to keep what you make. The Mac app has everything else.</p>
+			<section id="recent" hidden>
+				<h2>Open again</h2>
+				<ul></ul>
+			</section>
+			<p class="private">A beta. Your files stay in this browser, kept in its private storage (or in a folder you open), and nothing is uploaded. Download .pen gives you a copy. The Mac app has everything else.</p>
 		</div>
 	</div>
 	<div id="message" class="card-wrap" hidden><div class="card"><h1 id="message-title"></h1><p id="message-text"></p><div class="row" id="message-actions"></div></div></div>
@@ -51,6 +58,7 @@
 <script src="odin.js" defer></script>
 <script src="wgpu.js" defer></script>
 <script src="keys.js" defer></script>
+<script src="store.js" defer></script>
 <script src="editor.js" defer></script>
 </body>
 </html>
