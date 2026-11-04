@@ -79,5 +79,5 @@ if ! command -v wasm-ld >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 &&
 fi
 export PATH
 limit 900 sh tools/build_web.sh || { echo "viewer: compiling failed or took over 15 minutes" >&2; exit 1; }
-limit 600 sh tools/build_pencore.sh || { echo "viewer: compiling pencore failed or took over 10 minutes" >&2; exit 1; }
+limit 120 sh tools/build_pencore.sh || { echo "viewer: compiling pencore failed or took over 2 minutes" >&2; exit 1; }
 mkdir -p "$(dirname "$PENCORE")" && cp build/pencore/pencore.wasm "$PENCORE"
