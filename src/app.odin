@@ -181,7 +181,8 @@ app_start :: proc(path: string) -> bool {
 	app.cam = {-80, -60}
 	app.canvas_bg = CANVAS_BG
 	app.tab = -1
-	app.files_dir = strings.clone(fs_dir(engine.absolute_path(path)))
+	if path != "" do app.files_dir = strings.clone(fs_dir(engine.absolute_path(path)))
+	else if home, _ := fs_home(context.temp_allocator); home != "" do app.files_dir = strings.clone(home)
 	// no field takes the keyboard until the user picks one (0 would focus the first
 	// field drawn, now the layer search)
 	ui.tab_target = -1

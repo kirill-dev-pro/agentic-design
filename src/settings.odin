@@ -149,8 +149,20 @@ settings_field_apply :: proc(key, text: string) -> bool {
 
 // ---------------------------------------------------------------- sheets
 
+// The frame each sheet was last drawn in (by title, a literal): a sheet not drawn last frame
+// was opened in this one, often by a click outside where it appears (a Settings or Share
+// button), and that click must not close it again.
+sheet_frames: map[string]int
+
+sheet_just_opened :: proc(key: string) -> bool {
+	last, seen := sheet_frames[key]
+	sheet_frames[key] = frames_drawn
+	return !seen || last != frames_drawn - 1
+}
+
 // A centred modal sheet with a title and a close button; false once it is closed.
 sheet_begin :: proc(vg: ^nvg.Context, title: string, w, h: f32) -> (sheet: Rect, open: bool) {
+	just_opened := sheet_just_opened(title)
 	fill_rect(vg, {0, 0, app.screen.x, app.screen.y}, {0, 0, 0, 0.55})
 	w, h := min(app.screen.x - 96, w), min(app.screen.y - 96, h)
 	sheet = Rect{(app.screen.x - w) / 2, (app.screen.y - h) / 2, w, h}
@@ -160,7 +172,7 @@ sheet_begin :: proc(vg: ^nvg.Context, title: string, w, h: f32) -> (sheet: Rect,
 	ob_text(vg, sheet.x + 24, sheet.y + 30, title, 18, TEXT_FG, 600)
 	close := Rect{sheet.x + sheet.w - 44, sheet.y + 14, 30, 30}
 	if lucide_button(vg, close, "x") || (key_pressed(KEY_ESCAPE) && ui.focus == "") do return sheet, false
-	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) do return sheet, false
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) && !just_opened do return sheet, false
 	return sheet, true
 }
 
@@ -232,6 +244,7 @@ settings_row_text :: proc(vg: ^nvg.Context, box: Rect, i: int, name, hint: strin
 
 draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	if !settings_open do return
+	just_opened := sheet_just_opened("Settings")
 	saved_pass := ui.overlay_pass
 	ui.overlay_pass = true
 	defer ui.overlay_pass = saved_pass
@@ -250,7 +263,7 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	closing := false
 	close := Rect{sheet.x + sheet.w - 44, sheet.y + 14, 30, 30}
 	if lucide_button(vg, close, "x") || (key_pressed(KEY_ESCAPE) && ui.focus == "") do closing = true
-	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) do closing = true
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(sheet, app.mouse) && !just_opened do closing = true
 	if closing {
 		if ui.focus != "" do field_commit()
 		settings_open = false

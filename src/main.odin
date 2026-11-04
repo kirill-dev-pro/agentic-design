@@ -46,7 +46,9 @@ main :: proc() {
 		font_instance_main(os.args[2], os.args[3:len(os.args) - 1], os.args[len(os.args) - 1])
 		return
 	}
-	path := os.args[1] if len(os.args) > 1 else default_document_path()
+	// the installed app opens on the Dashboard; a build from the repository (tests, agents'
+	// test windows) opens its scratch file as before
+	path := os.args[1] if len(os.args) > 1 else ("" if bundle_path() != "" else default_document_path())
 	app_main(path)
 }
 
