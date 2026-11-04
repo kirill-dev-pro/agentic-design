@@ -12,7 +12,7 @@ import "../engine"
 //
 //   pc_alloc(len) -> ptr, pc_free(ptr)                    memory for the host to write into
 //   pc_open(pen, pen_len, sorts, sorts_len) -> handle     a document (sorts: {"id": "key"}; {} = assign)
-//   pc_apply(h, batch, batch_len) -> ptr                  {"ok", "reason"?, "skipped": [i], "ops": [as applied]}
+//   pc_apply(h, batch, batch_len) -> ptr                  {"ok", "reason"?, "skipped": [i], "deleted": [ids], "ops": [as applied]}
 //   pc_serialize(h) -> ptr                                the .pen bytes
 //   pc_state(h) -> ptr                                    {"nodes": {id: {"parent", "sort", "slot"}}}
 //   pc_close(h)
@@ -113,6 +113,14 @@ pc_apply :: proc "contextless" (h: int, batch: [^]u8, batch_len: int) -> rawptr 
 	}
 	// owned copies: applying a delete frees the node's strings the ops would point into
 	owned := engine.ops_clone(ops[:], context.temp_allocator)
+	// the ids a delete removes (the node and its subtree), known before they go
+	deleted := make([dynamic]string, context.temp_allocator)
+	for op in owned do if op.kind == .Delete {
+		n, _ := engine.doc_find(&e.doc, op.node)
+		if n == nil do continue
+		root := n.uid
+		for &m in e.doc.nodes do if m.uid == root || engine.is_descendant(&e.doc, m.uid, root) do append(&deleted, strings.clone(m.id, context.temp_allocator))
+	}
 	res := engine.ops_apply(&e.doc, &e.state, owned)
 	b := strings.builder_make(context.temp_allocator)
 	fmt.sbprintf(&b, `{{"ok":%v`, res.ok)
@@ -122,6 +130,11 @@ pc_apply :: proc "contextless" (h: int, batch: [^]u8, batch_len: int) -> rawptr 
 	}
 	strings.write_string(&b, `,"skipped":[`)
 	for i, k in res.skipped do fmt.sbprintf(&b, "%s%d", "," if k > 0 else "", i)
+	strings.write_string(&b, `],"deleted":[`)
+	if res.ok do for id, k in deleted {
+		if k > 0 do strings.write_byte(&b, ',')
+		engine.json_write_string(&b, id)
+	}
 	strings.write_string(&b, `],"ops":[`)
 	if res.ok {
 		for op, k in owned {

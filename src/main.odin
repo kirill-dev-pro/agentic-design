@@ -106,6 +106,10 @@ cloud_vectors_main :: proc(path: string) {
 	for vv in vectors {
 		v, _ := vv.(json.Object)
 		name := string(v["name"].(json.String) or_else "?")
+		if v["room"].(json.Boolean) or_else false {
+			fmt.println("skip", name, "(room only: tombstones)")
+			continue
+		}
 		doc: engine.Document
 		engine.doc_load(&doc, string(v["start"].(json.String) or_else ""))
 		state: engine.Cloud_State
