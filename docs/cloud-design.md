@@ -106,6 +106,15 @@ parallel with the site; execution plan with Dev and Web):
     edit cloud documents (the free plan's `cloudDocs` entitlement is on). Limits on storage,
     number of documents and history come from entitlements once prices are set; nothing in
     the code checks a plan's name.
+17. **Google and GitHub sign in to the existing account with the same email** (owner's
+    decision, 2026-11-04; reverses "no implicit linking" of §3.1). A new email creates the
+    account and its workspace at the first sign-in. Linking happens only when the provider
+    says the email is verified. An existing password account keeps its password and sessions,
+    and its email counts as verified from then on. Accepted risk: while the site sends no
+    email, a password account's email is never verified, so someone who registered another
+    person's address with a password before that person signs in with Google keeps the
+    password. Revisit when email verification works.
+
 
 ---
 
@@ -508,7 +517,7 @@ flowchart LR
     of its own.
   - GitHub through Bunderhost's managed sign-in as well. The broker supports Google and
     GitHub, each enabled per environment, so the site needs no OAuth app of its own.
-  - No implicit linking of accounts by email; linking is done explicitly from settings.
+  - Google and GitHub link to the account with the same verified email (decision 17).
 - **The Mac app** signs in through the system browser, never an embedded web view: it
   opens `/auth/app?challenge=…&port=…` (PKCE), and the site redirects to
   `http://127.0.0.1:<port>/callback` with a one-time code. The app exchanges the code for

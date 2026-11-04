@@ -15,6 +15,7 @@ import type { App } from './blobs'
 import { deleteOwnAccount, runAccountDeletions } from './account'
 import { exchangeCode } from './app-auth'
 import { cleanup } from './cleanup'
+import { secureLinkedAccount } from './linking'
 import { DocRoom } from './room/doc-room'
 import { fileRoutes } from './files'
 import * as schema from './schema'
@@ -29,8 +30,12 @@ export const backend = workerstack({
 		baseURL: env.APP_URL,
 		trustedOrigins: env.APP_URL ? [env.APP_URL] : [],
 		emailAndPassword: { enabled: true, minPasswordLength: 10 },
-		// Accounts are linked only explicitly, never by a matching email (cloud-design §3.1).
-		account: { accountLinking: { enabled: false } },
+		// Google/GitHub (managed identity) sign in to the account with the same email (owner's
+		// decision, 2026-11-04), only when the provider says the email is verified: the broker
+		// passes only verified emails, and nothing is a trusted provider. An existing account whose
+		// own email was never verified is linked too and keeps its password (accepted risk, see
+		// src/linking.ts and cloud-design decision 17).
+		account: { accountLinking: { enabled: true, trustedProviders: [], requireLocalEmailVerified: false } },
 		session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
 		// On in production only (Better Auth's default), with its stricter sign-in rules.
 		rateLimit: { window: 60, max: 10 },
@@ -38,6 +43,13 @@ export const backend = workerstack({
 		plugins: [organization({ allowUserToCreateOrganization: false }), bearer({ requireSignature: false })],
 		advanced: { database: { generateId: () => false } },
 		databaseHooks: {
+			account: {
+				create: {
+					after: async (account: { userId: string; providerId: string }) => {
+						await secureLinkedAccount(db, account)
+					},
+				},
+			},
 			user: {
 				create: {
 					after: async (user: { id: string }) => {
@@ -137,6 +149,16 @@ export const backend = workerstack({
 				return { ok: true }
 			}),
 
+		onboardingDone: o.protected
+			.route({ method: 'POST', path: '/api/me/onboarding' })
+			.handler(async ({ context }) => {
+				await context.db
+					.update(schema.user)
+					.set({ onboardedAt: new Date() })
+					.where(and(eq(schema.user.id, context.user.id), isNull(schema.user.onboardedAt)))
+				return { done: true }
+			}),
+
 		viewMetric: o.public
 			.route({ method: 'POST', path: '/api/metrics/view', successStatus: 204 })
 			.input(
@@ -174,7 +196,9 @@ export const backend = workerstack({
 					.select({ n: sum(schema.asset.size) })
 					.from(schema.asset)
 					.where(eq(schema.asset.workspaceId, ws.id))
+				const [flags] = await db.select({ onboardedAt: schema.user.onboardedAt }).from(schema.user).where(eq(schema.user.id, user.id))
 				return {
+					onboarding: { done: Boolean(flags?.onboardedAt) },
 					user: {
 						id: user.id,
 						name: user.name,

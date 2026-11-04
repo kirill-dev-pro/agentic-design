@@ -161,6 +161,11 @@ api:
       effect: read
       method: GET
       path: /api/oembed
+    - handle: onboardingDone
+      operationId: onboardingDone
+      effect: mutation
+      method: POST
+      path: /api/me/onboarding
     - handle: renameFile
       operationId: renameFile
       effect: mutation

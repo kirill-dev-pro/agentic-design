@@ -64,6 +64,13 @@
       "when": 1793802388182,
       "tag": "0008_delete_test_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793802721038,
+      "tag": "0009_lucky_shape",
+      "breakpoints": true
     }
   ]
 }

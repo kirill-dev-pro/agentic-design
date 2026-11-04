@@ -21,6 +21,8 @@ export const user = sqliteTable('user', {
 	image: text('image'),
 	createdAt: timestamp('createdAt').notNull(),
 	updatedAt: timestamp('updatedAt').notNull(),
+	/** When the site's first-sign-in guide was shown and closed (null: show it). */
+	onboardedAt: timestamp('onboardedAt'),
 })
 
 export const session = sqliteTable(
