@@ -6,7 +6,7 @@ import "core:strings"
 // Info.plist, the release workflow checks the tag against it, and the updater compares
 // it with the update manifest. A build can override it (-define:VERSION=0.1.1) to make a
 // test update; releases never do.
-VERSION :: #config(VERSION, "0.1.6")
+VERSION :: #config(VERSION, "0.2.0")
 
 BUNDLE_ID :: "dev.kcrz.agentic-design"
 APP_NAME :: "Agentic Design"
