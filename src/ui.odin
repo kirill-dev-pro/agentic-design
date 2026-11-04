@@ -23,9 +23,10 @@ draw_ui :: proc() {
 	if app.tab < 0 {
 		draw_dashboard(vg)
 	} else {
-		draw_sidebar(vg)
 		draw_tools(vg)
+		draw_sidebar(vg)
 		draw_inspector(vg)
+		draw_corner_buttons(vg)
 	}
 	draw_tab_bar(vg)
 	draw_component_drag_ghost(vg)
@@ -96,40 +97,39 @@ draw_tab_bar :: proc(vg: ^nvg.Context) {
 		if active do fill_rect(vg, tab, ACTIVE_BG, 7)
 		else if hover do fill_rect(vg, tab, HOVER_BG, 7)
 		draw_icon(vg, .File, tab.x + 18, TAB_H / 2, TEXT_FG if active else TEXT_DIM, 15)
-		label(vg, tab.x + 34, TAB_H / 2, name, TEXT_FG if active else TEXT_DIM, 13)
+		renaming := active && ui.focus == "filename" && ui.focus_uid == 0
+		if renaming do field(vg, 0, "filename", "", {tab.x + 30, tab.y + 3, tab.w - 58, tab.h - 6}, engine.file_title(app.file_path))
+		else do label(vg, tab.x + 34, TAB_H / 2, name, TEXT_FG if active else TEXT_DIM, 13)
 		cross := Rect{tab.x + tab.w - 26, tab.y + 4, 22, 22}
 		if active || hover {
 			if icon_button(vg, cross, .X) do close_me = i
 		}
-		if clicked(tab) && !in_rect(cross, app.mouse) do tab_activate(i)
+		if clicked(tab) && !in_rect(cross, app.mouse) && !renaming {
+			// a double click on the active tab renames the file
+			double := active && ui.tree_click_uid == -2 && time.duration_seconds(time.since(ui.tree_click)) < 0.35
+			ui.tree_click, ui.tree_click_uid = time.now(), -2
+			if double do field_focus(0, "filename", engine.file_title(app.file_path))
+			else do tab_activate(i)
+		}
 		x += tw + 6
 	}
 	if close_me >= 0 do close_tab(close_me)
 	if icon_button(vg, {x + 2, 8, 28, 28}, .Plus) do new_document()
+	if app.tab >= 0 do draw_view_controls(vg)
 }
 
+// The layers panel, floating at the top left (panels.odin). Its content is drawn where the
+// docked sidebar was ({0, TAB_H}); panel_begin moves it.
 draw_sidebar :: proc(vg: ^nvg.Context) {
-	panel := Rect{0, TAB_H, LEFT_W, app.screen.y - TAB_H}
-	fill_rect(vg, panel, PANEL_BG)
-	fill_rect(vg, {LEFT_W - 1, TAB_H, 1, panel.h}, PANEL_LINE)
+	if !panel_shown(.Left) do return
+	pr := panel_rect(.Left)
+	panel_begin(vg, pr, {0, TAB_H})
+	defer panel_end(vg)
+	bottom := TAB_H + pr.h
 
-	// file header; double click renames the file
-	y := TAB_H + 22
-	draw_icon(vg, .File, 24, y, TEXT_FG, 15)
-	if ui.focus == "filename" && ui.focus_uid == 0 {
-		field(vg, 0, "filename", "", {36, y - 12, LEFT_W - 52, 24}, engine.file_title(app.file_path))
-	} else {
-		label(vg, 40, y, engine.file_title(app.file_path), TEXT_FG, 13)
-		hdr := Rect{16, y - 14, LEFT_W - 32, 28}
-		if clicked(hdr) {
-			double := ui.tree_click_uid == -2 && time.duration_seconds(time.since(ui.tree_click)) < 0.35
-			ui.tree_click, ui.tree_click_uid = time.now(), -2
-			if double do field_focus(0, "filename", engine.file_title(app.file_path))
-		}
-	}
-
-	// Design | Components | Theme
-	seg := Rect{16, TAB_H + 44, LEFT_W - 32, 28}
+	// hide button, then Design | Components | Theme
+	panel_hide_button(vg, {8, TAB_H + 8, 28, 28}, .Left)
+	seg := Rect{42, TAB_H + 8, LEFT_W - 50, 28}
 	fill_rect(vg, seg, FIELD_BG, 7)
 	tab_names := [3]string{"Design", "Components", "Theme"}
 	tw := (seg.w - 4) / 3
@@ -141,11 +141,12 @@ draw_sidebar :: proc(vg: ^nvg.Context) {
 	}
 	ui.theme_tab = ui.side_tab == 2
 
-	top := TAB_H + 88
-	app.layers_scroll = max(app.layers_scroll - wheel_over({0, top, LEFT_W, panel.h - (top - TAB_H)}), 0)
+	top := TAB_H + 44
+	side := Rect{0, top, LEFT_W, bottom - top - 6}
+	app.layers_scroll = max(app.layers_scroll - wheel_over(side), 0)
 	nvg.Save(vg)
-	nvg.Scissor(vg, 0, top, LEFT_W, app.screen.y - top)
-	y = top + 8 - app.layers_scroll
+	nvg.Scissor(vg, side.x, side.y, side.w, side.h)
+	y := top + 4 - app.layers_scroll
 	if ui.side_tab == 2 do draw_variables(vg, &y)
 	else if ui.side_tab == 1 do draw_components_panel(vg, &y)
 	else {
@@ -155,8 +156,8 @@ draw_sidebar :: proc(vg: ^nvg.Context) {
 		draw_layers(vg, &y)
 	}
 	nvg.Restore(vg)
-	ui.side_h = y + app.layers_scroll - top + 16
-	side := Rect{0, top, LEFT_W, app.screen.y - top}
+	ui.side_h = y + app.layers_scroll - top + 8
+	ui.side_full_h = top - TAB_H + ui.side_h + 6
 	if ui.side_h > side.h do app.layers_scroll = scrollbar(vg, "sidebar", side, ui.side_h, app.layers_scroll)
 	else do app.layers_scroll = 0
 }
@@ -525,51 +526,90 @@ theme_menu_axis: string
 
 // ---------------------------------------------------------------- tool strip
 
+// The tool bar, floating at the bottom centre of the canvas.
 draw_tools :: proc(vg: ^nvg.Context) {
-	fill_rect(vg, {LEFT_W, TAB_H, TOOLS_W, app.screen.y - TAB_H}, PANEL_BG)
-	fill_rect(vg, {LEFT_W + TOOLS_W - 1, TAB_H, 1, app.screen.y - TAB_H}, PANEL_LINE)
+	bar := toolbar_rect()
+	float_surface(vg, bar, 12)
 	Tool_Button :: struct {
 		tool: Tool,
 		icon: Icon,
 		tip:  string,
 	}
 	tools := [?]Tool_Button{{.Select, .Select, "Move  V"}, {.Hand, .Hand, "Hand  H"}, {.Frame, .Frame, "Frame  F"}, {.Rect, .Rect, "Rectangle  R"}, {.Ellipse, .Ellipse, "Ellipse  E"}, {.Text, .Text, "Text  T"}, {.Pen, .Pen, "Pen  P"}, {.Connector, .Connector, "Connector  C"}}
-	y := TAB_H + 8
+	#assert(len(tools) + 1 == TOOLBAR_TOOLS)
+	x := bar.x + 6
+	y := bar.y + (bar.h - TOOLBAR_BUTTON) / 2
 	for t in tools {
-		if icon_button(vg, {LEFT_W + 6, y, 32, 32}, t.icon, app.tool == t.tool, t.tip) {
+		if icon_button(vg, {x, y, TOOLBAR_BUTTON, TOOLBAR_BUTTON}, t.icon, app.tool == t.tool, t.tip) {
 			if pen_active() do pen_finish()
 			app.tool = t.tool
 			if app.editing != 0 do finish_text_editing()
 		}
-		y += 38
+		x += TOOLBAR_BUTTON + 4
 	}
-	if icon_button(vg, {LEFT_W + 6, y, 32, 32}, .Image, tip = "Place image") do place_image_dialog()
-	y += 38
-	fill_rect(vg, {LEFT_W + 12, y + 2, TOOLS_W - 24, 1}, PANEL_LINE)
-	y += 10
-	if icon_button(vg, {LEFT_W + 6, y, 32, 32}, .Grid, ui.show_grid, "Dot grid") do ui.show_grid = !ui.show_grid
+	if icon_button(vg, {x, y, TOOLBAR_BUTTON, TOOLBAR_BUTTON}, .Image, tip = "Place image") do place_image_dialog()
+	x += TOOLBAR_BUTTON + 4
+	fill_rect(vg, {x + 2, y + 6, 1, TOOLBAR_BUTTON - 12}, PANEL_LINE)
+	x += 9
+	if icon_button(vg, {x, y, TOOLBAR_BUTTON, TOOLBAR_BUTTON}, .Grid, ui.show_grid, "Dot grid") do ui.show_grid = !ui.show_grid
 }
 
 // ---------------------------------------------------------------- inspector
 
+// The inspector, floating at the top right (panels.odin); drawn where the docked one was.
 draw_inspector :: proc(vg: ^nvg.Context) {
+	if !panel_shown(.Right) do return
 	px := app.screen.x - RIGHT_W
-	panel := Rect{px, TAB_H, RIGHT_W, app.screen.y - TAB_H}
-	fill_rect(vg, panel, PANEL_BG)
-	fill_rect(vg, {px, TAB_H, 1, panel.h}, PANEL_LINE)
+	pr := panel_rect(.Right)
+	panel_begin(vg, pr, {px, TAB_H})
+	defer panel_end(vg)
+	bottom := TAB_H + pr.h
 	x := px + 16
 	right := px + RIGHT_W - 16
-	y := TAB_H + 12
+	y := TAB_H + 8
 
-	// zoom · export
+	label(vg, x, y + 14, "Design", TEXT_FG, 13, true)
+	panel_hide_button(vg, {px + RIGHT_W - 36, y, 28, 28}, .Right)
+	y += 40
+
+	// the rest scrolls
+	area := Rect{px, y, RIGHT_W, bottom - y - 6}
+	ui.insp_scroll = clamp(ui.insp_scroll - wheel_over(area), 0, max(ui.insp_h - area.h + 16, 0))
+	nvg.Save(vg)
+	nvg.Scissor(vg, area.x, area.y, area.w, area.h)
+	ui.clip = area
+	top := y
+	y -= ui.insp_scroll
+	draw_inspector_content(vg, x, right, &y)
+	ui.insp_h = y + ui.insp_scroll - top
+	ui.insp_full_h = top - TAB_H + ui.insp_h + 22
+	ui.clip = {}
+	nvg.Restore(vg)
+	if ui.insp_h + 16 > area.h do ui.insp_scroll = scrollbar(vg, "inspector", area, ui.insp_h + 16, ui.insp_scroll)
+}
+
+// Zoom, Export and Share at the right of the tab bar, while a document is shown.
+draw_view_controls :: proc(vg: ^nvg.Context) {
+	right := app.screen.x - 12
+	y := (TAB_H - 28) / 2
+	share := Rect{right - 64, y, 64, 28}
+	if button(vg, share, "Share", primary = true) do share_sheet_open()
+	export := Rect{share.x - 8 - 70, y, 70, 28}
+	if button(vg, export, "Export") do menu_open("export", export, {"PNG\tShift Cmd E", "HTML + CSS", "React + Tailwind"})
+	if pick, ok := menu_take("export"); ok {
+		switch pick {
+		case 0: export_request()
+		case 1, 2: export_code_ui(.HTML if pick == 1 else .React)
+		}
+	}
 	zoom_text := fmt.tprintf("%d%%", int(app.zoom * 100 + 0.5))
-	zoom := Rect{x, y + 2, 84, 24}
-	if in_rect(zoom, app.mouse) do fill_rect(vg, zoom, HOVER_BG, 6)
-	label(vg, zoom.x + 8, zoom.y + 12, zoom_text, TEXT_FG, 12)
-	draw_icon(vg, .Chevron_Down, zoom.x + zoom.w - 10, zoom.y + 12, TEXT_DIM, 11)
+	zoom := Rect{export.x - 8 - 72, y, 72, 28}
+	if hovered(zoom) do fill_rect(vg, zoom, HOVER_BG, 6)
+	label(vg, zoom.x + 10, zoom.y + 14, zoom_text, TEXT_DIM, 12)
+	draw_icon(vg, .Chevron_Down, zoom.x + zoom.w - 12, zoom.y + 14, TEXT_DIM, 11)
 	if clicked(zoom) do menu_open("zoom", zoom, {"Zoom to fit", "Zoom to selection", "50%", "100%", "200%", "400%"})
 	if pick, ok := menu_take("zoom"); ok {
-		c := [2]f32{app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}
+		c := canvas_center()
 		switch pick {
 		case 0:
 			if r, rok := bounds_of(all_uids(true)); rok do zoom_to_rect(r)
@@ -581,30 +621,6 @@ draw_inspector :: proc(vg: ^nvg.Context) {
 		case 5: zoom_at(c, 4 / app.zoom)
 		}
 	}
-	if button(vg, {right - 76 - 8 - 60, y + 2, 60, 24}, "Share", primary = true) do share_sheet_open()
-	export := Rect{right - 76, y + 2, 76, 24}
-	if button(vg, export, "Export ▾") do menu_open("export", export, {"PNG\tShift Cmd E", "HTML + CSS", "React + Tailwind"})
-	if pick, ok := menu_take("export"); ok {
-		switch pick {
-		case 0: export_request()
-		case 1, 2: export_code_ui(.HTML if pick == 1 else .React)
-		}
-	}
-	y += 46
-
-	// the rest scrolls
-	area := Rect{px, y, RIGHT_W, app.screen.y - y}
-	ui.insp_scroll = clamp(ui.insp_scroll - wheel_over(area), 0, max(ui.insp_h - area.h + 16, 0))
-	nvg.Save(vg)
-	nvg.Scissor(vg, area.x, area.y, area.w, area.h)
-	ui.clip = area
-	top := y
-	y -= ui.insp_scroll
-	draw_inspector_content(vg, x, right, &y)
-	ui.insp_h = y + ui.insp_scroll - top
-	ui.clip = {}
-	nvg.Restore(vg)
-	if ui.insp_h + 16 > area.h do ui.insp_scroll = scrollbar(vg, "inspector", area, ui.insp_h + 16, ui.insp_scroll)
 }
 
 draw_inspector_content :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
@@ -1145,6 +1161,7 @@ draw_status :: proc(vg: ^nvg.Context) {
 	lw := text_width(vg, link) + 20
 	if reveal do w += lw + 4
 	r := Rect{app.canvas.x + (app.canvas.w - w) / 2, app.screen.y - 44, w, 28}
+	if app.tab >= 0 do r.y = toolbar_rect().y - 36 // above the tool bar
 	fill_rect(vg, r, {0.1, 0.1, 0.1, 0.95}, 8)
 	stroke_rect(vg, r, PANEL_LINE, 8)
 	if !reveal {

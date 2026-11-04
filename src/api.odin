@@ -902,6 +902,7 @@ inject_input :: proc(params: json.Object) {
 		case "alt": return KEY_LEFT_ALT
 		case "/": return KEY_SLASH
 		case "'": return KEY_APOSTROPHE
+		case "\\": return KEY_BACKSLASH
 		case ",": return KEY_COMMA
 		case "=": return KEY_EQUAL
 		case "-": return KEY_MINUS

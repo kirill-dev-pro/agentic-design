@@ -138,8 +138,8 @@ components_drag_update :: proc() {
 	comp_drag = {}
 	comp, _ := engine.doc_find_uid(&app.doc, uid)
 	if comp == nil do return
-	if moved && !in_rect(app.canvas, app.mouse) do return
-	at := to_page(app.mouse) if moved else to_page({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2})
+	if moved && !canvas_hit(app.mouse) do return
+	at := to_page(app.mouse) if moved else to_page(canvas_center())
 	insert_instance(comp, at - {comp.w / 2, comp.h / 2}, at if moved else {})
 }
 

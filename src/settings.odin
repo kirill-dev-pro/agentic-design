@@ -25,6 +25,8 @@ Settings :: struct {
 	last_seen_version: string, // the version whose "What's new" was shown (whats_new.odin)
 	dash_sort:    Dash_Sort, // the dashboard's order of all files (dashboard.odin)
 	dash_hidden:  [dynamic]string, // files and folders kept off the dashboard (files_index.odin)
+	hide_layers:    bool, // the editor's floating panels (panels.odin)
+	hide_inspector: bool,
 }
 
 Dash_Sort :: enum i32 {
@@ -78,6 +80,8 @@ settings_load :: proc() {
 	if s, ok := obj["dashboardSort"].(json.String); ok {
 		for k in Dash_Sort do if DASH_SORT_KEYS[k] == string(s) do settings.dash_sort = k
 	}
+	if b, ok := obj["hideLayers"].(json.Boolean); ok do settings.hide_layers = bool(b)
+	if b, ok := obj["hideInspector"].(json.Boolean); ok do settings.hide_inspector = bool(b)
 	if arr, ok := obj["dashboardHidden"].(json.Array); ok {
 		for v in arr do if s, sok := v.(json.String); sok do append(&settings.dash_hidden, strings.clone(string(s)))
 	}
@@ -90,8 +94,8 @@ settings_save :: proc(in_test_window := false) {
 	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]),
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector,
 	)
 	_ = fs_write(settings_path(), text)
 }

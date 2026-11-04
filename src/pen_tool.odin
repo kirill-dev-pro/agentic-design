@@ -322,7 +322,7 @@ pen_input :: proc(page: [2]f32) -> bool {
 		pen_apply()
 		return true
 	}
-	return pen.drawing && in_rect(app.canvas, app.mouse)
+	return pen.drawing && canvas_hit(app.mouse)
 }
 
 // Keys while drawing or editing; true when handled.
@@ -387,7 +387,7 @@ draw_pen_overlay :: proc(vg: ^nvg.Context) {
 	nvg.StrokeColor(vg, PEN_COLOR)
 	nvg.StrokeWidth(vg, 1.5)
 	nvg.Stroke(vg)
-	if pen.drawing && pen.drag == .None && len(pen.subs) > 0 && in_rect(app.canvas, app.mouse) {
+	if pen.drawing && pen.drag == .None && len(pen.subs) > 0 && canvas_hit(app.mouse) {
 		s := pen.subs[len(pen.subs) - 1]
 		if k := len(s.anchors); k > 0 && !s.closed {
 			a := s.anchors[k - 1]

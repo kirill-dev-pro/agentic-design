@@ -47,7 +47,7 @@ handle_drops :: proc() {
 		for p in pf.dropped do delete(p)
 		clear(&pf.dropped)
 	}
-	at := to_page(app.mouse) if in_rect(app.canvas, app.mouse) else to_page({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2})
+	at := to_page(app.mouse) if canvas_hit(app.mouse) else to_page(canvas_center())
 	fonts_dropped := make([dynamic]string, context.temp_allocator)
 	for p in pf.dropped do if engine.is_font_file(p) && app.tab >= 0 do append(&fonts_dropped, p)
 	if len(fonts_dropped) > 0 do import_font_files(fonts_dropped[:])

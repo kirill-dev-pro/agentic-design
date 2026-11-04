@@ -203,7 +203,7 @@ draw_connector_overlay :: proc(vg: ^nvg.Context) {
 			nvg.Stroke(vg)
 		}
 	}
-	if app.tool == .Connector && !ctool.active && in_rect(app.canvas, app.mouse) {
+	if app.tool == .Connector && !ctool.active && canvas_hit(app.mouse) {
 		if t := connect_target(to_page(app.mouse)); t != 0 do dots(vg, t, side_under_mouse(t))
 	}
 	if ctool.active {

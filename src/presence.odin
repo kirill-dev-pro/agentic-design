@@ -345,7 +345,7 @@ presence_poke :: proc(c: ^Peer, now: f64) {
 	}
 	t := c.target
 	if c.appear == 0 {
-		mid := to_page({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2})
+		mid := to_page(canvas_center())
 		spread := [2]f32{app.canvas.w, app.canvas.h} * 0.25 / app.zoom
 		t = mid + {(rand.float32() - 0.5) * spread.x, (rand.float32() - 0.5) * spread.y}
 	}

@@ -14,7 +14,7 @@ in_rect :: proc(r: Rect, p: [2]f32) -> bool {
 
 handle_input :: proc() {
 	m := app.mouse
-	over_canvas := in_rect(app.canvas, m) && app.tab >= 0 && !in_rect(ui.status_rect, m) // not on the export toast
+	over_canvas := canvas_hit(m) && app.tab >= 0 && !in_rect(ui.status_rect, m) // not on the export toast
 	page := to_page(m)
 
 	// A click anywhere outside a focused field commits it first.
@@ -590,6 +590,7 @@ handle_shortcuts :: proc() {
 			arrange_selection(.Backward)
 		case key_pressed(KEY_W): close_tab(app.tab)
 		case key_pressed(KEY_COMMA): settings_open = true
+		case key_pressed(KEY_BACKSLASH): panels_toggle_all()
 		case key_pressed(KEY_APOSTROPHE):
 			settings.pixel_grid = !settings.pixel_grid
 			settings_save()
@@ -604,11 +605,11 @@ handle_shortcuts :: proc() {
 			append(&app.sel, ..all_uids(true))
 		case key_pressed(KEY_0), key_pressed(KEY_1):
 			// 100% around the middle of the view (⌘0 as in pen.dev)
-			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1 / app.zoom)
+			zoom_at(canvas_center(), 1 / app.zoom)
 		case key_hit(KEY_EQUAL):
-			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 1.25)
+			zoom_at(canvas_center(), 1.25)
 		case key_hit(KEY_MINUS):
-			zoom_at({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2}, 0.8)
+			zoom_at(canvas_center(), 0.8)
 		case key_pressed(KEY_RIGHT_BRACKET): arrange_selection(.Forward)
 		}
 		return

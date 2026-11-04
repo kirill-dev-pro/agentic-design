@@ -86,6 +86,11 @@ UI :: struct {
 	pad_all:        bool, // padding shown as four sides
 	radius_corners: bool, // corner radius shown as four corners
 	export_scale:   int, // index into EXPORT_SCALES
+	// floating panels (panels.odin): the offset of the panel being drawn, and each panel's
+	// full height last frame (its header and content), which its height follows
+	origin:         [2]f32,
+	side_full_h:    f32,
+	insp_full_h:    f32,
 }
 
 ui: UI
@@ -243,6 +248,8 @@ Icon :: enum {
 	Search,
 	Pen,
 	Connector,
+	Panel_Left,
+	Panel_Right,
 }
 
 // 24×24 outlines; only M/L/C/Q/Z commands so the SVG parser handles them.
@@ -292,6 +299,8 @@ ICON_PATHS := [Icon]string {
 	.More          = "M5 12 C5 11.4 5.4 11 6 11 C6.6 11 7 11.4 7 12 C7 12.6 6.6 13 6 13 C5.4 13 5 12.6 5 12 Z M11 12 C11 11.4 11.4 11 12 11 C12.6 11 13 11.4 13 12 C13 12.6 12.6 13 12 13 C11.4 13 11 12.6 11 12 Z M17 12 C17 11.4 17.4 11 18 11 C18.6 11 19 11.4 19 12 C19 12.6 18.6 13 18 13 C17.4 13 17 12.6 17 12 Z",
 	.Search        = "M11 4 C14.9 4 18 7.1 18 11 C18 14.9 14.9 18 11 18 C7.1 18 4 14.9 4 11 C4 7.1 7.1 4 11 4 Z M16 16 L20.5 20.5",
 	.Connector     = "M5 4 C6.1 4 7 4.9 7 6 C7 7.1 6.1 8 5 8 C3.9 8 3 7.1 3 6 C3 4.9 3.9 4 5 4 Z M7 6 H13 V18 H19 M16 15 L19 18 L16 21",
+	.Panel_Left    = "M5 3 H19 C20.1 3 21 3.9 21 5 V19 C21 20.1 20.1 21 19 21 H5 C3.9 21 3 20.1 3 19 V5 C3 3.9 3.9 3 5 3 Z M9 3 V21",
+	.Panel_Right   = "M5 3 H19 C20.1 3 21 3.9 21 5 V19 C21 20.1 20.1 21 19 21 H5 C3.9 21 3 20.1 3 19 V5 C3 3.9 3.9 3 5 3 Z M15 3 V21",
 	.Pen           = "M12 19 L19 12 L22 15 L15 22 Z M18 13 L16.5 5.5 L2 2 L5.5 16.5 L13 18 Z M2 2 L9.6 9.6 M11 13 C12.1 13 13 12.1 13 11 C13 9.9 12.1 9 11 9 C9.9 9 9 9.9 9 11 C9 12.1 9.9 13 11 13 Z",
 }
 
@@ -564,11 +573,11 @@ field :: proc(vg: ^nvg.Context, uid: int, key, prefix: string, r: Rect, value: s
 	if !focused {
 		if clicked(r) && !(numeric && in_rect(grip, app.mouse)) {
 			field_focus(uid, key, value)
-			ui.focus_rect = r
+			ui.focus_rect = {r.x + ui.origin.x, r.y + ui.origin.y, r.w, r.h}
 		}
 		return
 	}
-	ui.focus_rect = r
+	ui.focus_rect = {r.x + ui.origin.x, r.y + ui.origin.y, r.w, r.h} // on screen: handle_input tests it
 	if hovered(text_zone) do ui.cursor_hint = .IBeam
 	if clicked(text_zone) {
 		double := time.duration_seconds(time.since(app.last_click)) < 0.35 && abs(app.mouse.x - app.last_click_p.x) < 4
@@ -766,6 +775,8 @@ menu_open :: proc(key: string, anchor: Rect, items: []string, checked := -1, sea
 	ui.menu.open = true
 	ui.menu.key = strings.clone(key)
 	ui.menu.anchor = anchor
+	ui.menu.anchor.x += ui.origin.x
+	ui.menu.anchor.y += ui.origin.y
 	for it in items do append(&ui.menu.items, strings.clone(it))
 	ui.menu.checked = checked
 	ui.menu.hover = checked
@@ -981,6 +992,8 @@ picker_open :: proc(key: string, anchor: Rect, c: engine.Color, ref := "") {
 	p.open = true
 	p.key = strings.clone(key)
 	p.anchor = anchor
+	p.anchor.x += ui.origin.x
+	p.anchor.y += ui.origin.y
 	p.h, p.s, p.v = rgb_to_hsv(c)
 	p.a = f32(c[3]) / 255
 	p.color = c
@@ -1303,7 +1316,7 @@ tooltip_request :: proc(text: string, at: Rect) {
 	if time.duration_seconds(time.since(ui.hover_since)) > 0.6 {
 		delete(ui.tooltip)
 		ui.tooltip = strings.clone(text)
-		ui.tooltip_rect = at
+		ui.tooltip_rect = {at.x + ui.origin.x, at.y + ui.origin.y, at.w, at.h}
 	}
 }
 

@@ -73,7 +73,7 @@ place_image_dialog :: proc() {
 	panel->setCanChooseDirectories(false)
 	if panel->runModal() != .OK do return
 	urls := panel->URLs()
-	at := to_page({app.canvas.x + app.canvas.w / 2, app.canvas.y + app.canvas.h / 2})
+	at := to_page(canvas_center())
 	for i in 0 ..< int(urls->count()) {
 		url := urls->objectAs(NS.UInteger(i), ^NS.URL)
 		path := intrinsics.objc_send(^NS.String, url, "path")->odinString()

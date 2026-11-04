@@ -284,7 +284,8 @@ frame_size :: proc() -> [2]i32 {
 	fb := platform_framebuffer_size()
 	app.dpr = f32(fb.x) / max(app.screen.x, 1)
 	app.mouse = pf.mouse
-	app.canvas = {LEFT_W + TOOLS_W, TAB_H, app.screen.x - LEFT_W - TOOLS_W - RIGHT_W, app.screen.y - TAB_H}
+	// the canvas fills the window under the tab bar; the panels float over it (panels.odin)
+	app.canvas = {0, TAB_H, app.screen.x, app.screen.y - TAB_H}
 	return fb
 }
 
@@ -496,12 +497,15 @@ zoom_at :: proc(screen_pt: [2]f32, factor: f32) {
 
 zoom_to_rect :: proc(r: [4]f32) {
 	if r[2] <= 0 || r[3] <= 0 do return
+	// fit in the part of the canvas the panels leave open, above the tool bar
 	pad: f32 = 60
-	zx := (app.canvas.w - pad * 2) / r[2]
-	zy := (app.canvas.h - pad * 2) / r[3]
+	v := canvas_visible()
+	v.h -= TOOLBAR_H + PANEL_MARGIN
+	zx := (v.w - pad * 2) / r[2]
+	zy := (v.h - pad * 2) / r[3]
 	app.zoom = clamp(min(zx, zy), 0.05, 4)
 	center := [2]f32{r[0] + r[2] / 2, r[1] + r[3] / 2}
-	app.cam = center - [2]f32{app.canvas.w, app.canvas.h} / (2 * app.zoom)
+	app.cam = center - ([2]f32{v.x + v.w / 2, v.y + v.h / 2} - [2]f32{app.canvas.x, app.canvas.y}) / app.zoom
 }
 
 bounds_of :: proc(uids: []int) -> (r: [4]f32, ok: bool) {
@@ -706,7 +710,7 @@ MEASURE :: nvg.Color{0.95, 0.28, 0.13, 1}
 // While ⌥ is held: distances from the selection to the layer under the pointer, or to the
 // edges of a layer around it (pen.dev and Figma show the same).
 draw_measurements :: proc(vg: ^nvg.Context) {
-	if !alt_down() || len(app.sel) == 0 || app.drag.kind != .None || !in_rect(app.canvas, app.mouse) do return
+	if !alt_down() || len(app.sel) == 0 || app.drag.kind != .None || !canvas_hit(app.mouse) do return
 	a, ok := bounds_of(app.sel[:])
 	if !ok do return
 	target := hit_test(to_page(app.mouse))
