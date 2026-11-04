@@ -95,7 +95,10 @@ const App = (() => {
 		try { list = (await api("GET", "/api/auth/managed/providers")).providers || []; } catch (e) {}
 		if (!list.length) return;
 		$(".provider-list", box).replaceChildren(...list.map((p) => {
-			const b = Object.assign(document.createElement("button"), { type: "button", className: "btn secondary provider", textContent: `Continue with ${p.label || p.id}` });
+			const b = Object.assign(document.createElement("button"), { type: "button", className: "btn secondary provider" });
+			const paths = { github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>', google: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' };
+			if (paths[p.id]) b.innerHTML = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${paths[p.id]}</svg>`;
+			b.append(`Continue with ${p.label || p.id}`);
 			b.addEventListener("click", async () => {
 				b.disabled = true;
 				try {

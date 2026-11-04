@@ -8,13 +8,18 @@
 .app h1 { font-size: clamp(28px, 2vw + 20px, 36px); font-weight: 700; letter-spacing: -0.6px; line-height: 1.15; }
 
 /* sign in and up */
-.auth { max-width: 420px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 18px; }
+body[data-page="signin"], body[data-page="signup"] { background: var(--surface-2); }
+.auth { max-width: 420px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 18px; padding: 32px; background: var(--surface); border-radius: 16px; box-shadow: 0 16px 48px var(--shadow-soft); }
+.auth h1 { font-size: 24px; letter-spacing: -.4px; }
+@media (max-width: 480px) { .auth { padding: 24px 20px; margin-top: 8px; } }
 .auth .sub { font-size: 15px; color: var(--text-muted); margin-top: -6px; }
 .switch { font-size: 14px; color: var(--text-muted); text-align: center; }
-.switch a, .app a.link { color: var(--accent-text); text-underline-offset: 3px; }
+.switch a, .app a.link { color: var(--accent-text); font-weight: 600; text-underline-offset: 3px; }
 .providers { display: flex; flex-direction: column; gap: 14px; }
 .provider-list { display: flex; flex-direction: column; gap: 10px; }
-.provider { width: 100%; }
+.btn.provider { width: 100%; background: var(--field); border-color: transparent; }
+.btn.provider:hover { background: var(--border); }
+.provider .ic { width: 18px; height: 18px; }
 .or { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-muted); }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
@@ -23,18 +28,19 @@ form { display: flex; flex-direction: column; gap: 14px; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 500; }
 label small { font-weight: 400; color: var(--text-muted); font-size: 13px; }
 label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
-input[type="text"], input[type="email"], input[type="password"], input[type="date"], select {
-	font: 400 15px/1.3 var(--sans); color: var(--text); background: var(--bg);
-	border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; width: 100%;
+input[type="text"], input[type="email"], input[type="password"], input[type="date"], input[type="search"], select {
+	font: 400 15px/1.3 var(--sans); color: var(--text); background: var(--field);
+	border: 1px solid transparent; border-radius: var(--radius-sm); padding: 11px 12px; width: 100%;
 }
-input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 input[readonly] { color: var(--text-muted); }
 form .btn { align-self: flex-start; }
 .auth form .btn { align-self: stretch; }
 .btn:disabled { opacity: .55; cursor: default; filter: none; }
-.form-error { color: #C0392B; font-size: 14px; }
-:root[data-theme="dark"] .form-error { color: #FF8A7A; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .form-error { color: #FF8A7A; } }
+/* an error: a box with a mark, in the danger colour */
+.form-error, .card p.form-error { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--danger); border-radius: var(--radius-sm); color: var(--text); font-size: 14px; line-height: 1.4; }
+.form-error[hidden] { display: none; }
+.form-error::before { content: "!"; flex: none; display: grid; place-items: center; width: 16px; height: 16px; margin-top: 1px; border: 1.5px solid var(--danger); border-radius: 50%; color: var(--danger); font-size: 10px; font-weight: 700; line-height: 1; }
 .form-ok { color: var(--agent-codex); font-size: 14px; }
 
 /* account */
@@ -98,20 +104,22 @@ body[data-page="files"] .app { max-width: none; padding-inline: clamp(16px, 2.2v
 }
 
 /* links dialog */
-.links-dialog { width: min(640px, calc(100vw - 24px)); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); padding: 24px; }
-.links-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.links-dialog { width: min(600px, calc(100vw - 24px)); border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); padding: 24px; box-shadow: 0 24px 64px var(--shadow-window); }
+.links-dialog::backdrop { background: rgba(16, 24, 40, .45); }
 .links-top { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; }
-.links-top h2 { font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.links-top h2 { font-size: 20px; font-weight: 700; letter-spacing: -.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .links-dialog > .sub { color: var(--text-muted); font-size: 14px; margin: 6px 0 16px; }
 .links-list { list-style: none; padding: 0; margin: 0 0 16px; display: flex; flex-direction: column; gap: 12px; }
-.link { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.link { background: var(--surface-2); border-radius: var(--radius-md); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .link .url { display: flex; gap: 8px; }
-.link .url input { font: 400 13px var(--mono); }
-.link .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; align-items: center; }
+.link .url input { font: 400 13px var(--mono); background: var(--surface); }
+.link .opts { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; align-items: center; }
 .link .opts label { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; font-size: 13px; }
-.link .opts select, .link .opts input[type="date"] { width: auto; padding: 4px 8px; font-size: 13px; }
-.link .foot { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 12px; gap: 8px; flex-wrap: wrap; }
+.link .opts select, .link .opts input[type="date"] { width: auto; padding: 5px 8px; font-size: 13px; background: var(--surface); }
+.link .foot { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 13px; gap: 8px; flex-wrap: wrap; }
+.link .foot .btn.danger { padding: 4px 8px; border-color: transparent; font-weight: 500; }
 .link .embed { font: 400 12px var(--mono); }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 .danger-zone { border-color: color-mix(in srgb, #C0392B 35%, var(--border)); }
 .danger-zone .btn.danger { border-color: color-mix(in srgb, #C0392B 45%, var(--border)); }
 
