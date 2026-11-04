@@ -86,3 +86,19 @@ form .btn { align-self: flex-start; }
 @media (max-width: 600px) { .files-head { flex-direction: column; align-items: stretch; } }
 .danger-zone { border-color: color-mix(in srgb, #C0392B 35%, var(--border)); }
 .danger-zone .btn.danger { border-color: color-mix(in srgb, #C0392B 45%, var(--border)); }
+
+/* the first-sign-in guide */
+.guide-dialog { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); padding: 26px; }
+.guide-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.guide-dialog h2 { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+.guide-dialog .sub { color: var(--text-muted); font-size: 14px; margin: 4px 0 18px; }
+.guide-cards { list-style: none; counter-reset: guide; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 10px; }
+.guide-cards li { counter-increment: guide; position: relative; padding: 14px 16px 14px 52px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+.guide-cards li::before { content: counter(guide); position: absolute; left: 16px; top: 14px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
+.guide-cards h3 { font-size: 15px; font-weight: 600; margin: 0 0 3px; }
+.guide-cards p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-muted); }
+a.inline { color: var(--accent-text); text-underline-offset: 3px; }
+.guide-dialog h2:focus { outline: none; }
+.guide-end { display: flex; justify-content: flex-end; }
+.guide-link { margin: -4px 0 4px; }
+@media (max-width: 600px) { .guide-dialog { padding: 20px; } .guide-cards li { padding-left: 48px; } }

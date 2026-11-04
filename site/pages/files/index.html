@@ -58,6 +58,20 @@
 		<ul id="files-list" class="files-grid"></ul>
 	</section>
 
+	<dialog id="guide-dialog" class="guide-dialog" aria-labelledby="guide-title">
+		<form method="dialog">
+			<h2 id="guide-title" tabindex="-1" autofocus>How it works</h2>
+			<p class="sub">Four things to know.</p>
+			<ol class="guide-cards">
+				<li><h3>Share a file with a link</h3><p>Open a .pen in the viewer and press Share. The file, its images and fonts go to your account. Anyone with the link can open it, on a phone too, without an account; you choose whether it can be downloaded or embedded.</p></li>
+				<li><h3>Keep track in My files</h3><p>My files lists everything you have shared. Copy or revoke a link, set an expiry, share a new version, or delete a file.</p></li>
+				<li><h3>On your Mac</h3><p>Agentic Design for Mac is a canvas for .pen files that Claude Code, Codex and other agents can work on through its MCP server. It signs in with this account through your browser and shares the open file the same way.</p></li>
+				<li><h3>Edit in the browser</h3><p>The editor at <a class="inline" href="/edit/">/edit</a> runs in your browser. It is a beta: the files you open there are kept in this browser, and Download .pen gives you a copy.</p></li>
+			</ol>
+			<div class="guide-end"><button class="btn primary" value="done">Got it</button></div>
+		</form>
+	</dialog>
+
 	<dialog id="links-dialog" class="links-dialog">
 		<form method="dialog" class="links-top"><h2 id="links-title">Links</h2><button class="btn ghost small" value="close">Close</button></form>
 		<p class="sub">Anyone with a link can view the file, without an account. Revoking a link stops it at once.</p>

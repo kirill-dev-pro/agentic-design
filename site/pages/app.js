@@ -257,9 +257,25 @@ const App = (() => {
 	const ownerUrl = (f) => "/view/?file=" + encodeURIComponent(f.docUrl || `/api/docs/${f.id}/v/${f.versionId}/doc.pen`);
 	const tokenOf = (url) => (url || "").split("/s/")[1] || "";
 
+	// The short guide on My files: opened once for an account (/api/me says onboarding.done is
+	// false), and again from the Account page (/files?guide). Closing it, by any way, counts as
+	// done; if telling the server fails it asks again next time.
+	function guide(m) {
+		const dlg = $("#guide-dialog");
+		if (!dlg || typeof dlg.showModal !== "function") return;
+		const first = !!(m.onboarding && m.onboarding.done === false);
+		if (!first && !new URLSearchParams(location.search).has("guide")) return;
+		dlg.addEventListener("close", () => {
+			if (first) api("POST", "/api/me/onboarding").catch(() => {});
+			if (new URLSearchParams(location.search).has("guide")) history.replaceState(null, "", location.pathname);
+		}, { once: true });
+		dlg.showModal();
+	}
+
 	async function files() {
 		const m = await me();
 		if (!m) return requireSignIn();
+		guide(m);
 		const use = m.workspace.usage, ent = m.workspace.entitlements;
 		$("#files-usage").textContent = `${use.sharedFiles} of ${ent.sharedFiles} files · ${bytes(use.storageBytes)} of ${bytes(ent.storageBytes)}`;
 		const list = $("#files-list");
