@@ -26,6 +26,10 @@ main :: proc() {
 		mcp_main()
 		return
 	}
+	if len(os.args) > 3 && os.args[1] == "cloud-diff" {
+		cloud_diff_main(os.args[2], os.args[3], len(os.args) > 4 && os.args[4] == "-v")
+		return
+	}
 	if len(os.args) > 2 && os.args[1] == "cloud-vectors" {
 		cloud_vectors_main(os.args[2])
 		return
@@ -147,4 +151,62 @@ cloud_vectors_main :: proc(path: string) {
 	}
 	fmt.printfln("%d of %d vectors pass", len(vectors) - failed, len(vectors))
 	if failed > 0 do os.exit(1)
+}
+
+// agentic-design cloud-diff <before.pen> <after.pen> [-v]: the ops that turn one state into the
+// other (engine.ops_diff), applied to the first (engine.ops_apply); passes when the result saves
+// to the same bytes as the second. -v prints the ops.
+cloud_diff_main :: proc(before_path, after_path: string, verbose: bool) {
+	load :: proc(path: string, doc: ^engine.Document) {
+		data, err := os.read_entire_file(path, context.allocator)
+		if err != nil || !engine.doc_load(doc, string(data)) {
+			fmt.eprintln("cannot load", path)
+			os.exit(2)
+		}
+	}
+	before, after: engine.Document
+	load(before_path, &before)
+	load(after_path, &after)
+	state: engine.Cloud_State
+	engine.sorts_assign(&before, &state)
+	ops := engine.ops_diff(before.nodes[:], after.nodes[:], before.header[:], after.header[:], &state, include_derived = true)
+	if verbose {
+		for op in ops {
+			b := strings.builder_make(context.temp_allocator)
+			engine.op_write(&b, op)
+			fmt.println(strings.to_string(b))
+		}
+	}
+	// the receiver: the wire form parsed again, applied to its own copy of `before`
+	wire := make([dynamic]engine.Op)
+	for op in ops {
+		b := strings.builder_make(context.temp_allocator)
+		engine.op_write(&b, op)
+		v, _ := json.parse_string(strings.to_string(b), .JSON, false, context.allocator)
+		parsed, ok := engine.op_parse(v)
+		if !ok {
+			fmt.println("FAIL an op does not parse back:", strings.to_string(b))
+			os.exit(1)
+		}
+		append(&wire, parsed)
+	}
+	recv: engine.Document
+	load(before_path, &recv)
+	rstate: engine.Cloud_State
+	engine.sorts_assign(&recv, &rstate)
+	res := engine.ops_apply(&recv, &rstate, wire[:])
+	if !res.ok {
+		fmt.println("FAIL the batch was refused:", res.reason)
+		os.exit(1)
+	}
+	engine.pages_prune(&recv)
+	engine.pages_prune(&after)
+	got, want := engine.doc_serialize(&recv), engine.doc_serialize(&after)
+	if got != want {
+		_ = os.write_entire_file("/tmp/cloud-diff.got.pen", transmute([]u8)got)
+		_ = os.write_entire_file("/tmp/cloud-diff.want.pen", transmute([]u8)want)
+		fmt.printfln("FAIL %d ops; the result differs (/tmp/cloud-diff.got.pen vs want.pen)", len(ops))
+		os.exit(1)
+	}
+	fmt.printfln("ok   %d ops, %d skipped; the result saves byte-identical", len(ops), len(res.skipped))
 }
