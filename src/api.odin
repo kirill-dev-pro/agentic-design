@@ -85,6 +85,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		e = api_connect(&b, params)
 	case "export_pages":
 		e = api_export_pages(&b, params)
+	case "export_icons":
+		e = api_export_icons(&b, params)
 	case "get_guide":
 		api_get_guide(&b)
 	case "lint":
