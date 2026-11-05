@@ -76,13 +76,30 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 	tile := engine.target_make(TILE, TILE)
 	defer engine.gpu_finish() // (last: the driver takes the deleted buffer back now, not at the next frame)
 	defer engine.target_free(&tile)
+	// the blurs to make: the window's paint order holds only the page it shows, so a layer on
+	// another page (an export, an agent's screenshot) brings its own subtree (D62)
+	order := app.draw_order[:]
+	if target != nil {
+		sub := make([dynamic]int, context.temp_allocator)
+		walk :: proc(sub: ^[dynamic]int, n: ^engine.Node, depth: int) {
+			if depth > engine.MAX_DEPTH || !n.enabled do return
+			append(sub, n.uid)
+			if n.kind == .Frame || n.kind == .Group || n.kind == .Ref {
+				for cu in engine.children_of(&app.doc, n.uid) {
+					if c, _ := engine.doc_find_uid(&app.doc, cu); c != nil do walk(sub, c, depth + 1)
+				}
+			}
+		}
+		walk(&sub, target, 0)
+		order = sub[:]
+	}
 	saved_cull := engine.cull_rect
 	defer engine.cull_rect = saved_cull
 	for y0 := i32(0); y0 < oh; y0 += TILE {
 		for x0 := i32(0); x0 < ow; x0 += TILE {
 			tw, th := min(TILE, ow - x0), min(TILE, oh - y0)
 			xf := nvg.Matrix{s, 0, 0, s, -r[0] * s - f32(x0), -r[1] * s - f32(y0)}
-			engine.blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg, order = app.draw_order[:]})
+			engine.blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg, order = order})
 			engine.target_begin(&tile, {bg.r, bg.g, bg.b, 1})
 			nvg.BeginFrame(vg, TILE, TILE, 1)
 			nvg.Transform(vg, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5])

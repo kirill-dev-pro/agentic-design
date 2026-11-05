@@ -719,13 +719,19 @@ font_open_license :: proc(path: string) -> bool {
 // fontstash doubles it and asks nanovg for a new texture, but nanovg uploads the old,
 // smaller pixel buffer into it (a crash inside glTexImage2D). And nothing ever resets the
 // atlas, so glyphs rasterised at every zoom level accumulate until the texture is huge.
+// Atlas textures replaced while a frame was being drawn: the text drawn before the atlas grew
+// still points at them until the frame is flushed, so they are deleted between frames
+// (font_atlas_trim). Deleting them at once dropped that text (D68: a frame rendered without
+// its text after a large batch, and garbled interface labels after lint).
+font_atlas_retired: [dynamic]int
+
 font_atlas_init :: proc(vg: ^nvg.Context) {
 	vg.fs.callbackResize = proc(data: rawptr, w, h: int) {
 		ctx := (^nvg.Context)(data)
 		old := ctx.fontImages[ctx.fontImageIdx]
 		// no pixels: fontstash marks the used area dirty and re-uploads it on the next flush
 		ctx.fontImages[ctx.fontImageIdx] = ctx.params.renderCreateTexture(ctx.params.userPtr, .Alpha, w, h, {}, nil)
-		if old != 0 do ctx.params.renderDeleteTexture(ctx.params.userPtr, old)
+		if old != 0 do append(&font_atlas_retired, old)
 	}
 }
 
@@ -733,6 +739,8 @@ FONT_ATLAS_MAX :: 2048
 
 // Between frames: once the atlas has outgrown its budget, start over with an empty one.
 font_atlas_trim :: proc(vg: ^nvg.Context) {
+	for img in font_atlas_retired do vg.params.renderDeleteTexture(vg.params.userPtr, img)
+	clear(&font_atlas_retired)
 	if vg.fs.width <= FONT_ATLAS_MAX && vg.fs.height <= FONT_ATLAS_MAX do return
 	fontstash.ResetAtlas(&vg.fs, FONT_ATLAS_MAX, FONT_ATLAS_MAX)
 	fontstash.__atlasReset(&vg.fs, FONT_ATLAS_MAX, FONT_ATLAS_MAX)

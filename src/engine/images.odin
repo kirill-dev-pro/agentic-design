@@ -2,11 +2,14 @@ package engine
 
 import "core:fmt"
 import "core:strings"
+import "core:time"
 import nvg "../nanovg"
 
 // Image fills: files referenced relative to the .pen document, loaded into NanoVG on demand.
 
 images: map[string]int // absolute path -> nanovg image (0 = failed)
+image_tried: map[string]time.Time // failed loads: when; tried again a little later (D106)
+IMAGE_RETRY :: 2 * time.Second
 
 image_resolve :: proc(url: string) -> string {
 	if path_is_abs(url) do return url
@@ -17,12 +20,24 @@ image_resolve :: proc(url: string) -> string {
 
 image_for :: proc(url: string) -> (img: int, w, h: int) {
 	path := image_resolve(url)
-	if cached, has := images[path]; has {
+	cached, has := images[path]
+	// a file that was missing or unreadable is looked for again now and then: it may have
+	// been copied in since (an agent writing the image after the document)
+	if has && cached == 0 {
+		if t, ok := image_tried[path]; ok && time.since(t) < IMAGE_RETRY do return 0, 0, 0
+		has = false
+	}
+	if has {
 		img = cached
 	} else {
 		if data, ok := read_file(path, context.temp_allocator); ok do img = nvg.CreateImageMem(renderer, data, {})
 		if img < 0 do img = 0
-		images[strings.clone(path)] = img
+		if _, known := images[path]; known do images[path] = img
+		else do images[strings.clone(path)] = img
+		if img == 0 {
+			if _, known := image_tried[path]; known do image_tried[path] = time.now()
+			else do image_tried[strings.clone(path)] = time.now()
+		}
 		if img > 0 do image_sources[img] = {path = strings.clone(path)} // for PDF export
 	}
 	if img > 0 do w, h = nvg.ImageSize(renderer, img)

@@ -483,6 +483,7 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			}
 		case .Icon:
 			if msg := engine.icon_problem(&n); msg != "" do issue(b, &count, limit, &n, "unknown-icon", msg)
+
 		case .Ref:
 			if c, _ := engine.doc_find(doc, n.ref); c == nil do issue(b, &count, limit, &n, "broken-ref", fmt.tprintf("component \"%s\" does not exist", n.ref))
 		case .Frame:
@@ -503,6 +504,10 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 					}
 				}
 			}
+		}
+		// an image fill whose file is not there or not readable draws nothing, silently (D106)
+		if n.image_url != "" {
+			if img, _, _ := engine.image_for(n.image_url); img == 0 do issue(b, &count, limit, &n, "missing-image", fmt.tprintf("image %s cannot be read (%s)", n.image_url, engine.image_resolve(n.image_url)))
 		}
 		// cut off by a clipping frame around it
 		// (a rotated or flipped layer by its drawn corners, in the parent's own space: the

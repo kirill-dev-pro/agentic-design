@@ -653,7 +653,18 @@ adopt_image_fills :: proc(raw, id: string, warnings: ^[dynamic]string) -> (strin
 			continue
 		}
 		images := fmt.tprintf("%s/images", os.dir(app.file_path))
-		if os.dir(engine.absolute_path(path)) == images do continue // already in place
+		// a file already inside the document's folder stays where it is, written relative to
+		// the document so the folder can move (D107)
+		abs := engine.absolute_path(path)
+		folder := os.dir(app.file_path)
+		if strings.has_prefix(abs, folder) && len(abs) > len(folder) && abs[len(folder)] == '/' {
+			rel := fmt.tprintf("./%s", abs[len(folder) + 1:])
+			if url != rel {
+				obj["url"] = json.String(rel)
+				changed = true
+			}
+			continue
+		}
 		_ = os.make_directory_all(images)
 		name := os.base(path)
 		dst := fmt.tprintf("%s/%s", images, name)

@@ -2,7 +2,10 @@
 """Builds assets/lucide.txt from lucide-static's icon-nodes.json.
 
     npm pack lucide-static && tar -xzf lucide-static-*.tgz
-    python3 -I tools/lucide_assets.py package/icon-nodes.json package/LICENSE
+    python3 -I tools/lucide_assets.py package/icon-nodes.json package/LICENSE package/icons
+
+The icons folder also holds Lucide's aliases (older names such as trash-2 and history,
+D105); those not in icon-nodes.json are read from their SVG files.
 
 Every icon becomes one line, "name<TAB>svg path data": circles, rects, lines and
 polylines are turned into path data so the app only needs its SVG path parser.
@@ -11,6 +14,7 @@ import json
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 
 
 def num(v):
@@ -70,13 +74,22 @@ def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out = os.path.join(root, "assets", "lucide.txt")
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    icons = dict(nodes)
+    if len(sys.argv) > 3:
+        folder = sys.argv[3]
+        for file in os.listdir(folder):
+            name = file[:-4]
+            if not file.endswith(".svg") or name in icons:
+                continue
+            svg = ET.parse(os.path.join(folder, file)).getroot()
+            icons[name] = [(el.tag.split("}")[-1], el.attrib) for el in svg]
     with open(out, "w") as f:
-        for name in sorted(nodes):
-            d = "".join(to_path(tag, attrs) for tag, attrs in nodes[name])
+        for name in sorted(icons):
+            d = "".join(to_path(tag, attrs) for tag, attrs in icons[name])
             f.write(f"{name}\t{d}\n")
     if license_text:
         open(os.path.join(root, "assets", "LICENSE-lucide.txt"), "w").write(license_text)
-    print(out, len(nodes), "icons", os.path.getsize(out), "bytes")
+    print(out, len(icons), "icons", f"({len(icons) - len(nodes)} aliases)", os.path.getsize(out), "bytes")
 
 
 if __name__ == "__main__":
