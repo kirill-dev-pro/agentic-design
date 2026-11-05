@@ -798,7 +798,7 @@ handle_text_editing :: proc() {
 		changed = true
 	}
 	if changed {
-		engine.node_set_string(&app.doc, n, "content", strings.to_string(b))
+		engine.node_set_content(&app.doc, n, strings.to_string(b))
 		mark_dirty()
 	}
 }

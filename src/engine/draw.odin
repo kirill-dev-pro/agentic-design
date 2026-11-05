@@ -555,6 +555,10 @@ blink_baseline_top :: proc(vg: ^nvg.Context, k: f32) -> f32 {
 }
 
 draw_text :: proc(vg: ^nvg.Context, n: ^Node) {
+	if len(n.spans) > 0 {
+		draw_rich(vg, n)
+		return
+	}
 	set_font(vg, n)
 	nvg.FillColor(vg, to_nvg(n.fill if n.has_fill else Color{0, 0, 0, 255}))
 	halign: nvg.AlignHorizontal = .LEFT

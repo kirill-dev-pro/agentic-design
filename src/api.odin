@@ -609,6 +609,14 @@ api_check_nodes :: proc(uid: int, deep: bool, warnings: ^[dynamic]string) {
 	n, _ := engine.doc_find_uid(&app.doc, uid)
 	if n == nil || n.ghost do return
 	if msg := engine.icon_problem(n); msg != "" do append(warnings, fmt.tprintf("%s: %s", n.id, msg))
+	// rich text: the content is the spans' texts joined
+	if n.kind == .Text && n.spans_bad {
+		v, _ := engine.prop_value(n, "spans")
+		if text, ok := engine.spans_text(v); ok {
+			if engine.prop_index(n, "content") >= 0 && n.content != "" do append(warnings, fmt.tprintf("%s: content was not the spans' texts joined; it was set to them", n.id))
+			engine.node_set_string(&app.doc, n, "content", text)
+		} else do append(warnings, fmt.tprintf("%s: spans must be an array of runs {\"text\", ...style}; the text is drawn plain", n.id))
+	}
 	if i := engine.prop_index(n, "padding"); i >= 0 {
 		if v, err := json.parse_string(n.props[i].raw, .JSON5, false, context.temp_allocator); err == nil {
 			if arr, ok := v.(json.Array); ok && len(arr) == 3 {
@@ -806,6 +814,10 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			if n.flow == .Connector && is_connector_key(k) do continue
 			switch k {
 			case "id", "parent_id", "children", "type", "rotationOrigin":
+			case "content":
+				// without new spans, the node's spans follow the new text
+				if text, is_str := v.(json.String); is_str && !("spans" in o) && len(n.spans) > 0 do engine.node_set_content(&app.doc, n, string(text))
+				else do engine.node_set(&app.doc, n, k, v)
 			case:
 				if _, is_null := v.(json.Null); is_null do engine.node_unset(&app.doc, n, k)
 				else do engine.node_set(&app.doc, n, k, v)
@@ -819,7 +831,7 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 				engine.node_set_number(&app.doc, nn, "y", math.round(pos.y * 100) / 100)
 			}
 		}
-		if "icon" in o || "iconFontName" in o || "padding" in o || "fill" in o do api_check_nodes(n.uid, false, &warnings)
+		if "icon" in o || "iconFontName" in o || "padding" in o || "fill" in o || "spans" in o do api_check_nodes(n.uid, false, &warnings)
 		append(&changed, n.uid)
 	}
 	strings.write_string(b, `{"updated":true`)

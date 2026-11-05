@@ -828,7 +828,7 @@ gen_html_node :: proc(g: ^Gen, n: ^Node, indent: int, prefix: string, top: bool)
 	title := n.name if n.name != "" else ""
 	switch n.kind {
 	case .Text:
-		fmt.sbprintf(&g.out, "<p class=\"n-%s\">%s</p>\n", cls, html_escape(n.content))
+		fmt.sbprintf(&g.out, "<p class=\"n-%s\">%s</p>\n", cls, rich_html(n, false) if len(n.spans) > 0 else html_escape(n.content))
 	case .Path:
 		heads := ""
 		if hd := connector_heads_d(n); hd != "" {
@@ -1212,7 +1212,7 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 	if wrap_hidden do fmt.sbprintf(&g.out, "%s{{(props.%s ?? true) && (\n", pad, prop)
 	switch n.kind {
 	case .Text:
-		content := jsx_escape(n.content)
+		content := rich_html(n, true) if len(n.spans) > 0 else jsx_escape(n.content)
 		if is_prop do fmt.sbprintf(&g.out, "%s<p %s>{{props.%s ?? %s}}</p>\n", pad, cls_attr, prop, js_string(n.content))
 		else do fmt.sbprintf(&g.out, "%s<p %s>%s</p>\n", pad, cls_attr, content)
 	case .Path:

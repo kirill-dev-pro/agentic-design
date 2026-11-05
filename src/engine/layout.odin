@@ -401,7 +401,9 @@ text_key :: proc(n: ^Node, wrap_w: f32) -> u64 {
 	nums := [4]f32{n.font_size, line_height_of(n), wrap_w if n.growth != .Auto else -1, n.letter_spacing}
 	// (mem.slice_to_bytes: transmuting a []f32 to []u8 would keep the element count and
 	// hash only the first number)
-	return hash.fnv64a(mem.slice_to_bytes(nums[:]), key)
+	key = hash.fnv64a(mem.slice_to_bytes(nums[:]), key)
+	if len(n.spans) > 0 do key = spans_hash(n, key)
+	return key
 }
 
 text_metrics :: proc(n: ^Node, wrap_w: f32) -> Text_Metrics {
@@ -411,6 +413,7 @@ text_metrics :: proc(n: ^Node, wrap_w: f32) -> Text_Metrics {
 	if len(text_cache) > 20000 {
 		for _, old in text_cache do delete(old.rows)
 		clear(&text_cache)
+		rich_cache_clear()
 	}
 	text_cache[key] = m
 	return m
@@ -434,6 +437,7 @@ measure_text_now :: proc(n: ^Node, wrap_w: f32) -> (m: Text_Metrics) {
 	nvg.Save(vg)
 	defer nvg.Restore(vg)
 	nvg.ResetTransform(vg) // measure at document scale, whatever is being drawn
+	if len(n.spans) > 0 do return rich_measure(vg, n, wrap_w, text_key(n, wrap_w))
 	set_font(vg, n)
 	lh := n.font_size * line_height_of(n)
 	rows := make([dynamic][2]int)

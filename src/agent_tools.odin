@@ -509,6 +509,8 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		if n.image_url != "" {
 			if img, _, _ := engine.image_for(n.image_url); img == 0 do issue(b, &count, limit, &n, "missing-image", fmt.tprintf("image %s cannot be read (%s)", n.image_url, engine.image_resolve(n.image_url)))
 		}
+		// rich text whose runs no longer join up to the content: drawn plain
+		if n.kind == .Text && n.spans_bad && !n.ghost do issue(b, &count, limit, &n, "spans-mismatch", "its spans' texts do not join up to its content (changed outside Agentic Design?), so it is drawn without them; set spans again")
 		// cut off by a clipping frame around it
 		// (a rotated or flipped layer by its drawn corners, in the parent's own space: the
 		// transforms above the parent move both alike)

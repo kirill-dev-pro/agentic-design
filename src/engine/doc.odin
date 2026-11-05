@@ -182,6 +182,8 @@ Node :: struct {
 	letter_spacing: f32,
 	underline:    bool,
 	strikethrough: bool,
+	spans:        [dynamic]Text_Span, // rich text runs (rich_text.odin), empty for plain text
+	spans_bad:    bool, // the file's spans do not join up to the content: ignored
 	image_url:    string, // image fill, relative to the document
 	image_mode:   Image_Mode,
 	growth:       Text_Growth,
@@ -786,6 +788,7 @@ node_free_derived :: proc(n: ^Node) {
 	for sn in n.slot_names do delete(sn)
 	delete(n.slot_names)
 	n.slot_names = nil
+	spans_free(n)
 }
 
 node_clone :: proc(n: Node) -> Node {
@@ -1388,6 +1391,7 @@ node_set_text :: proc(doc: ^Document, n: ^Node, key, text: string) -> (err: stri
 		}
 	case "name", "content":
 		if t == "" && key == "name" do node_unset(doc, n, key)
+		else if key == "content" do node_set_content(doc, n, text)
 		else do node_set_string(doc, n, key, text)
 	case "opacity":
 		f, ok := strconv.parse_f32(strings.trim_suffix(t, "%"))
@@ -1465,6 +1469,7 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 	stroke_width: f32 = -1
 	view_box: [4]f32
 	has_view_box := false
+	spans_value: json.Value
 	for p in n.props {
 		v, err := json.parse_string(p.raw, .JSON5, false, context.temp_allocator)
 		if err != nil do continue
@@ -1571,6 +1576,8 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 			n.underline = json_bool(doc, v) or_else false
 		case "strikethrough":
 			n.strikethrough = json_bool(doc, v) or_else false
+		case "spans":
+			spans_value = v
 		case "strokeLinecap":
 			switch json_str(doc, v) {
 			case "round": n.line_cap = .Round
@@ -1687,6 +1694,7 @@ node_refresh :: proc(doc: ^Document, n: ^Node) {
 	n.stroke_width = thickness if thickness >= 0 else (stroke_width if stroke_width >= 0 else 1)
 	if n.stroke_per_side do n.stroke_width = max(n.stroke_sides[0], n.stroke_sides[1], n.stroke_sides[2], n.stroke_sides[3])
 	if n.kind == .Text {
+		if spans_value != nil do parse_spans(doc, n, spans_value)
 		#partial switch n.growth {
 		case .Auto: n.width, n.height = {mode = .Fit}, {mode = .Fit}
 		case .Fixed_Width: n.height = {mode = .Fit}
