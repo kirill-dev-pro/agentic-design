@@ -2281,3 +2281,28 @@ for a 4,829 px page.
 **Consequences.** tests/render/rich_text.py and tests/render/responsive_export.py. Justify
 is not applied to rich text. A responsive page carries each version's markup once per
 version; merging matching layers into one tree is left for later.
+
+## 90. The canvas is cached
+
+**Problem.** Every frame drew the whole document, about 8 ms for a 5,800-layer file. A frame
+is drawn for anything that moves on screen: the pointer over a panel, a list scrolled,
+hover, an agent's cursor, a caret. On a 120 Hz display that was most of the frame's time:
+lists stuttered and an agent's run kept a core busy. The layers list was also clamped only
+after it was drawn, so a fling past its end drew it beyond its last row for a frame,
+which looked like a spring over the list.
+
+**Decision.** The document (grid included) is drawn into a texture of the window's size
+before the frame and the frame shows that texture. It is drawn again only when its key
+changes: the document and its version, the layout epoch, zoom, camera, canvas rect,
+framebuffer size, scale, background, grid, the pages hidden, and every 2 s while an image
+failed to load (D106). Everything over the document (frame titles, hover, selection,
+agents' cursors and flashes, marks, guides) is drawn on top every frame, as before.
+Blurs are prepared only when the document is drawn. `AGENTIC_NO_CANVAS_CACHE=1` turns the
+cache off; `perf` reports `canvas_renders`. The layers list is clamped before it is drawn,
+by the last frame's height, and draws only the rows in view; children come from the
+document's index.
+
+**Consequences.** tests/ui/canvas_cache.py runs the same steps with and without the cache
+and compares the window pictures byte for byte. A change that alters drawing without
+bumping the document version or the layout epoch would leave a stale canvas until the next
+change: such state must join the key.

@@ -144,7 +144,10 @@ draw_sidebar :: proc(vg: ^nvg.Context) {
 
 	top := TAB_H + 44
 	side := Rect{0, top, LEFT_W, bottom - top - 6}
-	app.layers_scroll = max(app.layers_scroll - wheel_over(side), 0)
+	// clamped before drawing, by last frame's height: past the end, a fling drew the list
+	// beyond its last row and pulled it back the next frame, a shaking copy over the list
+	app.layers_scroll = clamp(app.layers_scroll - wheel_over(side), 0, max(ui.side_h - side.h, 0))
+	layers_view = {side.y, side.y + side.h}
 	nvg.Save(vg)
 	nvg.Scissor(vg, side.x, side.y, side.w, side.h)
 	y := top + 4 - app.layers_scroll
@@ -239,6 +242,9 @@ page_menu_apply :: proc() {
 	if pick, ok := dialog_take("delete-page"); ok && pick == 1 do page_delete(page_menu_index)
 }
 
+// The sidebar's visible span (top, bottom): rows outside it only take their place.
+layers_view: [2]f32
+
 draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 	// a new selection reveals itself in the tree
 	first := app.sel[0] if len(app.sel) > 0 else 0
@@ -266,13 +272,22 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 		if depth > engine.MAX_DEPTH do return
 		r := Rect{8, y^, LEFT_W - 16, ROW_H}
 		append(rows, Row{n.uid, r, depth, n.kind == .Frame || n.kind == .Group})
+		// children from the document's index (each row scanned every node twice, copying
+		// it, so a long tree of a big file took most of a frame)
+		kids := engine.children_of(&app.doc, n.uid)
+		has_children := len(kids) > 0
+		open := ui.expanded[n.uid]
+		if r.y + r.h >= layers_view[0] && r.y <= layers_view[1] do layer_row_ui(vg, n, r, depth, has_children, open)
+		y^ += ROW_H
+		if !open do return
+		// a copy: a click in a row may change the document and with it the index
+		#reverse for cu in slice.clone(kids, context.temp_allocator) do if c, _ := engine.doc_find_uid(&app.doc, cu); c != nil do row(vg, c, depth + 1, y, rows)
+	}
+	layer_row_ui :: proc(vg: ^nvg.Context, n: ^engine.Node, r: Rect, depth: int, has_children, open: bool) {
 		sel := is_selected(n.uid)
 		if sel do fill_rect(vg, r, ACTIVE_BG, 6)
 		else if in_rect(r, app.mouse) do fill_rect(vg, r, HOVER_BG, 6)
 		x := r.x + 12 + f32(depth) * 16
-		has_children := false
-		for c in app.doc.nodes do if c.parent == n.uid {has_children = true; break}
-		open := ui.expanded[n.uid]
 		chev := Rect{x - 10, r.y, 20, ROW_H}
 		if has_children do draw_icon(vg, .Chevron_Down if open else .Chevron_Right, x, r.y + ROW_H / 2, TEXT_DIM, 12)
 		if n.kind == .Text do label(vg, x + 20, r.y + ROW_H / 2, "Aa", TEXT_DIM, 12, false, .CENTER)
@@ -320,12 +335,6 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 				append(&app.sel, n.uid)
 			}
 			context_menu_open(app.mouse)
-		}
-		y^ += ROW_H
-		if !open do return
-		uid := n.uid
-		for i := len(app.doc.nodes) - 1; i >= 0; i -= 1 {
-			if app.doc.nodes[i].parent == uid do row(vg, &app.doc.nodes[i], depth + 1, y, rows)
 		}
 	}
 	// find layers (⌘F): a flat list of matches on this page instead of the tree

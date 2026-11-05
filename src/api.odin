@@ -136,8 +136,8 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		if params["trim"].(json.Boolean) or_else false do memory_trim()
 		api_memory(&b)
 	case "perf":
-		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d,"frames":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), engine.ghost_rebuilds, engine.measure_calls, engine.text_measures, frames_drawn)
-		engine.ghost_rebuilds, engine.measure_calls, engine.text_measures, frames_drawn = 0, 0, 0, 0
+		fmt.sbprintf(&b, `{{"layout":%.2f,"input":%.2f,"canvas":%.2f,"ui":%.2f,"flush":%.2f,"swap":%.2f,"frame":%.2f,"atlas":%v,"nodes":%d,"ghosts":%d,"ghost_rebuilds":%d,"measures":%d,"text_measures":%d,"frames":%d,"canvas_renders":%d}}`, app.perf[0], app.perf[1], app.perf[2], app.perf[3], app.perf[4], app.perf[5], app.perf[6], int(app.perf[7]), len(app.doc.nodes), len(app.doc.ghosts), engine.ghost_rebuilds, engine.measure_calls, engine.text_measures, frames_drawn, canvas_cache.renders)
+		engine.ghost_rebuilds, engine.measure_calls, engine.text_measures, frames_drawn, canvas_cache.renders = 0, 0, 0, 0, 0
 	case "input":
 		// Synthetic mouse/keyboard events for driving the interface from tests.
 		inject_input(params)

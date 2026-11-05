@@ -3,6 +3,7 @@ package agentic_design
 import "engine"
 
 import "core:fmt"
+import "core:hash"
 import "core:math"
 import "core:strconv"
 import "core:strings"
@@ -140,6 +141,7 @@ app_main :: proc(path: string) {
 // documents to open, the control socket. False when there is no window or renderer.
 app_start :: proc(path: string) -> bool {
 	engine.lod_off = fs_env("AGENTIC_NO_LOD", context.temp_allocator) != ""
+	canvas_cache.off = fs_env("AGENTIC_NO_CANVAS_CACHE", context.temp_allocator) != ""
 	use_big_allocator_for_temp()
 	posix_ignore_sigpipe()
 
@@ -309,7 +311,8 @@ drawing_frame: bool
 frame_draw :: proc(fb: [2]i32, capture: bool) -> (t3, t4, t5, t6: time.Tick) {
 	drawing_frame = true
 	defer drawing_frame = false
-	if app.tab >= 0 {
+	canvas_cache_render(fb)
+	if app.tab >= 0 && !canvas_cache.valid {
 		c := app.canvas
 		engine.blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg, order = app.draw_order[:]})
 	}
@@ -574,7 +577,21 @@ draw_canvas :: proc() {
 	c := app.canvas
 	nvg.Save(vg)
 	nvg.Scissor(vg, c.x, c.y, c.w, c.h)
+	if canvas_cache.valid {
+		// the document as drawn last time it or the view changed (canvas_cache_render)
+		nvg.BeginPath(vg)
+		nvg.Rect(vg, c.x, c.y, c.w, c.h)
+		nvg.FillPaint(vg, nvg.ImagePattern(0, 0, app.screen.x, app.screen.y, 0, canvas_cache.target.image, 1))
+		nvg.Fill(vg)
+	} else do draw_document_layer(vg)
+	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
+	draw_annotations(vg) // the user's marks for the agent
+	draw_canvas_overlays(vg)
+}
 
+// The grid and the document: what the canvas cache holds.
+draw_document_layer :: proc(vg: ^nvg.Context) {
+	c := app.canvas
 	if ui.show_grid && app.zoom >= 0.35 {
 		step: f32 = 20
 		for step * app.zoom < 14 do step *= 2
@@ -608,9 +625,92 @@ draw_canvas :: proc() {
 	engine.blur_active = false
 	engine.cull_rect = {}
 	nvg.Restore(vg)
-	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
-	draw_annotations(vg) // the user's marks for the agent
+}
 
+// ---------------------------------------------------------------- canvas cache
+
+// The document is drawn into a texture of the window's size and the frame shows that texture,
+// until the document, its layout or the view changes. Everything else a frame redraws
+// (the pointer over the panels, a list scrolled, hover, selection, agents' cursors, marks,
+// a caret) then costs no redraw of the document: on a 5,800-layer file that was ~8 ms of
+// every frame, most of a 120 Hz display's time, and scrolling a list stuttered.
+// AGENTIC_NO_CANVAS_CACHE=1 draws the document every frame, as before.
+Canvas_Key :: struct {
+	doc:     rawptr,
+	version: int,
+	layout:  int,
+	path:    u64,
+	zoom:    f32,
+	cam:     [2]f32,
+	canvas:  Rect,
+	fb:      [2]i32,
+	dpr:     f32,
+	bg:      nvg.Color,
+	grid:    bool,
+	hidden:  u64,
+	retry:   i64, // while an image failed to load: every 2 s, when it is tried again (D106)
+}
+
+canvas_cache: struct {
+	target:  engine.Target,
+	key:     Canvas_Key,
+	valid:   bool,
+	off:     bool,
+	renders: int, // documents drawn into it (for tests: `perf`)
+}
+
+canvas_cache_key :: proc(fb: [2]i32) -> Canvas_Key {
+	k := Canvas_Key {
+		doc     = &app.doc,
+		version = app.doc.version,
+		layout  = engine.layout_epoch,
+		path    = hash.fnv64a(transmute([]u8)app.file_path),
+		zoom    = app.zoom,
+		cam     = app.cam,
+		canvas  = app.canvas,
+		fb      = fb,
+		dpr     = app.dpr,
+		bg      = app.canvas_bg,
+		grid    = ui.show_grid,
+	}
+	h: u64 = 14695981039346656037
+	for cu in engine.children_of(&app.doc, 0) {
+		if !app.page_hidden[cu] do continue
+		h = (h ~ u64(cu)) * 1099511628211
+	}
+	k.hidden = h
+	if len(engine.image_tried) > 0 do k.retry = time.now()._nsec / 2_000_000_000
+	return k
+}
+
+// Before the window's frame: draws the document into the cache when it is out of date.
+canvas_cache_render :: proc(fb: [2]i32) {
+	if app.tab < 0 || canvas_cache.off || fb.x <= 0 || fb.y <= 0 {
+		canvas_cache.valid = false
+		if app.tab < 0 && canvas_cache.target.w > 0 do engine.target_free(&canvas_cache.target) // the Dashboard has no canvas
+		return
+	}
+	key := canvas_cache_key(fb)
+	if canvas_cache.valid && key == canvas_cache.key do return
+	c := app.canvas
+	engine.blur_prepare({xf = {app.zoom, 0, 0, app.zoom, c.x - app.cam.x * app.zoom, c.y - app.cam.y * app.zoom}, dpr = app.dpr, clip = {c.x, c.y, c.w, c.h}, fb = {fb.x, fb.y}, bg = app.canvas_bg, order = app.draw_order[:]})
+	if canvas_cache.target.w != int(fb.x) || canvas_cache.target.h != int(fb.y) {
+		engine.target_free(&canvas_cache.target)
+		canvas_cache.target = engine.target_make(int(fb.x), int(fb.y))
+	}
+	bg := app.canvas_bg
+	engine.target_begin(&canvas_cache.target, {bg.r, bg.g, bg.b, 1})
+	nvg.BeginFrame(app.vg, app.screen.x, app.screen.y, app.dpr)
+	nvg.Scissor(app.vg, c.x, c.y, c.w, c.h)
+	draw_document_layer(app.vg)
+	nvg.EndFrame(app.vg)
+	canvas_cache.key = key
+	canvas_cache.valid = true
+	canvas_cache.renders += 1
+}
+
+draw_canvas_overlays :: proc(vg: ^nvg.Context) {
+	c := app.canvas
 	// titles of top-level frames
 	nvg.FontFace(vg, "ui")
 	nvg.FontSize(vg, 12)
