@@ -92,6 +92,7 @@ Png_Strip :: struct {
 	out_len:    int,
 	adler:      c.ulong,
 	ok:         bool,
+	bpp:        int, // 3 (RGB) or 4 (RGBA)
 }
 
 // Row y of the image.
@@ -104,7 +105,8 @@ png_row :: #force_inline proc(s: ^Png_Strip, y: int) -> []u8 {
 @(private = "file")
 png_filter_rows :: proc(s: ^Png_Strip) {
 	w := s.w
-	n := w * 3
+	bpp := s.bpp
+	n := w * bpp
 	line := n + 1
 	scratch := make([]u8, line * 5 + n * 2)
 	defer delete(scratch)
@@ -112,16 +114,20 @@ png_filter_rows :: proc(s: ^Png_Strip) {
 	for f in 0 ..< 5 do cand[f] = scratch[f * line:][:line]
 	cur := scratch[line * 5:][:n]
 	prev := scratch[line * 5 + n:][:n] // zero above the first row, as PNG defines it
-	rgb :: proc(dst, src: []u8, w: int) {
+	rgb :: proc(dst, src: []u8, w, bpp: int) {
+		if bpp == 4 {
+			copy(dst, src[:w * 4])
+			return
+		}
 		for x in 0 ..< w do dst[x * 3], dst[x * 3 + 1], dst[x * 3 + 2] = src[x * 4], src[x * 4 + 1], src[x * 4 + 2]
 	}
-	if s.y0 > 0 do rgb(prev, png_row(s, s.y0 - 1), w)
+	if s.y0 > 0 do rgb(prev, png_row(s, s.y0 - 1), w, bpp)
 	for y in s.y0 ..< s.y1 {
-		rgb(cur, png_row(s, y), w)
+		rgb(cur, png_row(s, y), w, bpp)
 		best, best_sum := 0, max(int)
 		for f in 0 ..< 5 {
 			o := cand[f]
-			png_filter_one(o, cur, prev, f)
+			png_filter_one(o, cur, prev, f, bpp)
 			sum := 0
 			for v in o[1:] do sum += int(abs(i8(v))) if v != 128 else 128
 			if sum < best_sum do best, best_sum = f, sum
@@ -133,7 +139,7 @@ png_filter_rows :: proc(s: ^Png_Strip) {
 
 // One PNG filter of a row; `prev` is the row above (zeros for the first row).
 @(private = "file")
-png_filter_one :: proc(dst, cur, prev: []u8, f: int) {
+png_filter_one :: proc(dst, cur, prev: []u8, f: int, bpp: int) {
 	dst[0] = u8(f)
 	n := len(cur)
 	d := dst[1:]
@@ -141,17 +147,17 @@ png_filter_one :: proc(dst, cur, prev: []u8, f: int) {
 	case 0:
 		copy(d, cur)
 	case 1:
-		for i in 0 ..< 3 do d[i] = cur[i]
-		for i in 3 ..< n do d[i] = cur[i] - cur[i - 3]
+		for i in 0 ..< bpp do d[i] = cur[i]
+		for i in bpp ..< n do d[i] = cur[i] - cur[i - bpp]
 	case 2:
 		for i in 0 ..< n do d[i] = cur[i] - prev[i]
 	case 3:
-		for i in 0 ..< 3 do d[i] = cur[i] - prev[i] / 2
-		for i in 3 ..< n do d[i] = cur[i] - u8((u32(cur[i - 3]) + u32(prev[i])) / 2)
+		for i in 0 ..< bpp do d[i] = cur[i] - prev[i] / 2
+		for i in bpp ..< n do d[i] = cur[i] - u8((u32(cur[i - bpp]) + u32(prev[i])) / 2)
 	case 4:
-		for i in 0 ..< 3 do d[i] = cur[i] - prev[i] // Paeth with a = c = 0 predicts b
-		for i in 3 ..< n {
-			a, b, cc := i32(cur[i - 3]), i32(prev[i]), i32(prev[i - 3])
+		for i in 0 ..< bpp do d[i] = cur[i] - prev[i] // Paeth with a = c = 0 predicts b
+		for i in bpp ..< n {
+			a, b, cc := i32(cur[i - bpp]), i32(prev[i]), i32(prev[i - bpp])
 			pa, pb, pc := abs(b - cc), abs(a - cc), abs(a + b - 2 * cc)
 			pred := a if pa <= pb && pa <= pc else (b if pb <= pc else cc)
 			d[i] = cur[i] - u8(pred)
@@ -180,11 +186,12 @@ png_strip_work :: proc(s: ^Png_Strip) {
 	s.ok = true
 }
 
-// Encodes w × h RGBA pixels (top row first, alpha ignored) as an RGB PNG.
+// Encodes w × h RGBA pixels (top row first) as an RGB PNG, or RGBA with `alpha`.
 // The result is allocated with `allocator`.
-png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level := PNG_LEVEL, threads := 0) -> (png: []u8, ok: bool) {
+png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level := PNG_LEVEL, threads := 0, alpha := false) -> (png: []u8, ok: bool) {
 	if w <= 0 || h <= 0 || len(pixels) < w * h * 4 do return
-	line := w * 3 + 1
+	bpp := 4 if alpha else 3
+	line := w * bpp + 1
 	// strips of at least 64 rows and 256 KB of input, one per core at most
 	n := threads if threads > 0 else max(1, os.get_processor_core_count())
 	n = clamp(min(n, h / 64, (line * h) / (256 * 1024)), 1, 16)
@@ -202,6 +209,7 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 			y1        = y1,
 			last      = i == n - 1,
 			level     = c.int(level),
+			bpp       = bpp,
 			filtered  = filtered[y0 * line:y1 * line],
 		}
 	}
@@ -251,7 +259,7 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 	put(out, &p, {'I', 'H', 'D', 'R'})
 	put_u32(out, &p, u32(w))
 	put_u32(out, &p, u32(h))
-	put(out, &p, {8, 2, 0, 0, 0}) // 8 bits, RGB, deflate, adaptive filtering, no interlace
+	put(out, &p, {8, 6 if alpha else 2, 0, 0, 0}) // 8 bits, RGBA or RGB, deflate, adaptive filtering, no interlace
 	chunk_end(out, &p, start)
 	put_u32(out, &p, u32(2 + total + 4))
 	start = p
@@ -270,8 +278,8 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 
 
 // RGBA rows, top row first (as gpu_read gives them), to a PNG in the temporary allocator.
-png_encode :: proc(pixels: []u8, w, h: i32) -> (png: []u8, ok: bool) {
-	return png_write(pixels, int(w), int(h), context.temp_allocator)
+png_encode :: proc(pixels: []u8, w, h: i32, alpha := false) -> (png: []u8, ok: bool) {
+	return png_write(pixels, int(w), int(h), context.temp_allocator, alpha = alpha)
 }
 
 // zlib (with its header), for FlateDecode streams.

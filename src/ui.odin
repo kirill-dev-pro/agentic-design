@@ -1342,9 +1342,10 @@ export_encode :: proc(uids: []int, scale: f32, format: engine.Export_Format) -> 
 	if len(uids) == 1 do target, _ = engine.doc_find_uid(&app.doc, uids[0])
 	pad: f32 = 0 if target != nil else 20
 	r = {r[0] - pad, r[1] - pad, r[2] + pad * 2, r[3] + pad * 2}
-	pixels, w, h, rok := render_region(r, scale, target, {1, 1, 1, 1})
+	clear_bg := ui.export_transparent && format == .PNG
+	pixels, w, h, rok := render_region(r, scale, target, {0, 0, 0, 0} if clear_bg else {1, 1, 1, 1})
 	if !rok do return nil, false
-	return engine.encode_image(pixels, w, h, format, scale)
+	return engine.encode_image(pixels, w, h, format, scale, clear_bg)
 }
 
 // "Hero@2x" for a layer named Hero at 2×.

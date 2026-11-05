@@ -10,13 +10,20 @@ import stbiw "vendor:stb/image"
 
 PNG_LEVEL :: 6
 
-png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level := PNG_LEVEL, threads := 0) -> (png: []u8, ok: bool) {
+png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level := PNG_LEVEL, threads := 0, alpha := false) -> (png: []u8, ok: bool) {
 	if w <= 0 || h <= 0 || len(pixels) < w * h * 4 do return
 	out := make([dynamic]u8, allocator)
 	write :: proc "c" (ctx: rawptr, data: rawptr, size: c.int) {
 		context = callback_context()
 		out := (^[dynamic]u8)(ctx)
 		append(out, ..([^]u8)(data)[:size])
+	}
+	if alpha {
+		if stbiw.write_png_to_func(write, &out, c.int(w), c.int(h), 4, raw_data(pixels), c.int(w * 4)) == 0 {
+			delete(out)
+			return nil, false
+		}
+		return out[:], true
 	}
 	rgb := make([]u8, w * h * 3, context.temp_allocator)
 	for i in 0 ..< w * h do rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2] = pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]
@@ -28,8 +35,8 @@ png_write :: proc(pixels: []u8, w, h: int, allocator := context.allocator, level
 }
 
 // RGBA rows, top row first (as gpu_read gives them), to a PNG in the temporary allocator.
-png_encode :: proc(pixels: []u8, w, h: i32) -> (png: []u8, ok: bool) {
-	return png_write(pixels, int(w), int(h), context.temp_allocator)
+png_encode :: proc(pixels: []u8, w, h: i32, alpha := false) -> (png: []u8, ok: bool) {
+	return png_write(pixels, int(w), int(h), context.temp_allocator, alpha = alpha)
 }
 
 // No zlib here: PDF streams are written uncompressed (pdf.odin's stream takes nil as that).

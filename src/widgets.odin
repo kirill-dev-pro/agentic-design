@@ -86,6 +86,7 @@ UI :: struct {
 	pad_all:        bool, // padding shown as four sides
 	radius_corners: bool, // corner radius shown as four corners
 	export_scale:   int, // index into EXPORT_SCALES
+	export_transparent: bool, // PNG exports without a background (D63)
 	// floating panels (panels.odin): the offset of the panel being drawn, and each panel's
 	// full height last frame (its header and content), which its height follows
 	origin:         [2]f32,

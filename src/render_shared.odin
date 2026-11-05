@@ -59,7 +59,7 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 	max_side := i32(clamp(engine.gpu_max_side(), 1024, 16384))
 	// up to 16 pixels per unit, the GPU's largest texture a side and 100 Mpx in all;
 	// render_scale tells callers what was used
-	s := clamp(scale, 0.05, 16)
+	s := clamp(scale, 0.001, 16) // (a 1024 icon at 16 px is 0.016, D66)
 	s = min(s, f32(max_side) / r[2], f32(max_side) / r[3])
 	if r[2] * s * r[3] * s > 100e6 do s *= math.sqrt(100e6 / (r[2] * s * r[3] * s)) // at most 100 Mpx
 	render_scale = s
@@ -100,7 +100,7 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 			tw, th := min(TILE, ow - x0), min(TILE, oh - y0)
 			xf := nvg.Matrix{s, 0, 0, s, -r[0] * s - f32(x0), -r[1] * s - f32(y0)}
 			engine.blur_prepare({xf = xf, dpr = 1, clip = {0, 0, f32(tw), f32(th)}, fb = {TILE, TILE}, bg = bg, order = order})
-			engine.target_begin(&tile, {bg.r, bg.g, bg.b, 1})
+			engine.target_begin(&tile, {bg.r, bg.g, bg.b, bg.a})
 			nvg.BeginFrame(vg, TILE, TILE, 1)
 			nvg.Transform(vg, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5])
 			engine.cull_rect = {r[0] + f32(x0) / s, r[1] + f32(y0) / s, f32(tw) / s, f32(th) / s}
@@ -119,6 +119,16 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 			for k in 0 ..< int(th) {
 				copy(pixels[((int(y0) + k) * int(ow) + int(x0)) * 4:][:int(tw) * 4], got[k * int(tw) * 4:][:int(tw) * 4])
 			}
+		}
+	}
+	// on a transparent background the colours come premultiplied by their alpha: undo that
+	if bg.a < 1 {
+		for i := 0; i < len(pixels); i += 4 {
+			a := u32(pixels[i + 3])
+			if a == 0 || a == 255 do continue
+			pixels[i] = u8(min(u32(pixels[i]) * 255 / a, 255))
+			pixels[i + 1] = u8(min(u32(pixels[i + 1]) * 255 / a, 255))
+			pixels[i + 2] = u8(min(u32(pixels[i + 2]) * 255 / a, 255))
 		}
 	}
 	return pixels, ow, oh, true

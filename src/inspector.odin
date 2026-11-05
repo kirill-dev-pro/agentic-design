@@ -644,6 +644,10 @@ draw_export_section :: proc(vg: ^nvg.Context, n: ^engine.Node, x, w: f32, y: ^f3
 	formats := [4]string{"PNG", "JPEG", "WEBP", "PDF"}
 	if pick, ok := dropdown_menu(vg, "export.format", {x + half + 8, y^, half, 28}, formats[:], ui.export_format); ok do ui.export_format = pick
 	y^ += 34
+	if engine.Export_Format(ui.export_format) == .PNG {
+		if checkbox(vg, {x, y^, w, 22}, "Transparent background", ui.export_transparent) do ui.export_transparent = !ui.export_transparent
+		y^ += 30
+	}
 	if button(vg, {x, y^, w, 28}, "Export layer") do export_layer(n, EXPORT_SCALE_VALUES[ui.export_scale], engine.Export_Format(ui.export_format))
 	y^ += 36
 	divider(vg, x, w, y)

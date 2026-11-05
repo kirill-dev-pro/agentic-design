@@ -278,6 +278,13 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 			scale = f32(params["scale"].(json.Float) or_else 2),
 			view  = params["view"].(json.Boolean) or_else false,
 			path  = strings.clone(string(params["path"].(json.String) or_else ""), context.temp_allocator),
+			transparent = string(params["background"].(json.String) or_else "") == "transparent",
+			width = f32(params["width"].(json.Float) or_else 0),
+			height = f32(params["height"].(json.Float) or_else 0),
+		}
+		if (shot.width > 0 || shot.height > 0) && shot.view {
+			shot = {}
+			return api_error("width and height size a layer or page image, not the window"), false
 		}
 		if th, has := params["theme"].(json.Object); has {
 			for k, v in th {
@@ -763,6 +770,8 @@ Shot :: struct {
 	path:   string, // write the image here instead of returning it
 	theme:  [8][2]string, // theme values to render with (axis, value), whatever the window shows
 	themes: int,
+	transparent: bool, // no background: an RGBA PNG (D63)
+	width, height: f32, // exact pixel size wanted (D66); 0 = from the scale
 }
 
 shot: Shot
@@ -822,13 +831,18 @@ render_screenshot :: proc() {
 		engine.doc_retheme(&app.doc)
 		engine.layout_document(&app.doc)
 	}
-	pixels, ow, oh, rok := render_region(r, shot.scale, target, shot_backdrop(target))
+	// an exact pixel size: the scale that gives it (the other side follows the layer's shape)
+	if shot.width > 0 do shot.scale = shot.width / r[2]
+	else if shot.height > 0 do shot.scale = shot.height / r[3]
+	bg := shot_backdrop(target)
+	if shot.transparent do bg = {0, 0, 0, 0}
+	pixels, ow, oh, rok := render_region(r, shot.scale, target, bg)
 	if !rok {
 		finish_request(req, api_error("node too small to capture"))
 		return
 	}
 	if shot.path != "" {
-		data, eok := engine.encode_image(pixels, ow, oh, shot.format, shot.scale)
+		data, eok := engine.encode_image(pixels, ow, oh, shot.format, shot.scale, shot.transparent)
 		if !eok {
 			finish_request(req, api_error("encoding failed"))
 			return
@@ -847,7 +861,7 @@ render_screenshot :: proc() {
 		finish_request(req, strings.to_string(b))
 		return
 	}
-	finish_request(req, encode_png_response(pixels, ow, oh, shot.scale))
+	finish_request(req, encode_png_response(pixels, ow, oh, shot.scale, shot.transparent))
 }
 
 // Shows the page that holds the first of these layers, so selecting or zooming to a layer
@@ -870,8 +884,8 @@ write_scale_note :: proc(b: ^strings.Builder, asked: f32) {
 }
 
 // Encodes RGBA rows (top row first) as a PNG response (temp allocator).
-encode_png_response :: proc(pixels: []u8, ow, oh: i32, asked: f32 = 0) -> string {
-	png, ok := engine.png_encode(pixels, ow, oh)
+encode_png_response :: proc(pixels: []u8, ow, oh: i32, asked: f32 = 0, alpha := false) -> string {
+	png, ok := engine.png_encode(pixels, ow, oh, alpha)
 	if !ok do return api_error("PNG encoding failed")
 	encoded := base64.encode(png, allocator = context.temp_allocator)
 	b := strings.builder_make(big_allocator())

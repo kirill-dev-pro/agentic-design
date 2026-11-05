@@ -34,8 +34,8 @@ export_format_from :: proc(s: string) -> (Export_Format, bool) {
 
 // Encodes pixels (alpha made opaque) as `format`. `scale` is pixels per design unit, for
 // the PDF page size.
-encode_image :: proc(pixels: []u8, w, h: i32, format: Export_Format, scale: f32 = 1) -> ([]u8, bool) {
-	if format == .PNG do return png_encode(pixels, w, h)
+encode_image :: proc(pixels: []u8, w, h: i32, format: Export_Format, scale: f32 = 1, alpha := false) -> ([]u8, bool) {
+	if format == .PNG do return png_encode(pixels, w, h, alpha)
 	for i := 3; i < len(pixels); i += 4 do pixels[i] = 255
 	switch format {
 	case .PNG:
