@@ -138,3 +138,8 @@ a.inline { color: var(--accent-text); text-underline-offset: 3px; }
 .guide-end { display: flex; justify-content: flex-end; }
 .guide-link { margin: -4px 0 4px; }
 @media (max-width: 600px) { .guide-dialog { padding: 20px; } .guide-cards li { padding-left: 48px; } }
+
+/* files shared with this account */
+#shared-section { margin-top: 36px; }
+.shared-title { font-size: 18px; font-weight: 600; letter-spacing: -.2px; margin-bottom: 14px; }
+.file.pick { outline: 2px solid var(--accent); outline-offset: 2px; }

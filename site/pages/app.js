@@ -284,15 +284,63 @@ const App = (() => {
 		const list = $("#files-list");
 		const showError = (text) => { $("#files-error").textContent = text || ""; $("#files-error").hidden = !text; };
 		const icon = (name) => el("span", { className: "ico", innerHTML: `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>` });
-		let all = [], filter = "all";
+		let all = [], shared = [], filter = "all";
 
 		async function load() {
 			let data;
 			try { data = await api("GET", "/api/docs"); }
 			catch (e) { return showError(say(e)); }
 			all = data.files;
-			$("#files-empty").hidden = all.length > 0;
+			shared = data.shared || [];
+			$("#files-empty").hidden = all.length > 0 || shared.length > 0;
 			show();
+			showShared();
+		}
+
+		// Files other people shared with this account: opened, not managed (the owner keeps rename,
+		// delete, links and versions); a member can leave.
+		function showShared() {
+			$("#shared-section").hidden = shared.length === 0;
+			$("#shared-list").replaceChildren(...shared.map(sharedCard));
+			const want = new URLSearchParams(location.search).get("doc");
+			const hit = want && $(`#shared-list [data-id="${CSS.escape(want)}"], #files-list [data-id="${CSS.escape(want)}"]`);
+			if (hit) { hit.classList.add("pick"); hit.scrollIntoView({ block: "center" }); }
+		}
+
+		function sharedCard(f) {
+			const role = f.shared && f.shared.role === "editor" ? "Can edit" : "Can view";
+			const owner = f.shared && f.shared.owner && (f.shared.owner.name || f.shared.owner.email) || "someone";
+			const open = el("a", { role: "menuitem", href: ownerUrl(f), textContent: "Open" });
+			const leave = el("button", { type: "button", role: "menuitem", className: "danger", textContent: "Leave" });
+			leave.addEventListener("click", async () => {
+				closeMenu();
+				if (!confirm(`Leave “${f.name}”? You will no longer see it.`)) return;
+				try { await api("DELETE", `/api/docs/${f.id}/people/${m.user.id}`); load(); } catch (e) { showError(say(e)); }
+			});
+			const menu = el("div", { className: "cmenu", role: "menu", hidden: true }, open, m.user && m.user.id ? leave : null);
+			const more = el("button", { type: "button", className: "more", title: "Actions", innerHTML: '<svg class="ic" aria-hidden="true"><use href="#i-more"/></svg>' });
+			more.setAttribute("aria-label", `Actions for ${f.name}`);
+			more.setAttribute("aria-haspopup", "menu");
+			more.setAttribute("aria-expanded", "false");
+			more.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const was = openMenu && openMenu.menu === menu;
+				closeMenu();
+				if (!was) { menu.hidden = false; more.setAttribute("aria-expanded", "true"); openMenu = { menu, button: more }; }
+			});
+			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
+				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null,
+				el("span", { className: "badge-cloud" }, icon("cloud"), "Cloud"));
+			const li = el("li", { className: "file" },
+				el("div", { className: "file-top" },
+					el("div", { className: "meta" },
+						el("span", { className: "name", textContent: f.name, title: f.name }),
+						el("span", { className: "when" }, icon("cloud"), `${owner} · ${when(f.updatedAt)}`)),
+					el("div", { className: "more-wrap" }, more, menu)),
+				thumb,
+				el("div", { className: "linkstate" }, icon("link"), role));
+			li.dataset.id = f.id;
+			return li;
 		}
 
 		// What the search, the filter and the sort leave of the files.
@@ -361,7 +409,7 @@ const App = (() => {
 			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
 				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null,
 				el("span", { className: "badge-cloud" }, icon("cloud"), "Cloud"));
-			return el("li", { className: "file" },
+			const li = el("li", { className: "file" },
 				el("div", { className: "file-top" },
 					el("div", { className: "meta" },
 						el("span", { className: "name", textContent: f.name, title: f.name }),
@@ -369,6 +417,8 @@ const App = (() => {
 					el("div", { className: "more-wrap" }, more, menu)),
 				thumb,
 				el("div", { className: "linkstate" }, icon("link"), nLinks ? `${views} ${views === 1 ? "view" : "views"} · link on` : "Link off"));
+			li.dataset.id = f.id;
+			return li;
 		}
 
 		await load();
