@@ -85,6 +85,11 @@ parse_spans :: proc(doc: ^Document, n: ^Node, v: json.Value) {
 	}
 }
 
+// The node draws its runs: they still cover its content exactly.
+is_rich :: proc(n: ^Node) -> bool {
+	return len(n.spans) > 0 && n.spans[len(n.spans) - 1].b == len(n.content)
+}
+
 // `n` with the style of one span: a copy that shares n's memory, never freed or kept.
 span_node :: proc(n: ^Node, s: Text_Span) -> Node {
 	c := n^

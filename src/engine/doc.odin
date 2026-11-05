@@ -598,6 +598,8 @@ ghost_clone_tree :: proc(doc: ^Document, orig_uid, parent, inst_uid: int, chain:
 			if o.has_content {
 				delete(g.content)
 				g.content = strings.clone(o.content)
+				// the runs were cut for the component's own text
+				if len(g.spans) > 0 && g.content != orig.content do spans_free(&g)
 			}
 			if o.has_name {
 				delete(g.name)
@@ -671,6 +673,12 @@ ghost_clone :: proc(n: Node) -> Node {
 	c.theme_set = make([dynamic][2]string, len(n.theme_set))
 	for t, i in n.theme_set do c.theme_set[i] = {strings.clone(t[0]), strings.clone(t[1])}
 	c.theme_key = strings.clone(n.theme_key)
+	c.spans = make([dynamic]Text_Span, len(n.spans))
+	for sp, i in n.spans {
+		c.spans[i] = sp
+		c.spans[i].family = strings.clone(sp.family)
+		c.spans[i].href = strings.clone(sp.href)
+	}
 	return c
 }
 
@@ -821,6 +829,12 @@ node_clone :: proc(n: Node) -> Node {
 	c.theme_set = make([dynamic][2]string, len(n.theme_set))
 	for t, i in n.theme_set do c.theme_set[i] = {strings.clone(t[0]), strings.clone(t[1])}
 	c.theme_key = strings.clone(n.theme_key)
+	c.spans = make([dynamic]Text_Span, len(n.spans))
+	for sp, k in n.spans {
+		c.spans[k] = sp
+		c.spans[k].family = strings.clone(sp.family)
+		c.spans[k].href = strings.clone(sp.href)
+	}
 	return c
 }
 

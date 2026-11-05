@@ -2252,3 +2252,30 @@ titles by the agent).
 
 **Consequences.** tests/agent/input.py covers context, sessions, titles, marks, Gemini's
 stream and the 0.3 migration with stand-in CLIs. Gemini CLI itself has not been run here.
+
+## 89. Rich text and one responsive page
+
+**Problem.** A text node had one style, so a sentence with a bold word, a coloured word or
+a link took several layers placed by hand (Dogfooder D39, D98). `export_code` of a desktop
+and a mobile frame wrote two pages one under the other (D103): 10,838 px tall at 1440 px
+for a 4,829 px page.
+
+**Decision.**
+
+- Text nodes take `spans`: runs `{"text", …style}` whose texts join up to `content`, each
+  overriding the node's fontFamily, fontWeight, fontStyle, fontSize, fill, underline,
+  strikethrough, letterSpacing, or adding href. `content` stays the whole plain text, so
+  pen.dev (which has no runs) and older versions show the words in the node's style.
+  Lines wrap at spaces across runs (a word wider than the box between characters); a row
+  is as tall as its biggest run and the runs share a baseline. Setting `spans` alone sets
+  `content`. A content change (update_nodes, the inspector, typing) keeps the runs: the
+  changed part goes into the run where the change starts. Runs that no longer join up to
+  the content (changed in another editor) are ignored and lint reports `spans-mismatch`.
+  `export_code` writes `<span style>` and `<a href>`; PDF and outline text draw the runs.
+- `export_code` of frames pinned to two or more `viewport` values makes one page: each
+  version sits in a `vp-<value>` wrapper shown only in its own width range, split at the
+  breakpoints the variables use (the middle between the widths).
+
+**Consequences.** tests/render/rich_text.py and tests/render/responsive_export.py. Justify
+is not applied to rich text. A responsive page carries each version's markup once per
+version; merging matching layers into one tree is left for later.

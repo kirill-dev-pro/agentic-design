@@ -34,6 +34,9 @@ Gen :: struct {
 	roots:    []int, // layers to export (empty: every top-level layer of the page)
 	viewport: string, // the theme axis written as media queries ("" if none)
 	widths:   map[string]f32, // viewport value -> the width of the frames pinned to it
+	vp_first: string, // the viewport axis's default value
+	vp_class: map[int]string, // exported frame -> "vp-<value>" when they make one responsive page
+	vp_css:   string, // the media queries showing each of those frames in its width range
 }
 
 // Generates the files for the current page.
@@ -43,6 +46,7 @@ generate_code :: proc(doc: ^Document, format: Code_Format, roots: []int = nil) -
 	clear(&export_warnings)
 	g := Gen{doc = doc, format = format, roots = roots}
 	viewport_setup(&g)
+	viewport_pages(&g)
 	g.css = strings.builder_make(context.temp_allocator)
 	g.out = strings.builder_make(context.temp_allocator)
 	collect_components(&g)
@@ -59,13 +63,17 @@ generate_code :: proc(doc: ^Document, format: Code_Format, roots: []int = nil) -
 		for cu in export_roots(&g) {
 			n, _ := doc_find_uid(doc, cu)
 			if n == nil || !n.enabled do continue
-			gen_html_node(&g, n, 1, "", true)
+			vp, in_vp := g.vp_class[cu]
+			if in_vp do fmt.sbprintf(&g.out, "  <div class=\"%s\">\n", vp)
+			gen_html_node(&g, n, 2 if in_vp else 1, "", true)
+			if in_vp do strings.write_string(&g.out, "  </div>\n")
 		}
 		strings.write_string(&g.out, "</body>\n</html>\n")
 		nodes_css := strings.to_string(g.css)
 		g.css = strings.builder_make(context.temp_allocator)
 		gen_css_vars(&g, strings.concatenate({nodes_css, strings.to_string(g.out)}, context.temp_allocator))
 		strings.write_string(&g.css, nodes_css)
+		strings.write_string(&g.css, g.vp_css)
 		append(&files, Code_File{"index.html", strings.clone(strings.to_string(g.out), context.temp_allocator)})
 		append(&files, Code_File{"styles.css", strings.clone(strings.to_string(g.css), context.temp_allocator)})
 	case .React:
@@ -75,6 +83,7 @@ generate_code :: proc(doc: ^Document, format: Code_Format, roots: []int = nil) -
 		gen_react_page(&g)
 		page := strings.clone(strings.to_string(g.out), context.temp_allocator)
 		gen_css_vars(&g, strings.concatenate({components, page}, context.temp_allocator))
+		strings.write_string(&g.css, g.vp_css)
 		append(&files, Code_File{"globals.css", strings.clone(strings.to_string(g.css), context.temp_allocator)})
 		append(&files, Code_File{"components.tsx", components})
 		append(&files, Code_File{"Page.tsx", page})
@@ -178,6 +187,7 @@ viewport_setup :: proc(g: ^Gen) {
 			g.viewport = a.name
 		}
 		if g.viewport != "" && len(a.values) > 0 {
+			g.vp_first = a.values[0]
 			for cu in children_of(g.doc, 0) {
 				n, _ := doc_find_uid(g.doc, cu)
 				if n == nil || n.reusable || n.kind != .Frame do continue
@@ -188,6 +198,41 @@ viewport_setup :: proc(g: ^Gen) {
 			break
 		}
 	}
+}
+
+// D103: exported frames pinned to two or more viewport values (a desktop and a mobile
+// version of a page) make one responsive page, not pages stacked one after the other: each
+// frame shows only in its value's width range, split at the same breakpoints as the
+// variables (the middle between the widths).
+viewport_pages :: proc(g: ^Gen) {
+	g.vp_class = make(map[int]string, context.temp_allocator)
+	if g.viewport == "" do return
+	value_of := make(map[int]string, context.temp_allocator)
+	values := make([dynamic]Breakpoint, context.temp_allocator)
+	for cu in export_roots(g) {
+		n, _ := doc_find_uid(g.doc, cu)
+		if n == nil || n.parent != 0 || n.kind != .Frame do continue
+		value := g.vp_first
+		for t in n.theme_set do if t[0] == g.viewport do value = t[1]
+		value_of[cu] = value
+		known := false
+		for v in values do if v.value == value do known = true
+		if !known do append(&values, Breakpoint{value = value, width = g.widths[value]})
+	}
+	if len(values) < 2 do return
+	slice.sort_by(values[:], proc(a, b: Breakpoint) -> bool {return a.width > b.width})
+	for i in 1 ..< len(values) do values[i].below = math.floor((values[i].width + values[i - 1].width) / 2)
+	b := strings.builder_make(context.temp_allocator)
+	strings.write_string(&b, "/* one page for every viewport: each version shows in its own width range */\n")
+	for v, i in values {
+		cls := fmt.tprintf("vp-%s", css_name(v.value))
+		// wider than its range: the next wider version shows
+		if i > 0 do fmt.sbprintf(&b, "@media (width > %dpx) {{ .%s {{ display: none; }} }}\n", int(v.below), cls)
+		// narrower than its range
+		if i + 1 < len(values) do fmt.sbprintf(&b, "@media (width <= %dpx) {{ .%s {{ display: none; }} }}\n", int(values[i + 1].below), cls)
+	}
+	g.vp_css = strings.to_string(b)
+	for cu, value in value_of do g.vp_class[cu] = fmt.tprintf("vp-%s", css_name(value))
 }
 
 // Media queries for the viewport axis, widest first: a value applies below the middle
@@ -828,7 +873,7 @@ gen_html_node :: proc(g: ^Gen, n: ^Node, indent: int, prefix: string, top: bool)
 	title := n.name if n.name != "" else ""
 	switch n.kind {
 	case .Text:
-		fmt.sbprintf(&g.out, "<p class=\"n-%s\">%s</p>\n", cls, rich_html(n, false) if len(n.spans) > 0 else html_escape(n.content))
+		fmt.sbprintf(&g.out, "<p class=\"n-%s\">%s</p>\n", cls, rich_html(n, false) if is_rich(n) else html_escape(n.content))
 	case .Path:
 		heads := ""
 		if hd := connector_heads_d(n); hd != "" {
@@ -1172,7 +1217,10 @@ gen_react_page :: proc(g: ^Gen) {
 	for cu in export_roots(g) {
 		n, _ := doc_find_uid(g.doc, cu)
 		if n == nil || !n.enabled do continue
-		gen_react_node(g, n, 3, nil, true)
+		vp, in_vp := g.vp_class[cu]
+		if in_vp do fmt.sbprintf(&g.out, "      <div className=\"%s\">\n", vp)
+		gen_react_node(g, n, 4 if in_vp else 3, nil, true)
+		if in_vp do strings.write_string(&g.out, "      </div>\n")
 	}
 	strings.write_string(&g.out, "    </main>\n  );\n}\n")
 }
@@ -1212,7 +1260,7 @@ gen_react_node :: proc(g: ^Gen, n: ^Node, indent: int, comp: ^Node, top: bool) {
 	if wrap_hidden do fmt.sbprintf(&g.out, "%s{{(props.%s ?? true) && (\n", pad, prop)
 	switch n.kind {
 	case .Text:
-		content := rich_html(n, true) if len(n.spans) > 0 else jsx_escape(n.content)
+		content := rich_html(n, true) if is_rich(n) else jsx_escape(n.content)
 		if is_prop do fmt.sbprintf(&g.out, "%s<p %s>{{props.%s ?? %s}}</p>\n", pad, cls_attr, prop, js_string(n.content))
 		else do fmt.sbprintf(&g.out, "%s<p %s>%s</p>\n", pad, cls_attr, content)
 	case .Path:
