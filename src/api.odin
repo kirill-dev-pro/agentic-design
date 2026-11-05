@@ -212,6 +212,10 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 			engine.doc_bring_to_front(&app.doc, n.uid)
 		}
 		strings.write_string(&b, `{"ok":true,"moved":true}`)
+	case "share", "unshare":
+		// put the document in the cloud (agent_share.odin); answered when it is done
+		agent, _ := obj["agent"].(json.Object)
+		return api_share(req, params, agent, method == "unshare")
 	case "undo":
 		undo()
 		strings.write_string(&b, `{"ok":true}`)

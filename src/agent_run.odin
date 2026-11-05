@@ -348,6 +348,7 @@ agent_tick :: proc() {
 	for t in agent_state.threads {
 		if t.running && t.stopping && time.since(t.stop_at) > 0 do _ = os.process_kill(t.process)
 	}
+	agent_share_tick()
 }
 
 @(private = "file")

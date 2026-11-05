@@ -683,6 +683,15 @@ Share_Job :: struct {
 		Revoke,
 	},
 	download, embed: bool,
+	// an agent's share (agent_share.odin): who may see it, and the link set to exactly that
+	agent:           bool,
+	access:          Share_Access,
+}
+
+Share_Access :: enum {
+	Private, // in the account's files only (the owner)
+	Link, // anyone with the link
+	Public, // a public link (needs a verified email)
 }
 
 // Shares the saved file at `path` (a new file, or a new version behind the same link).
@@ -693,6 +702,14 @@ cloud_share :: proc(path, name: string) {
 // Changes the link's download and embed permissions.
 cloud_share_settings :: proc(path: string, download, embed: bool) {
 	start_job({path = strings.clone(path), kind = .Update_Link, download = download, embed = embed})
+}
+
+// An agent's share: uploads `path` and sets who may see it (agent_share.odin). False when a
+// job is already running or nobody is signed in.
+cloud_share_as :: proc(path, name: string, access: Share_Access, download, embed: bool) -> bool {
+	if cloud.running || !cloud_signed_in() do return false
+	start_job({path = strings.clone(path), name = strings.clone(name), kind = .Upload, agent = true, access = access, download = download, embed = embed})
+	return true
 }
 
 // Revokes the link and forgets the share (the file stays in the account's files).
@@ -724,7 +741,7 @@ share_worker :: proc(data: rawptr) {
 	}
 	ok := false
 	switch j.kind {
-	case .Upload: ok = share_upload(j.path, j.name)
+	case .Upload: ok = share_upload(j.path, j.name, j)
 	case .Update_Link: ok = share_link_update(j.path, j.download, j.embed)
 	case .Revoke: ok = share_revoke(j.path)
 	}
@@ -754,7 +771,7 @@ request_failed :: proc(what: string, r: Http_Result) -> bool {
 }
 
 @(private = "file")
-share_upload :: proc(path, name: string) -> bool {
+share_upload :: proc(path, name: string, job: ^Share_Job) -> bool {
 	set_text(&cloud.progress, "Reading the files…")
 	pen_sum, pen_size, pen_ok := sha256_file(path)
 	if !pen_ok {
@@ -817,8 +834,26 @@ share_upload :: proc(path, name: string) -> bool {
 	file_obj, _ := commit.json.(json.Object)
 	if f, ok := file_obj["file"].(json.Object); ok do file_obj = f
 	link: json.Object
-	if links, ok := file_obj["links"].(json.Array); ok && len(links) > 0 do link, _ = links[0].(json.Object)
-	if link == nil {
+	links_json, _ := file_obj["links"].(json.Array)
+	if len(links_json) > 0 do link, _ = links_json[0].(json.Object)
+	if job.agent && job.access == .Private {
+		// only the owner: every link of the file is turned off
+		set_text(&cloud.progress, "Turning links off…")
+		for lv in links_json {
+			lo, _ := lv.(json.Object)
+			r := cloud_http("DELETE", fmt.tprintf("%s/api/links/%s", cloud_url(), string(lo["id"].(json.String) or_else "")), bearer = cloud.token)
+			if r.status != 200 && r.status != 204 && r.status != 404 && r.status != 410 do return request_failed("Turning the link off", r)
+		}
+		link = nil
+	} else if job.agent {
+		// the link says exactly what the agent was allowed to set
+		body := fmt.tprintf(`{{"visibility":"%s","allowDownload":%v,"allowEmbed":%v}}`, "public" if job.access == .Public else "link", job.download, job.embed)
+		r: Http_Result
+		if link != nil do r = cloud_http("PATCH", fmt.tprintf("%s/api/links/%s", cloud_url(), string(link["id"].(json.String) or_else "")), body, cloud.token)
+		else do r = cloud_http("POST", fmt.tprintf("%s/api/docs/%s/links", cloud_url(), doc_id), body, cloud.token)
+		if r.status != 201 && r.status != 200 do return request_failed("Making the link", r)
+		link, _ = r.json.(json.Object)
+	} else if link == nil {
 		r := cloud_http("POST", fmt.tprintf("%s/api/docs/%s/links", cloud_url(), doc_id), "{}", cloud.token)
 		if r.status != 201 && r.status != 200 do return request_failed("Making the link", r)
 		link, _ = r.json.(json.Object)
@@ -833,7 +868,7 @@ share_upload :: proc(path, name: string) -> bool {
 	}
 	for m in missing do append(&s.missing, strings.clone(m))
 	share_store(key, s)
-	cloud.copied = true // the main thread puts the link on the clipboard
+	if !job.agent do cloud.copied = true // the main thread puts the link on the clipboard
 	platform_wake()
 	return true
 }

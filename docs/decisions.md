@@ -2192,3 +2192,27 @@ agent's work came back as many undo steps.
 **Consequences.** tests/agent/input.py drives it with a stand-in CLI (fake_claude.py) that
 starts our MCP server from the config, as Claude Code does. Test windows show the input only
 with AGENTIC_AGENT_INPUT=1. The web editor has no input yet (it cannot start processes).
+
+## 87. Agents put files in the cloud, private unless the user allows a link
+
+**Problem.** An agent could design a file but not share it: only the Share button in the
+inspector could upload, and it always made a link.
+
+**Decision.**
+
+- MCP tools `share` and `unshare` (`src/agent_share.odin`) upload the session's document
+  (or `document`) to the account signed in on this Mac, as the Share button does (a new
+  version behind the same file when it was shared before).
+- `access`: `private` by default (only the owner, in their cloud files; any link of the file
+  is turned off), `link` (anyone with the link) or `public`. A link needs the user's yes in
+  the window ("Share" / "Don't allow"), because a document's text could ask an agent to
+  publish it; private uploads to the user's own account do not ask. `allow_download` and
+  `allow_embed` set what the link allows. `unshare` turns the link off; the file stays,
+  private.
+- With nobody signed in the call is refused and says where to sign in; the agent never
+  signs in for the user.
+- Giving one person or a team access needs invitations on the server (cloud-docs-plan S6);
+  `invite` follows when the API exists.
+
+**Consequences.** tests/cloud/agent_share.py runs the tools through `agentic-design mcp`
+against a backend with a throwaway account.
