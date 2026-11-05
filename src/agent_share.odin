@@ -28,6 +28,9 @@ agent_share: struct {
 	embed:    bool,
 	revoke:   bool,
 	who:      string, // the agent, for the question
+	method:   string, // "invite", "people", "remove_access" answer from cloud.job_result
+	email:    string,
+	role:     string,
 }
 
 SHARE_ACCESS_NAMES := [Share_Access]string {
@@ -41,6 +44,9 @@ share_reset :: proc() {
 	delete(agent_share.path)
 	delete(agent_share.name)
 	delete(agent_share.who)
+	delete(agent_share.method)
+	delete(agent_share.email)
+	delete(agent_share.role)
 	agent_share = {}
 }
 
@@ -108,6 +114,50 @@ api_share :: proc(req: ^Request, params: json.Object, agent: json.Object, revoke
 	return "", true
 }
 
+// invite, people and remove_access (contract §10): who may open the document in the cloud.
+api_people :: proc(req: ^Request, params: json.Object, agent: json.Object, method: string) -> (string, bool) {
+	if app.file_path == "" do return api_error("no document: open one or pass \"document\""), false
+	if agent_share.stage != .None || cloud.running do return api_error("Agentic Design is already uploading a file; try again in a moment."), false
+	if !cloud_signed_in() {
+		set_status("An agent wants to share a file: sign in under Settings → Account")
+		return api_error("Nobody is signed in to the Agentic Design cloud on this Mac, so nothing changed. Ask the user to sign in: Settings → Account → Sign in with browser. Then call this again."), false
+	}
+	email := strings.to_lower(strings.trim_space(string(params["email"].(json.String) or_else "")), context.temp_allocator)
+	role := string(params["role"].(json.String) or_else "viewer")
+	if method != "people" && (email == "" || !strings.contains(email, "@")) do return api_error("pass \"email\": the person's email address"), false
+	if role != "viewer" && role != "editor" do return api_error("role: viewer (sees the file) or editor (can change it)"), false
+	if app.dirty do save_document(app.file_path)
+	agent_share.req = req
+	agent_share.path = strings.clone(app.file_path)
+	agent_share.name = strings.clone(engine.file_title(app.file_path))
+	agent_share.method = strings.clone(method)
+	agent_share.email = strings.clone(email)
+	agent_share.role = strings.clone(role)
+	who := string(agent["title"].(json.String) or_else "") if agent != nil else ""
+	if who == "" do who = string(agent["client"].(json.String) or_else "") if agent != nil else ""
+	if who == "" do who = "An agent"
+	agent_share.who = strings.clone(who)
+	if method == "invite" {
+		dialog_open("agent.share", fmt.tprintf("Invite %s?", email), fmt.tprintf("%s wants to give %s access to “%s” as %s. The file goes to your Agentic Design cloud if it is not there yet; they open it with an invitation link, signed in with that email.", agent_share.who, email, agent_share.name, "an editor (can change it)" if role == "editor" else "a viewer"), {"Don't allow", "Invite"})
+		agent_share.stage = .Confirm
+		return "", true
+	}
+	agent_share.stage = .Running
+	kind := cloud_people_job_kind(method)
+	if !cloud_people_job(agent_share.path, agent_share.name, kind, email, role) do share_answer(false, "the request could not start")
+	return "", true
+}
+
+@(private = "file")
+cloud_people_job_kind :: proc(method: string) -> (k: People_Job) {
+	switch method {
+	case "invite": k = .Invite
+	case "people": k = .People
+	case: k = .Remove
+	}
+	return
+}
+
 // Every frame: the user's answer, then the end of the upload.
 agent_share_tick :: proc() {
 	switch agent_share.stage {
@@ -119,12 +169,21 @@ agent_share_tick :: proc() {
 				return
 			}
 			agent_share.stage = .Running
-			if !cloud_share_as(agent_share.path, agent_share.name, agent_share.access, agent_share.download, agent_share.embed) do share_answer(false, "the upload could not start")
+			started := false
+			if agent_share.method != "" do started = cloud_people_job(agent_share.path, agent_share.name, cloud_people_job_kind(agent_share.method), agent_share.email, agent_share.role)
+			else do started = cloud_share_as(agent_share.path, agent_share.name, agent_share.access, agent_share.download, agent_share.embed)
+			if !started do share_answer(false, "the upload could not start")
 		}
 	case .Running:
 		if cloud.running do return
 		if cloud_phase() == .Failed {
 			share_answer(false, fmt.tprintf("The upload failed: %s", cloud_text(&cloud.error)))
+			return
+		}
+		if agent_share.method != "" {
+			res := strings.clone(cloud_text(&cloud.job_result), context.temp_allocator)
+			if agent_share.method == "invite" do set_status("Invitation for %s ready", agent_share.email)
+			share_answer(true, res if res != "" else "{}")
 			return
 		}
 		s, _ := cloud_share_of(agent_share.path)

@@ -68,6 +68,7 @@ cloud: struct {
 	mutex:      sync.Mutex, // guards the strings below and `shares`
 	progress:   string,
 	error:      string,
+	job_result: string, // JSON from the last people job (agent_share.odin)
 	signin_url: string,
 	shares:     map[string]Cloud_Share, // by cloud_share_key
 	shares_loaded: bool,
@@ -681,7 +682,11 @@ Share_Job :: struct {
 		Upload,
 		Update_Link,
 		Revoke,
+		Invite, // people with access (decision 87): invite by email, list, remove
+		People,
+		Remove,
 	},
+	email, role:     string,
 	download, embed: bool,
 	// an agent's share (agent_share.odin): who may see it, and the link set to exactly that
 	agent:           bool,
@@ -712,6 +717,26 @@ cloud_share_as :: proc(path, name: string, access: Share_Access, download, embed
 	return true
 }
 
+// The people jobs of an agent: the file goes to the cloud first (private) when it is not
+// there yet. The answer is in cloud.job_result.
+People_Job :: enum {
+	Invite,
+	People,
+	Remove,
+}
+
+cloud_people_job :: proc(path, name: string, kind: People_Job, email, role: string) -> bool {
+	if cloud.running || !cloud_signed_in() do return false
+	j := Share_Job{path = strings.clone(path), name = strings.clone(name), email = strings.clone(email), role = strings.clone(role), agent = true, access = .Private}
+	switch kind {
+	case .Invite: j.kind = .Invite
+	case .People: j.kind = .People
+	case .Remove: j.kind = .Remove
+	}
+	start_job(j)
+	return true
+}
+
 // Revokes the link and forgets the share (the file stays in the account's files).
 cloud_share_revoke :: proc(path: string) {
 	start_job({path = strings.clone(path), kind = .Revoke})
@@ -735,6 +760,8 @@ share_worker :: proc(data: rawptr) {
 	defer {
 		delete(j.path)
 		delete(j.name)
+		delete(j.email)
+		delete(j.role)
 		free(j)
 		free_all(context.temp_allocator)
 		cloud.running = false
@@ -744,6 +771,7 @@ share_worker :: proc(data: rawptr) {
 	case .Upload: ok = share_upload(j.path, j.name, j)
 	case .Update_Link: ok = share_link_update(j.path, j.download, j.embed)
 	case .Revoke: ok = share_revoke(j.path)
+	case .Invite, .People, .Remove: ok = people_job(j)
 	}
 	if ok {
 		set_text(&cloud.progress, "")
@@ -904,6 +932,73 @@ share_revoke :: proc(path: string) -> bool {
 		if r.status != 200 && r.status != 204 && r.status != 404 && r.status != 410 do return request_failed("Turning the link off", r)
 	}
 	share_forget(cloud_share_key(path))
+	return true
+}
+
+// ---------------------------------------------------------------- people (contract §10)
+
+@(private = "file")
+people_job :: proc(j: ^Share_Job) -> bool {
+	s, had := cloud_share_of(j.path)
+	if !had || s.doc_id == "" {
+		if j.kind != .Invite {
+			set_text(&cloud.job_result, `{"inCloud":false,"owner":null,"members":[],"invites":[]}`)
+			return true
+		}
+		if !share_upload(j.path, j.name, j) do return false
+		s, had = cloud_share_of(j.path)
+	}
+	base := fmt.tprintf("%s/api/docs/%s", cloud_url(), s.doc_id)
+	switch j.kind {
+	case .Invite:
+		set_text(&cloud.progress, "Inviting…")
+		r := cloud_http("POST", fmt.tprintf("%s/invites", base), fmt.tprintf(`{{"email":%s,"role":"%s"}}`, json_quote(j.email), j.role), cloud.token)
+		if r.status == 409 && r.reason == "ALREADY_MEMBER" {
+			// a member already: change their role
+			people := cloud_http("GET", fmt.tprintf("%s/people", base), bearer = cloud.token)
+			if people.status != 200 do return request_failed("Reading who has access", people)
+			po, _ := people.json.(json.Object)
+			members, _ := po["members"].(json.Array)
+			for mv in members {
+				mo, _ := mv.(json.Object)
+				if strings.to_lower(string(mo["email"].(json.String) or_else ""), context.temp_allocator) != strings.to_lower(j.email, context.temp_allocator) do continue
+				u := cloud_http("PATCH", fmt.tprintf("%s/people/%s", base, string(mo["userId"].(json.String) or_else "")), fmt.tprintf(`{{"role":"%s"}}`, j.role), cloud.token)
+				if u.status != 200 do return request_failed("Changing the role", u)
+				set_text(&cloud.job_result, `{{"email":%s,"role":"%s","member":true,"url":""}}`, json_quote(j.email), j.role)
+				return true
+			}
+		}
+		if r.status != 201 && r.status != 200 do return request_failed("Inviting", r)
+		set_text(&cloud.job_result, "%s", string(r.body))
+	case .People:
+		r := cloud_http("GET", fmt.tprintf("%s/people", base), bearer = cloud.token)
+		if r.status != 200 do return request_failed("Reading who has access", r)
+		set_text(&cloud.job_result, "%s", string(r.body))
+	case .Remove:
+		r := cloud_http("GET", fmt.tprintf("%s/people", base), bearer = cloud.token)
+		if r.status != 200 do return request_failed("Reading who has access", r)
+		po, _ := r.json.(json.Object)
+		want := strings.to_lower(j.email, context.temp_allocator)
+		removed := ""
+		members, _ := po["members"].(json.Array)
+		for mv in members {
+			mo, _ := mv.(json.Object)
+			if strings.to_lower(string(mo["email"].(json.String) or_else ""), context.temp_allocator) != want do continue
+			d := cloud_http("DELETE", fmt.tprintf("%s/people/%s", base, string(mo["userId"].(json.String) or_else "")), bearer = cloud.token)
+			if d.status != 200 && d.status != 204 do return request_failed("Removing access", d)
+			removed = "member"
+		}
+		invites, _ := po["invites"].(json.Array)
+		for iv in invites {
+			io, _ := iv.(json.Object)
+			if string(io["email"].(json.String) or_else "") != want do continue
+			d := cloud_http("DELETE", fmt.tprintf("%s/invites/%s", base, string(io["id"].(json.String) or_else "")), bearer = cloud.token)
+			if d.status != 200 && d.status != 204 do return request_failed("Removing the invitation", d)
+			if removed == "" do removed = "invitation"
+		}
+		set_text(&cloud.job_result, `{{"email":%s,"removed":%s}}`, json_quote(j.email), json_quote(removed))
+	case .Upload, .Update_Link, .Revoke:
+	}
 	return true
 }
 

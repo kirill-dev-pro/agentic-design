@@ -2211,8 +2211,12 @@ inspector could upload, and it always made a link.
   private.
 - With nobody signed in the call is refused and says where to sign in; the agent never
   signs in for the user.
-- Giving one person or a team access needs invitations on the server (cloud-docs-plan S6);
-  `invite` follows when the API exists.
+- People (contract §10): `invite` (email, role `viewer` or `editor`) asks the user in the window,
+  puts the file in the cloud privately if it is not there, and returns the invitation link
+  for the agent to give the user (no mail is sent; the person opens it signed in with that
+  email). Inviting a member again changes their role. `people` lists the owner, members and
+  open invitations; `remove_access` takes a member out or cancels an invitation. Teams are
+  not part of it.
 
 **Consequences.** tests/cloud/agent_share.py runs the tools through `agentic-design mcp`
 against a backend with a throwaway account.

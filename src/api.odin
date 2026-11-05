@@ -216,6 +216,9 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 		// put the document in the cloud (agent_share.odin); answered when it is done
 		agent, _ := obj["agent"].(json.Object)
 		return api_share(req, params, agent, method == "unshare")
+	case "invite", "people", "remove_access":
+		agent, _ := obj["agent"].(json.Object)
+		return api_people(req, params, agent, method)
 	case "undo":
 		undo()
 		strings.write_string(&b, `{"ok":true}`)
