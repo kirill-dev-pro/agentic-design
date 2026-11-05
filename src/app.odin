@@ -222,7 +222,10 @@ app_frame :: proc() {
 	app.needs_layout = false
 	ran := process_requests()
 	if ran {
-		active_until = platform_time() + ACTIVE_AFTER_INPUT
+		// a request's result is drawn in this very frame: no run of frames after it (half a
+		// second of them per request kept a big document at the display's rate, a core
+		// busy, for as long as an agent worked); agents' cursors are paced on their own
+		active_until = max(active_until, platform_time() + REQUEST_FRAMES)
 		agent_activity_touch()
 	}
 	agent_activity_tick()
@@ -349,6 +352,7 @@ live_redraw :: proc() {
 // loop spun at hundreds of frames a second whenever macOS stopped syncing it to the
 // display (a window behind others), keeping a core busy and the laptop warm.
 ACTIVE_AFTER_INPUT :: 0.5 // seconds of full frame rate after the last input
+REQUEST_FRAMES :: 0.03 // after an agent's request: the frame that shows it, and one more
 
 active_until: f64
 pace_wake: sync.Sema // posted when a request arrives, so frame pacing does not hold it up
@@ -360,7 +364,10 @@ idle_wait :: proc() -> f64 {
 	if now < active_until || shot.req != nil || len(thumb_queue) > 0 || export_pending || copy_png_pending || app.needs_layout do return 0
 	// agents' cursors and flashes (presence.odin): paced, since a covered window gets no vsync
 	if busy, fast := presence_animating(now); busy {
-		step := 1 / pf.refresh if fast else 1.0 / 20
+		// paced by what a frame costs: a big document takes ~8 ms a frame, and a cursor
+		// gliding at 120 Hz or swaying at 20 Hz over it kept a core busy for a whole run
+		cost := max(app.perf[6] - app.perf[5], 0) / 1000 // seconds, without the wait for the display
+		step := max(1 / pf.refresh, 1.0 / 60, cost * 3) if fast else max(1.0 / 20, cost * 15)
 		return max(frame_started + step - now, 0.001)
 	}
 	into := time.now()._nsec % 500_000_000 // carets blink on every half second
