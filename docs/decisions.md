@@ -2274,7 +2274,9 @@ for a 4,829 px page.
   `export_code` writes `<span style>` and `<a href>`; PDF and outline text draw the runs.
 - `export_code` of frames pinned to two or more `viewport` values makes one page: each
   version sits in a `vp-<value>` wrapper shown only in its own width range, split at the
-  breakpoints the variables use (the middle between the widths).
+  breakpoints the variables use (the middle between the widths). A value's width comes from
+  the frames pinned to it; an unpinned frame counts only for a value no frame is pinned to
+  (0.5.1: a wide components board had moved the breakpoint to 2376 px, D108).
 
 **Consequences.** tests/render/rich_text.py and tests/render/responsive_export.py. Justify
 is not applied to rich text. A responsive page carries each version's markup once per
