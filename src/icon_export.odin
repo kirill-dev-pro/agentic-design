@@ -83,7 +83,10 @@ api_export_icons :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	if arr, ok := params["kinds"].(json.Array); ok {
 		for k in arr do append(&kinds, string(k.(json.String) or_else ""))
 	} else do append(&kinds, "macos", "favicon")
-	if err := os.make_directory_all(dir); err != nil do return fmt.tprintf("could not create %s: %v", dir, err)
+	// an existing folder is fine (D109)
+	if !os.is_dir(dir) {
+		if err := os.make_directory_all(dir); err != nil do return fmt.tprintf("could not create %s: %v", dir, err)
+	}
 	written := make([dynamic]string, context.temp_allocator)
 	warnings := make([dynamic]string, context.temp_allocator)
 	write :: proc(path: string, data: []u8, written: ^[dynamic]string) -> string {

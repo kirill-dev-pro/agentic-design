@@ -178,7 +178,7 @@ export_roots :: proc(g: ^Gen) -> []int {
 
 // A theme axis named viewport (or breakpoint, screen, device) is responsive: its values
 // become media queries. Each value's width is the widest top-level frame pinned to it
-// (the default value: the widest unpinned frame).
+// (the default value, when no frame is pinned to it: the widest unpinned frame).
 viewport_setup :: proc(g: ^Gen) {
 	axes := doc_theme_axes(g.doc)
 	for a in axes {
@@ -188,13 +188,21 @@ viewport_setup :: proc(g: ^Gen) {
 		}
 		if g.viewport != "" && len(a.values) > 0 {
 			g.vp_first = a.values[0]
+			// frames pinned to a value give its width; an unpinned frame counts for the default
+			// value only when no frame is pinned to it (a wide components board beside a
+			// desktop and a mobile page made the breakpoint 2376 px, D108)
+			unpinned: f32
 			for cu in children_of(g.doc, 0) {
 				n, _ := doc_find_uid(g.doc, cu)
 				if n == nil || n.reusable || n.kind != .Frame do continue
-				value := a.values[0]
-				for t in n.theme_set do if t[0] == a.name do value = t[1]
-				g.widths[value] = max(g.widths[value], n.w)
+				pinned := false
+				for t in n.theme_set do if t[0] == a.name {
+					g.widths[t[1]] = max(g.widths[t[1]], n.w)
+					pinned = true
+				}
+				if !pinned do unpinned = max(unpinned, n.w)
 			}
+			if g.widths[a.values[0]] <= 0 && unpinned > 0 do g.widths[a.values[0]] = unpinned
 			break
 		}
 	}
