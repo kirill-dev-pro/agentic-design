@@ -160,6 +160,13 @@ draw_node_tree :: proc(vg: ^nvg.Context, n: ^Node, alpha: f32, depth: int, force
 	// without any extent (empty fit_content frames, zero-size shapes) are not outlined.
 	flat := n.w < 1e-3 && n.h < 1e-3
 
+	// drop shadows that follow the shape (blur.odin), under the layer
+	if blur_active && n.uid != blur_self && shadow_by_silhouette(n) {
+		for e, i in n.effects[:n.neffects] {
+			if !e.enabled || e.kind != .Drop_Shadow do continue
+			if r, ok := blur_shadow[n.uid * 16 + i]; ok do draw_blurred_layer(vg, r, 1)
+		}
+	}
 	switch n.kind {
 	case .Frame, .Rectangle:
 		if !flat && node_visible(n) do draw_box(vg, n)

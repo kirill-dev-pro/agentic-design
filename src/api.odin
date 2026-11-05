@@ -549,7 +549,7 @@ api_create_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	push_undo()
 	created := make([dynamic]int, context.temp_allocator)
 	for spec_in in specs {
-		spec, serr := expand_shape_spec(spec_in)
+		spec, serr := expand_shape_spec(rotation_origin_spec(spec_in))
 		if serr != "" do return serr
 		uid, err := engine.node_from_json(&app.doc, spec, parent)
 		if err != "" do return err
@@ -712,6 +712,57 @@ write_warnings :: proc(b: ^strings.Builder, warnings: []string) {
 	strings.write_byte(b, ']')
 }
 
+// rotationOrigin (D71): "center", "top-left" or [fx, fy] (fractions of the box). The file
+// keeps pen.dev's rotation about the top-left corner; x and y are moved so that the layer
+// turns about this point instead.
+rotation_pivot :: proc(v: json.Value) -> (f: [2]f32, ok: bool) {
+	#partial switch t in v {
+	case json.String:
+		switch string(t) {
+		case "center", "centre": return {0.5, 0.5}, true
+		case "top-left": return {0, 0}, true
+		}
+	case json.Array:
+		if len(t) == 2 {
+			a, aok := t[0].(json.Float)
+			b, bok := t[1].(json.Float)
+			if aok && bok do return {f32(a), f32(b)}, true
+		}
+	}
+	return {}, false
+}
+
+// Where a box point (from the unrotated top-left) lands, relative to the top-left corner.
+rotated_offset :: proc(v: [2]f32, rotation: f32, flip_x, flip_y: bool) -> [2]f32 {
+	p := [2]f32{v.x * (-1 if flip_x else 1), v.y * (-1 if flip_y else 1)}
+	a := -rotation * math.PI / 180
+	return {p.x * math.cos(a) - p.y * math.sin(a), p.x * math.sin(a) + p.y * math.cos(a)}
+}
+
+// A node spec with rotationOrigin: x and y set so the layer, placed at x and y unturned,
+// turns about that point. Children are handled the same way.
+rotation_origin_spec :: proc(spec: json.Value) -> json.Value {
+	o, is_obj := spec.(json.Object)
+	if !is_obj do return spec
+	if kids, has := o["children"].(json.Array); has {
+		for &k in kids do k = rotation_origin_spec(k)
+	}
+	pv, has := o["rotationOrigin"]
+	if !has do return spec
+	delete_key(&o, "rotationOrigin")
+	f, ok := rotation_pivot(pv)
+	rot := f32(o["rotation"].(json.Float) or_else 0)
+	w, wok := o["width"].(json.Float)
+	h, hok := o["height"].(json.Float)
+	if !ok || rot == 0 || !wok || !hok do return o
+	fx, fy := o["flipX"].(json.Boolean) or_else false, o["flipY"].(json.Boolean) or_else false
+	v := [2]f32{f.x * f32(w), f.y * f32(h)}
+	d := v - rotated_offset(v, rot, bool(fx), bool(fy))
+	o["x"] = engine.json_num(f32(o["x"].(json.Float) or_else 0) + d.x)
+	o["y"] = engine.json_num(f32(o["y"].(json.Float) or_else 0) + d.y)
+	return o
+}
+
 api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	updates, ok := params["updates"].(json.Array)
 	if !ok || len(updates) == 0 do return "updates must be a non-empty array"
@@ -740,13 +791,30 @@ api_update_nodes :: proc(b: ^strings.Builder, params: json.Object) -> string {
 			for k in o do if is_connector_key(k) do has_conn = true
 			if has_conn do if e := update_connector(n, o); e != "" do return e
 		}
+		// a new rotation about a pivot: the pivot stays where it is on the page
+		pivot_pos: Maybe([2]f32)
+		pivot_v: [2]f32
+		if pv, has := o["rotationOrigin"]; has {
+			if f, ok := rotation_pivot(pv); ok {
+				pivot_v = {f.x * n.w, f.y * n.h}
+				pivot_pos = n.pos + rotated_offset(pivot_v, n.rotation, n.flip_x, n.flip_y)
+			} else do return "rotationOrigin: \"center\", \"top-left\" or [fx, fy] (fractions of the box)"
+		}
 		for k, v in o {
 			if n.flow == .Connector && is_connector_key(k) do continue
 			switch k {
-			case "id", "parent_id", "children", "type":
+			case "id", "parent_id", "children", "type", "rotationOrigin":
 			case:
 				if _, is_null := v.(json.Null); is_null do engine.node_unset(&app.doc, n, k)
 				else do engine.node_set(&app.doc, n, k, v)
+			}
+		}
+		if pp, ok := pivot_pos.?; ok && !("x" in o) && !("y" in o) {
+			nn, _ := engine.doc_find_uid(&app.doc, n.uid)
+			if nn != nil {
+				pos := pp - rotated_offset(pivot_v, nn.rotation, nn.flip_x, nn.flip_y)
+				engine.node_set_number(&app.doc, nn, "x", math.round(pos.x * 100) / 100)
+				engine.node_set_number(&app.doc, nn, "y", math.round(pos.y * 100) / 100)
 			}
 		}
 		if "icon" in o || "iconFontName" in o || "padding" in o || "fill" in o do api_check_nodes(n.uid, false, &warnings)

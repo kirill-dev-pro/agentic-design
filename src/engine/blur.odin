@@ -31,6 +31,7 @@ Blur_Buffer :: struct {
 blur_buffers: [dynamic]Blur_Buffer
 blur_layer: map[int]Blur_Result // layer blur, drawn instead of the layer
 blur_backdrop: map[int]Blur_Result // background blur, drawn under the layer's fill
+blur_shadow: map[int]Blur_Result // drop shadows of paths, icons and text: uid * 16 + effect (D45)
 blur_active: bool // draw_node_tree uses the results (canvas and screenshots only)
 blur_self: int // the layer being drawn into its own buffer
 blur_stop: int // capturing a backdrop: drawing stops at this layer
@@ -41,10 +42,22 @@ blur_stopped: bool
 blur_prepare :: proc(view: Blur_View) {
 	clear(&blur_layer)
 	clear(&blur_backdrop)
+	clear(&blur_shadow)
 	count := 0
 	for uid in view.order {
 		n, _ := doc_find_uid(current, uid)
 		if n == nil do continue
+		// a drop shadow follows the shape of a path, an icon or text: their silhouette,
+		// offset and blurred (frames, rectangles and ellipses use a box gradient)
+		if shadow_by_silhouette(n) {
+			for e, i in n.effects[:n.neffects] {
+				if !e.enabled || e.kind != .Drop_Shadow || i >= 16 do continue
+				if r, ok := blur_render(view, n, false, e.blur, count, e); ok {
+					blur_shadow[uid * 16 + i] = r
+					count += 1
+				}
+			}
+		}
 		for e in n.effects[:n.neffects] {
 			if !e.enabled || e.blur <= 0 || (e.kind != .Blur && e.kind != .Background_Blur) do continue
 			back := e.kind == .Background_Blur
@@ -70,20 +83,26 @@ blur_buffer :: proc(i, w, h: int) -> ^Blur_Buffer {
 	return b
 }
 
-blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: int) -> (res: Blur_Result, ok: bool) {
+shadow_by_silhouette :: proc(n: ^Node) -> bool {
+	return n.kind == .Path || n.kind == .Icon || n.kind == .Text
+}
+
+blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: int, shadow: Maybe(Effect) = nil) -> (res: Blur_Result, ok: bool) {
 	if !gpu_blur_ready() do return
+	sh, is_shadow := shadow.?
 	xf := view.xf
 	scale := math.sqrt(abs(xf[0] * xf[3] - xf[1] * xf[2])) * view.dpr
 	sigma := radius / 2 * scale // in framebuffer pixels
-	if sigma < 0.3 do return
+	if sigma < 0.3 && !is_shadow do return
 	// the layer's box as drawn, in framebuffer pixels, with room for the blur
 	corners, _ := node_corners(n)
 	lo, hi := [2]f32{1e9, 1e9}, [2]f32{-1e9, -1e9}
-	for c in corners {
+	for c0 in corners {
+		c := c0 + (sh.offset if is_shadow else 0)
 		q := [2]f32{xf[0] * c.x + xf[2] * c.y + xf[4], xf[1] * c.x + xf[3] * c.y + xf[5]} * view.dpr
 		lo, hi = {min(lo.x, q.x), min(lo.y, q.y)}, {max(hi.x, q.x), max(hi.y, q.y)}
 	}
-	margin := math.ceil(3 * sigma)
+	margin := math.ceil(3 * sigma) + 1
 	lo, hi = lo - margin, hi + margin
 	// only what can be seen (and the margin the blur reaches in from outside it)
 	cl := view.clip
@@ -126,15 +145,23 @@ blur_render :: proc(view: Blur_View, n: ^Node, back: bool, radius: f32, index: i
 		// the layer alone, turned and mirrored as the layers around it are
 		if m, tr := node_transform_of_parent(n); tr do nvg.Transform(vg, m[0], m[1], m[2], m[3], m[4], m[5])
 		blur_self = n.uid
+		if is_shadow {
+			// its silhouette in the shadow's colour, moved by the offset
+			nvg.Translate(vg, sh.offset.x, sh.offset.y)
+			vg.silhouette, vg.silhouetteOn = to_nvg(sh.color), true
+		}
 		draw_node_tree(vg, n, 1, 0)
+		vg.silhouetteOn = false
 		blur_self = 0
 	}
 	cull_rect = saved_cull
 	nvg.EndFrame(vg)
 
 	s := sigma * f32(w) / (hi.x - lo.x)
-	gpu_blur(&buf.a, &buf.b, {1 / f32(w), 0}, s)
-	gpu_blur(&buf.b, &buf.a, {0, 1 / f32(h)}, s)
+	if sigma >= 0.3 {
+		gpu_blur(&buf.a, &buf.b, {1 / f32(w), 0}, s)
+		gpu_blur(&buf.b, &buf.a, {0, 1 / f32(h)}, s)
+	}
 	return {image = buf.a.image, rect = {lo.x / view.dpr, lo.y / view.dpr, (hi.x - lo.x) / view.dpr, (hi.y - lo.y) / view.dpr}}, true
 }
 

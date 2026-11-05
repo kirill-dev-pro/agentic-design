@@ -209,6 +209,10 @@ Text_Run :: struct {
 
 Context :: struct {
 	recorder:      ^Recorder, // Agentic Design patch (see Recorder)
+	// Agentic Design patch: every fill, stroke and glyph in this colour, with its own alpha
+	// (a layer's silhouette, for shadows of paths and text)
+	silhouette:    Color,
+	silhouetteOn:  bool,
 	params:        Params,
 	commands:      [dynamic]f32,
 	commandx,      commandy: f32,
@@ -2536,9 +2540,24 @@ Circle :: #force_inline proc(ctx: ^Context, cx, cy: f32, radius: f32) {
 }
 
 // Fills the current path with current fill style.
+// Agentic Design patch: a paint turned into the silhouette colour (keeps coverage: alpha,
+// and the font atlas for glyphs).
+__silhouette :: proc(ctx: ^Context, paint: ^Paint, keep_image: bool) {
+	if !ctx.silhouetteOn do return
+	c := ctx.silhouette
+	ia, oa := paint.innerColor.a, paint.outerColor.a
+	if paint.image != 0 && !keep_image {
+		paint.image = 0
+		ia, oa = 1, 1
+	}
+	paint.innerColor = {c.r, c.g, c.b, c.a * ia}
+	paint.outerColor = {c.r, c.g, c.b, c.a * oa}
+}
+
 Fill :: proc(ctx: ^Context) {
 	state := __getState(ctx)
 	fill_paint := state.fill
+	__silhouette(ctx, &fill_paint, false)
 	if ctx.recorder != nil {
 		fill_paint.innerColor.a *= state.alpha
 		fill_paint.outerColor.a *= state.alpha
@@ -2582,6 +2601,7 @@ Stroke :: proc(ctx: ^Context) {
 	scale := __getAverageScale(state.xform[:])
 	strokeWidth := clamp(state.strokeWidth * scale, 0, 200)
 	stroke_paint := state.stroke
+	__silhouette(ctx, &stroke_paint, false)
 	if ctx.recorder != nil {
 		stroke_paint.innerColor.a *= state.alpha
 		stroke_paint.outerColor.a *= state.alpha
@@ -2875,6 +2895,7 @@ __renderText :: proc(ctx: ^Context, verts: []Vertex) {
 
 	// Render triangles.
 	paint.image = ctx.fontImages[ctx.fontImageIdx]
+	__silhouette(ctx, &paint, true)
 
 	// Apply global alpha
 	paint.innerColor.a *= state.alpha
