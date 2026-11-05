@@ -2,11 +2,12 @@
 // The Worker checks the session (cookie, or the Mac app's bearer token) and the person's role
 // in the document, sets x-doc-* headers itself (whatever the client sent is dropped), starts the
 // room from the document's latest upload the first time, and hands the upgrade over.
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 import { blobKey, bucket, type App } from '../blobs'
 import type { Manifest } from '../files'
-import { document, member, version } from '../schema'
+import { docAccess } from '../invites'
+import { document, version } from '../schema'
 
 export const ROOM_PATH = /^\/api\/docs\/([^/]+)\/room$/
 
@@ -21,22 +22,19 @@ export async function handleRoom(app: App & { auth: any }, request: Request, ns:
 	const session = await app.auth.api.getSession({ headers: request.headers }).catch(() => null)
 	if (!session?.user) return new Response('Unauthorized', { status: 401 })
 
-	const [row] = await app.db
-		.select({ doc: document, role: member.role })
-		.from(document)
-		.innerJoin(member, and(eq(member.organizationId, document.workspaceId), eq(member.userId, session.user.id)))
-		.where(and(eq(document.id, docId), isNull(document.deletedAt)))
-		.limit(1)
-	// Not a member of the document's workspace: the same answer as a document that does not exist.
-	if (!row?.doc.headVersionId) return new Response('Not found', { status: 404 })
-	const role = row.role === 'owner' ? 'owner' : 'editor'
+	// The workspace's people own it; invited people have their role (src/invites.ts). Anyone else
+	// gets the same answer as for a document that does not exist.
+	const access = await docAccess(app.db, session.user.id, docId)
+	if (!access?.doc.headVersionId) return new Response('Not found', { status: 404 })
+	const row = { doc: access.doc }
+	const role = access.role
 
 	const stub = ns.get(ns.idFromName(docId))
 	const info = (await (await stub.fetch('https://room/info')).json()) as { initialized: boolean }
 	if (!info.initialized) {
 		// The first time: the latest upload becomes the room's document (an M1 shared file becomes a
 		// cloud document, decision 14).
-		const [ver] = await app.db.select({ manifest: version.manifest }).from(version).where(eq(version.id, row.doc.headVersionId))
+		const [ver] = await app.db.select({ manifest: version.manifest }).from(version).where(eq(version.id, row.doc.headVersionId!))
 		const m = JSON.parse(ver!.manifest) as Manifest
 		const res = await bucket(app).get(blobKey(row.doc.workspaceId, m.pen.hash))
 		if (!res.ok) return new Response('The document could not be read', { status: 502 })

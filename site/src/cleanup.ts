@@ -8,7 +8,7 @@ import { pruneAuthTrace } from './auth-trace'
 import { blobKey, bucket, type App } from './blobs'
 import type { Manifest } from './files'
 import { blobsOf } from './files'
-import { appAuthCode, asset, document, shareLink, version } from './schema'
+import { appAuthCode, asset, docInvite, docMember, document, shareLink, version } from './schema'
 
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
@@ -32,6 +32,8 @@ export async function cleanup(app: Pick<App, 'db' | 'storage'>, now = Date.now()
 			)
 	).map((r: { id: string }) => r.id)
 	if (gone.length) {
+		await db.delete(docMember).where(inArray(docMember.docId, gone))
+		await db.delete(docInvite).where(inArray(docInvite.docId, gone))
 		await db.delete(shareLink).where(inArray(shareLink.docId, gone))
 		await db.delete(version).where(inArray(version.docId, gone))
 		await db.delete(document).where(inArray(document.id, gone))
@@ -40,6 +42,8 @@ export async function cleanup(app: Pick<App, 'db' | 'storage'>, now = Date.now()
 	await db.delete(appAuthCode).where(lt(appAuthCode.expiresAt, new Date(now - HOUR)))
 
 	await pruneAuthTrace(app, now)
+	// invitations 30 days past their expiry
+	await db.delete(docInvite).where(lt(docInvite.expiresAt, new Date(now - 30 * DAY)))
 
 	// blobs: per workspace, what its remaining versions name
 	const used = new Map<string, Set<string>>()

@@ -13,6 +13,8 @@ import {
 	accountDeletion,
 	appAuthCode,
 	asset,
+	docInvite,
+	docMember,
 	document,
 	member,
 	organization,
@@ -58,6 +60,8 @@ export async function purgeAccount(app: Pick<App, 'db' | 'storage'>, userId: str
 			await db.select({ id: document.id }).from(document).where(inArray(document.workspaceId, workspaces))
 		).map((r: { id: string }) => r.id)
 		if (docs.length) {
+			await db.delete(docMember).where(inArray(docMember.docId, docs))
+			await db.delete(docInvite).where(inArray(docInvite.docId, docs))
 			await db.delete(shareLink).where(inArray(shareLink.docId, docs))
 			await db.delete(version).where(inArray(version.docId, docs))
 			await db.delete(document).where(inArray(document.id, docs))
@@ -67,6 +71,9 @@ export async function purgeAccount(app: Pick<App, 'db' | 'storage'>, userId: str
 		await db.delete(member).where(inArray(member.organizationId, workspaces))
 		await db.delete(organization).where(inArray(organization.id, workspaces))
 	}
+	// Their access to other people's documents, and invitations they sent.
+	await db.delete(docMember).where(eq(docMember.userId, userId))
+	await db.delete(docInvite).where(eq(docInvite.invitedBy, userId))
 	// Rows elsewhere that name the user (a team's documents they created stay with the team).
 	await db.delete(shareLink).where(eq(shareLink.createdBy, userId))
 	await db.delete(appAuthCode).where(eq(appAuthCode.userId, userId))

@@ -15,6 +15,7 @@ import { durableRateLimitStore, type ExecutionContextLike } from 'workerstack/wo
 import { handleExport } from './account'
 import { traced, withAuthTrace } from './auth-trace'
 import { handleAppAuth } from './app-auth'
+import { handleInvitePage } from './invites'
 import { handleBlobPut, type App } from './blobs'
 import { handleRoom, ROOM_PATH } from './room/route'
 import { handleContent, handleOwnerContent, handlePage } from './share'
@@ -55,6 +56,7 @@ export default {
 		if (/^\/(s|embed)\/[^/]+\/?$/.test(path))
 			return own('page', (app) => handlePage(app, request, env.ASSETS, path.startsWith('/s/') ? 's' : 'embed'))
 		if (path === '/api/account/export') return own('content', (app) => handleExport(app as never, request))
+		if (/^\/i\/[^/]+\/?$/.test(path)) return own('page', (app) => handleInvitePage(app as never, request))
 		if (path === '/auth/app') return own('page', (app) => handleAppAuth(app as never, request))
 		if (path.startsWith('/c/')) return own('content', (app) => handleContent(app, request))
 		if (path.startsWith('/api/blobs/')) return own('upload', (app) => handleBlobPut(app, request))

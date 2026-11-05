@@ -240,3 +240,36 @@ export const authTrace = sqliteTable('auth_trace', {
 	hadStateCookie: integer('hadStateCookie', { mode: 'boolean' }).notNull(),
 	hadState: integer('hadState', { mode: 'boolean' }).notNull(),
 })
+
+/** A person given access to one document, outside its workspace (cloud-design §3.2). */
+export const docMember = sqliteTable(
+	'doc_member',
+	{
+		docId: typeid('doc').notNull().references(() => document.id, { onDelete: 'cascade' }),
+		userId: typeid('user').notNull().references(() => user.id, { onDelete: 'cascade' }),
+		role: text('role', { enum: ['viewer', 'editor'] }).notNull(),
+		invitedBy: text('invitedBy'),
+		createdAt: timestamp('createdAt').notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.docId, t.userId] }), index('doc_member_user_idx').on(t.userId)],
+)
+
+/** An invitation to one document by email, accepted through its link (src/invites.ts). */
+export const docInvite = sqliteTable(
+	'doc_invite',
+	{
+		id: typeid('dinv').primaryKey().$defaultFn(() => generateTypeId('dinv')),
+		docId: typeid('doc').notNull().references(() => document.id, { onDelete: 'cascade' }),
+		email: text('email').notNull(),
+		role: text('role', { enum: ['viewer', 'editor'] }).notNull(),
+		tokenHash: text('tokenHash').notNull(),
+		tokenSealed: text('tokenSealed').notNull(),
+		invitedBy: typeid('user').notNull().references(() => user.id, { onDelete: 'cascade' }),
+		createdAt: timestamp('createdAt').notNull(),
+		expiresAt: timestamp('expiresAt').notNull(),
+		acceptedAt: timestamp('acceptedAt'),
+		acceptedBy: text('acceptedBy'),
+		revokedAt: timestamp('revokedAt'),
+	},
+	(t) => [uniqueIndex('doc_invite_token_idx').on(t.tokenHash), index('doc_invite_doc_idx').on(t.docId)],
+)

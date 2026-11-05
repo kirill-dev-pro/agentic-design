@@ -12,8 +12,9 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { blobKey, bucket, cors, appUrl, type App } from './blobs'
 import { sha256Hex } from './crypto'
 import type { Manifest } from './files'
-import { document, member, organization, shareLink, user, version } from './schema'
+import { document, shareLink, user, version } from './schema'
 import { zip } from './zip'
+import { docAccess } from './invites'
 
 export type Resolved = {
 	doc: typeof document.$inferSelect
@@ -191,25 +192,11 @@ export async function handleOwnerContent(app: App & { auth: any }, request: Requ
 	const session = await app.auth.api.getSession({ headers: request.headers }).catch(() => null)
 	if (!session?.user) return plain(401, 'Sign in')
 	const [, , , docId, , versionId, ...rest] = new URL(request.url).pathname.split('/')
-	const [row] = await app.db
-		.select({ doc: document })
-		.from(document)
-		.innerJoin(organization, eq(organization.id, document.workspaceId))
-		.where(and(eq(document.id, docId ?? ''), isNull(document.deletedAt)))
-		.limit(1)
-	if (!row || !(await isMember(app, session.user.id, row.doc.workspaceId))) return plain(404, 'NOT_FOUND')
+	const row = await docAccess(app.db, session.user.id, docId ?? '')
+	if (!row) return plain(404, 'NOT_FOUND')
 	const m = await manifestOf(app, row.doc.id, versionId ?? '')
 	if (!m) return plain(404, 'NOT_FOUND')
 	return serveBlob(app, request, row.doc.workspaceId, m, rest.map(decodeURIComponent).join('/'), row.doc.name)
-}
-
-async function isMember(app: App, userId: string, workspaceId: string) {
-	const found = await app.db
-		.select({ id: member.id })
-		.from(member)
-		.where(and(eq(member.userId, userId), eq(member.organizationId, workspaceId)))
-		.limit(1)
-	return Boolean(found[0])
 }
 
 // ---------------------------------------------------------------- pages

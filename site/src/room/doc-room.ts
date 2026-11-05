@@ -128,6 +128,17 @@ export class DocRoom extends DurableObject {
 			const snap = this.snapshotRow()
 			return Response.json({ initialized: Boolean(snap), seq: snap ? (this.room?.seq ?? snap.seq) : 0 })
 		}
+		if (url.pathname === '/kick' && request.method === 'POST') {
+			// The Worker after a role change or a removal: close that person's sockets; they reconnect
+			// with their new role, or not at all.
+			const { userId, reason } = (await request.json()) as { userId: string; reason: string }
+			let closed = 0
+			for (const s of this.ctx.getWebSockets(userId) as HibernatableWebSocket[]) {
+				s.close(4403, reason === 'ROLE_CHANGED' ? 'ROLE_CHANGED' : 'REVOKED')
+				closed++
+			}
+			return Response.json({ closed })
+		}
 		if (url.pathname === '/init' && request.method === 'POST') {
 			if (this.snapshotRow()) return Response.json({ ok: true, already: true })
 			const { pen, docId, assets = [] } = (await request.json()) as {

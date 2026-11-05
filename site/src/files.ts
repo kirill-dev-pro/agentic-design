@@ -9,6 +9,7 @@ import { blobKey, bucket, secretOf, sniffOk, TYPES, uploadTarget, appUrl, type A
 import { randomToken, seal, sha256Hex, unseal } from './crypto'
 import { asset, document, shareLink, user, version } from './schema'
 import { docPath } from './share'
+import { docAccess, sharedWith } from './invites'
 import { currentWorkspace, type Workspace } from './workspaces'
 
 const VERSION_TTL_MS = 60 * 60 * 1000
@@ -301,7 +302,14 @@ export function fileRoutes(o: any) {
 				.from(document)
 				.where(and(eq(document.workspaceId, ws.id), isNull(document.deletedAt), isNotNull(document.headVersionId)))
 				.orderBy(desc(document.updatedAt))
-			return { files: await Promise.all(docs.map((d: typeof document.$inferSelect) => fileJson(app, d, context.request))) }
+			const files = await Promise.all(docs.map((d: typeof document.$inferSelect) => fileJson(app, d, context.request)))
+			// Files other people shared with this account (src/invites.ts): no links, which are the owner's.
+			const shared = await Promise.all(
+				(await sharedWith(app.db, context.user.id))
+					.filter((s) => s.doc.headVersionId)
+					.map(async (s) => ({ ...(await fileJson(app, s.doc, context.request)), links: [], shared: { role: s.role, owner: s.owner } })),
+			)
+			return { files, shared }
 		}),
 
 		createFile: o.protected
@@ -316,15 +324,21 @@ export function fileRoutes(o: any) {
 			.route({ method: 'GET', path: '/api/docs/{docId}' })
 			.input(v.object({ docId: v.string() }))
 			.handler(async ({ input, context }: any) => {
-				const [app, ws] = await ctxWs(context)
-				const doc = await ownDoc(app, ws, input.docId)
+				const app = context as App
+				const access = await docAccess(app.db, context.user.id, input.docId)
+				if (!access) fail('NOT_FOUND', 'NOT_FOUND', 'No such file')
+				const doc = access!.doc
+				const mine = access!.role === 'owner'
 				const versions = await app.db
 					.select({ id: version.id, createdAt: version.committedAt, sizeBytes: version.sizeBytes })
 					.from(version)
 					.where(and(eq(version.docId, doc.id), eq(version.status, 'committed')))
 					.orderBy(desc(version.committedAt))
+				const json = await fileJson(app, doc, context.request)
 				return {
-					...(await fileJson(app, doc, context.request)),
+					...json,
+					role: access!.role,
+					links: mine ? json.links : [],
 					versions: versions.map((x: { id: string; createdAt: Date; sizeBytes: number }) => ({
 						id: x.id,
 						createdAt: x.createdAt.toISOString(),

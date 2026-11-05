@@ -71,6 +71,13 @@
       "when": 1793802721038,
       "tag": "0009_lucky_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793837862995,
+      "tag": "0010_magenta_karnak",
+      "breakpoints": true
     }
   ]
 }

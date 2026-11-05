@@ -59,6 +59,12 @@ resources:
       - exportName: _system.files
         physicalName: bunderstack_file_meta
         system: true
+      - exportName: docInvite
+        physicalName: doc_invite
+        system: false
+      - exportName: docMember
+        physicalName: doc_member
+        system: false
       - exportName: document
         physicalName: document
         system: false
@@ -111,6 +117,16 @@ api:
       effect: mutation
       method: POST
       path: /api/app-auth/token
+    - handle: changeInvite
+      operationId: changeInvite
+      effect: mutation
+      method: PATCH
+      path: /api/docs/{docId}/invites/{inviteId}
+    - handle: changeMember
+      operationId: changeMember
+      effect: mutation
+      method: PATCH
+      path: /api/docs/{docId}/people/{userId}
     - handle: commitVersion
       operationId: commitVersion
       effect: mutation
@@ -141,11 +157,21 @@ api:
       effect: read
       method: GET
       path: /api/docs/{docId}
+    - handle: invite
+      operationId: invite
+      effect: mutation
+      method: POST
+      path: /api/docs/{docId}/invites
     - handle: listFiles
       operationId: listFiles
       effect: read
       method: GET
       path: /api/docs
+    - handle: listPeople
+      operationId: listPeople
+      effect: read
+      method: GET
+      path: /api/docs/{docId}/people
     - handle: me
       operationId: me
       effect: read
@@ -166,11 +192,21 @@ api:
       effect: mutation
       method: POST
       path: /api/me/onboarding
+    - handle: removeMember
+      operationId: removeMember
+      effect: mutation
+      method: DELETE
+      path: /api/docs/{docId}/people/{userId}
     - handle: renameFile
       operationId: renameFile
       effect: mutation
       method: PATCH
       path: /api/docs/{docId}
+    - handle: revokeInvite
+      operationId: revokeInvite
+      effect: mutation
+      method: DELETE
+      path: /api/docs/{docId}/invites/{inviteId}
     - handle: revokeLink
       operationId: revokeLink
       effect: mutation

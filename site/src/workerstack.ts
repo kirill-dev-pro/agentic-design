@@ -18,6 +18,7 @@ import { cleanup } from './cleanup'
 import { secureLinkedAccount } from './linking'
 import { DocRoom } from './room/doc-room'
 import { fileRoutes } from './files'
+import { inviteRoutes } from './invites'
 import * as schema from './schema'
 import { countView, manifestOf, resolveToken, shareJson, tokenOfShareUrl } from './share'
 import { currentWorkspace, ensurePersonalWorkspace } from './workspaces'
@@ -88,6 +89,7 @@ export const backend = workerstack({
 		}),
 	api: (o) => ({
 		...fileRoutes(o),
+		...inviteRoutes(o),
 
 		share: o.public
 			.route({ method: 'GET', path: '/api/share/{token}' })
