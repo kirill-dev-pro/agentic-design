@@ -294,16 +294,38 @@ copy_selection :: proc() {
 	strings.write_byte(&b, ']')
 	delete(clipboard)
 	clipboard = strings.to_string(b)
-	platform_clipboard_set(clipboard)
+	// text layers put their words on the system clipboard (pasted into a chat or a doc they
+	// are text, not .pen JSON); this window keeps the layers and pastes them back as layers
+	words := make([dynamic]string, context.temp_allocator)
+	for uid in roots {
+		n, _ := engine.doc_find_uid(&app.doc, uid)
+		if n == nil || n.kind != .Text {
+			clear(&words)
+			break
+		}
+		append(&words, n.content)
+	}
+	delete(clipboard_text)
+	clipboard_text = strings.join(words[:], "\n") if len(words) > 0 else strings.clone(clipboard)
+	platform_clipboard_set(clipboard_text)
 	set_status("Copied %d %s", len(roots), "layer" if len(roots) == 1 else "layers")
 }
+
+clipboard_text: string // what copy_selection put on the system clipboard
 
 // Pastes nodes from the system clipboard when it holds .pen JSON, else from the
 // internal one, into the selected frame (or beside the selection).
 paste_clipboard :: proc() {
 	text := clipboard
-	st := strings.trim_space(platform_clipboard_get())
-	if strings.has_prefix(st, "[") || strings.has_prefix(st, "{") do text = st
+	sys := platform_clipboard_get()
+	st := strings.trim_space(sys)
+	if strings.has_prefix(st, "[") || strings.has_prefix(st, "{") {
+		text = st
+	} else if sys != "" && (sys != clipboard_text || clipboard == "") {
+		// text from elsewhere: a new text layer with it
+		paste_text_layer(sys)
+		return
+	}
 	if text == "" do return
 	root, err := json.parse_string(text, .JSON5, false, context.temp_allocator)
 	if err != nil do return
@@ -343,6 +365,29 @@ paste_clipboard :: proc() {
 	append(&app.sel, ..pasted[:])
 	mark_dirty()
 	set_status("Pasted %d %s", len(pasted), "layer" if len(pasted) == 1 else "layers")
+}
+
+// Plain text pasted on the canvas: a text layer in the selected frame (or at the view's centre).
+paste_text_layer :: proc(text: string) {
+	parent := 0
+	if len(app.sel) == 1 {
+		if n, _ := engine.doc_find_uid(&app.doc, app.sel[0]); n != nil do parent = n.uid if n.kind == .Frame else n.parent
+	}
+	c := app.canvas
+	at := to_page({c.x + c.w / 2, c.y + c.h / 2})
+	ox, oy := engine.parent_origin(&app.doc, parent)
+	push_undo()
+	n := new_node(.Text, parent)
+	jb := strings.builder_make(context.temp_allocator)
+	engine.json_write_string(&jb, text)
+	engine.node_set_raw(&n, "content", strings.to_string(jb))
+	added := engine.doc_add(&app.doc, n)
+	engine.node_set_number(&app.doc, added, "x", math.round(at.x - ox))
+	engine.node_set_number(&app.doc, added, "y", math.round(at.y - oy))
+	clear(&app.sel)
+	append(&app.sel, added.uid)
+	mark_dirty()
+	set_status("Pasted text")
 }
 
 // ---------------------------------------------------------------- context menu

@@ -787,22 +787,7 @@ draw_canvas_overlays :: proc(vg: ^nvg.Context) {
 			nvg.Text(vg, p.x, p.y + 17, text)
 		}
 	}
-	// text caret
-	if app.editing != 0 {
-		if n, _ := engine.doc_find_uid(&app.doc, app.editing); n != nil && (int(time.now()._nsec / 500_000_000) % 2 == 0) {
-			nvg.Save(vg)
-			engine.set_font(vg, n)
-			lines := strings.split(n.content, "\n", context.temp_allocator)
-			last := lines[len(lines) - 1]
-			w := nvg.TextBounds(vg, 0, 0, last)
-			nvg.Restore(vg)
-			p := to_screen({n.x + w, n.y + f32(len(lines) - 1) * n.font_size * engine.line_height_of(n)})
-			nvg.BeginPath(vg)
-			nvg.Rect(vg, p.x + 1, p.y, 1.5, n.font_size * engine.line_height_of(n) * app.zoom)
-			nvg.FillColor(vg, ACCENT)
-			nvg.Fill(vg)
-		}
-	}
+	draw_text_editor(vg) // the caret and the selection of the text being edited
 	draw_gradient_handles(vg)
 	draw_pen_overlay(vg)
 	draw_connector_overlay(vg)

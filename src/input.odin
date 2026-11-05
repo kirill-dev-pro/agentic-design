@@ -46,7 +46,7 @@ handle_input :: proc() {
 		update_cursor(false)
 		return
 	}
-	if app.editing != 0 do handle_text_editing()
+	if app.editing != 0 do handle_text_editing(page, over_canvas)
 	else if ui.focus == "" do handle_shortcuts()
 
 	app.hover = 0
@@ -84,6 +84,11 @@ handle_input :: proc() {
 		if app.editing != 0 {
 			n, _ := engine.doc_find_uid(&app.doc, app.editing)
 			if n == nil || !point_in_node(n, page) do finish_text_editing()
+			else if mouse_pressed(MOUSE_BUTTON_LEFT) && !key_down(KEY_SPACE) && app.tool != .Hand {
+				// a click in the text being edited moves the caret (text_editor.odin)
+				update_cursor(over_canvas)
+				return
+			}
 		}
 		app.drag = Drag {
 			start_page  = page,
@@ -305,7 +310,7 @@ mouse_down_tool :: proc(page: [2]f32) {
 			// double click: text is edited, a title renames its frame, an instance opens its
 			// component, anything else selects the layer one level further in
 			if n, _ := engine.doc_find_uid(&app.doc, deepest); n != nil && n.kind == .Text {
-				start_text_editing(deepest)
+				start_text_editing(deepest, page)
 				return
 			}
 			if n, _ := engine.doc_find_uid(&app.doc, hit); n != nil {
@@ -754,55 +759,7 @@ duplicate_tree :: proc(uid: int, parent: int, offset: f32) -> int {
 
 // ---------------------------------------------------------------- text editing
 
-start_text_editing :: proc(uid: int) {
-	app.editing = uid
-	clear(&app.sel)
-	append(&app.sel, uid)
-}
-
-finish_text_editing :: proc() {
-	n, _ := engine.doc_find_uid(&app.doc, app.editing)
-	if n != nil && strings.trim_space(n.content) == "" {
-		engine.doc_delete(&app.doc, n.uid)
-		prune_selection()
-	}
-	app.editing = 0
-}
-
-handle_text_editing :: proc() {
-	n, _ := engine.doc_find_uid(&app.doc, app.editing)
-	if n == nil {
-		app.editing = 0
-		return
-	}
-	if key_pressed(KEY_ESCAPE) || (mod_cmd() && key_pressed(KEY_ENTER)) {
-		finish_text_editing()
-		return
-	}
-	changed := false
-	b := strings.builder_make(context.temp_allocator)
-	strings.write_string(&b, n.content)
-	for r in pf.chars {
-		strings.write_rune(&b, r)
-		changed = true
-	}
-	if key_hit(KEY_ENTER) || key_hit(KEY_KP_ENTER) {
-		strings.write_byte(&b, '\n')
-		changed = true
-	}
-	if key_hit(KEY_BACKSPACE) && strings.builder_len(b) > 0 {
-		str := strings.to_string(b)
-		_, size := utf8.decode_last_rune_in_string(str)
-		strings.builder_init(&b, context.temp_allocator)
-		strings.write_string(&b, str[:len(str) - size])
-		changed = true
-	}
-	if changed {
-		engine.node_set_content(&app.doc, n, strings.to_string(b))
-		mark_dirty()
-	}
-}
-
+// (text_editor.odin)
 
 // ---------------------------------------------------------------- smart guides
 

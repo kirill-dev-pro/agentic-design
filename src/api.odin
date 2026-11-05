@@ -1034,6 +1034,9 @@ inject_input :: proc(params: json.Object) {
 		case "'": return KEY_APOSTROPHE
 		case "\\": return KEY_BACKSLASH
 		case ",": return KEY_COMMA
+		case ".": return KEY_PERIOD
+		case "home": return KEY_HOME
+		case "end": return KEY_END
 		case "=": return KEY_EQUAL
 		case "-": return KEY_MINUS
 		case "]": return KEY_RIGHT_BRACKET

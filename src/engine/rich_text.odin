@@ -144,7 +144,6 @@ rich_cache_clear :: proc() {
 }
 
 // Width of content[a:b] drawn span by span (letter spacing after every character, as CSS).
-@(private = "file")
 rich_width :: proc(vg: ^nvg.Context, n: ^Node, a, b: int) -> f32 {
 	w: f32
 	i := a
