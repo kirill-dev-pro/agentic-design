@@ -120,6 +120,9 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 	case "cloud":
 		// sign-in and sharing (tests): cloud.odin api_cloud
 		e = api_cloud(&b, params)
+	case "agent":
+		// the agent input's thread, context, sessions and marks (tests): agent_run.odin
+		e = api_agent(&b, params)
 	case "whats_new":
 		// the "What's new" sheet (tests): {"open": true}, {"menu": true} or {"close": true}, or its state
 		e = api_whats_new(&b, params["open"].(json.Boolean) or_else false, params["close"].(json.Boolean) or_else false, params["menu"].(json.Boolean) or_else false)
@@ -329,7 +332,7 @@ api_dispatch_request :: proc(req: ^Request, obj: json.Object) -> (response: stri
 // Methods that do not depend on the document shown.
 document_free :: proc(method: string) -> bool {
 	switch method {
-	case "open", "window", "update", "onboarding", "whats_new", "cloud", "dashboard", "perf", "memory", "input", "presence":
+	case "open", "window", "update", "onboarding", "whats_new", "cloud", "dashboard", "perf", "memory", "input", "presence", "agent":
 		return true
 	}
 	return false

@@ -49,6 +49,10 @@ shot_backdrop :: proc(target: ^engine.Node) -> nvg.Color {
 // `scale` pixels per unit and reads the pixels back (RGBA rows, top row first).
 render_scale: f32 // the scale the last render_region used, after its limits
 
+// Drawn over the document in render_region, in page coordinates (s: the render's scale): the
+// marks for an agent's picture (annotations.odin).
+render_overlay: proc(vg: ^nvg.Context, s: f32)
+
 render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color) -> (pixels: []u8, ow, oh: i32, ok: bool) {
 	// drawn into a buffer of its own, so it may be larger than the window (up to what the
 	// GPU allows) and leaves the window's frame alone
@@ -92,6 +96,7 @@ render_region :: proc(r: [4]f32, scale: f32, target: ^engine.Node, bg: nvg.Color
 				}
 			}
 			engine.blur_active = false
+			if render_overlay != nil do render_overlay(vg, s)
 			nvg.EndFrame(vg)
 			got := engine.gpu_read(&tile, 0, 0, int(tw), int(th))
 			for k in 0 ..< int(th) {

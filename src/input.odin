@@ -41,6 +41,11 @@ handle_input :: proc() {
 		if pf.smart do smart_zoom(m)
 	}
 
+	// the marks toolbar is open: the pointer draws marks for the agent (annotations.odin)
+	if annotate_input(over_canvas, page) {
+		update_cursor(false)
+		return
+	}
 	if app.editing != 0 do handle_text_editing()
 	else if ui.focus == "" do handle_shortcuts()
 

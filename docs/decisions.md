@@ -2220,3 +2220,35 @@ inspector could upload, and it always made a link.
 
 **Consequences.** tests/cloud/agent_share.py runs the tools through `agentic-design mcp`
 against a backend with a throwaway account.
+
+## 88. Context, sessions and marks for the agent
+
+**Problem.** The agent in the window saw only the design: not the code or notes it is
+for, not what the user meant by "this" beyond the selection. Each file had one thread, so
+an earlier conversation could not be picked up again.
+
+**Decision** (agent-context.pen, drawn by the Dogfooder; Kirill chose: marks clear on send,
+titles by the agent).
+
+- Context: a paperclip in the input attaches folders and files to the document (kept per
+  document in Application Support, never in the .pen). Claude Code gets them as `--add-dir`
+  and may read only them (`Read(//path/**)`, Read, Grep and Glob; nothing else of the
+  Mac); Codex reads them in its read-only sandbox; Gemini CLI gets `--include-directories`.
+  The guide sent with the prompt lists them.
+- Sessions: each document keeps every conversation (threads/<hash>/index.json and one file
+  per session); the thread panel's header lists them, resumes one (the CLI's session id) or
+  starts a new one. After a session's first answer its agent names it in a few words (a
+  short run with no tools, in the background). 0.3 thread files become the first session.
+- Marks (`src/annotations.odin`): comment, pen, arrow, area and numbered tag, drawn over
+  the canvas in page coordinates. The next request takes them: a list naming the layers each
+  mark is on, and a picture of the view with the marks (`render_overlay` in render_region),
+  readable by the agent (Claude: a read rule for it; Codex: `-i`; Gemini: `@path`). Then they
+  leave the canvas.
+- Gemini CLI joins Claude Code and Codex: `--output-format stream-json`, our server from
+  settings for this run (GEMINI_CLI_SYSTEM_SETTINGS_PATH, trusted), only it allowed.
+- A request is started at the next frame's start: the picture is drawn offscreen, which
+  cannot happen inside the window's frame. The CLIs' options that take several values come
+  before the others, so none of them takes the prompt.
+
+**Consequences.** tests/agent/input.py covers context, sessions, titles, marks, Gemini's
+stream and the 0.3 migration with stand-in CLIs. Gemini CLI itself has not been run here.

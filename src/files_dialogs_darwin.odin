@@ -80,3 +80,22 @@ place_image_dialog :: proc() {
 		if place_image(path, at) do at += {24, 24}
 	}
 }
+
+// Context for the agent (agent_input.odin): folders or files chosen in the system panel.
+ask_context_paths :: proc(folders: bool) -> []string {
+	if pf.quiet do return nil
+	panel := NS.OpenPanel.openPanel()
+	panel->setAllowsMultipleSelection(true)
+	panel->setCanChooseDirectories(folders)
+	panel->setCanChooseFiles(!folders)
+	intrinsics.objc_send(nil, panel, "setPrompt:", NS.AT("Attach"))
+	intrinsics.objc_send(nil, panel, "setMessage:", NS.AT("The agent may read and search what you attach, for this design."))
+	if panel->runModal() != .OK do return nil
+	urls := panel->URLs()
+	out := make([dynamic]string, context.temp_allocator)
+	for i in 0 ..< int(urls->count()) {
+		url := urls->objectAs(NS.UInteger(i), ^NS.URL)
+		append(&out, strings.clone(intrinsics.objc_send(^NS.String, url, "path")->odinString(), context.temp_allocator))
+	}
+	return out[:]
+}

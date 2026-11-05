@@ -602,6 +602,7 @@ draw_canvas :: proc() {
 	engine.cull_rect = {}
 	nvg.Restore(vg)
 	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
+	draw_annotations(vg) // the user's marks for the agent
 
 	// titles of top-level frames
 	nvg.FontFace(vg, "ui")

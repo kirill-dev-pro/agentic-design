@@ -24,11 +24,28 @@ import "core:time"
 Agent_Kind :: enum {
 	Claude,
 	Codex,
+	Gemini,
 }
 
 AGENT_KIND_NAMES := [Agent_Kind]string {
 	.Claude = "Claude Code",
 	.Codex  = "Codex",
+	.Gemini = "Gemini CLI",
+}
+
+// What the user attached for the agent to read (decision 88): a folder or a file, kept per
+// document.
+Context_Item :: struct {
+	path:   string,
+	folder: bool,
+}
+
+// A past or current conversation about a document.
+Session_Info :: struct {
+	sid:   string, // ours
+	title: string,
+	agent: Agent_Kind,
+	time:  i64, // unix seconds of its last request
 }
 
 Run_State :: enum {
@@ -50,6 +67,8 @@ Run_Item :: struct {
 	kind:  Run_Item_Kind,
 	text:  string,
 	count: int, // tool calls of the same tool in a row
+	image: string, // a user request: the marked view sent with it (annotations.odin)
+	marks: int, // how many marks it carried
 }
 
 Agent_Thread :: struct {
@@ -73,6 +92,18 @@ Agent_Thread :: struct {
 	shown:    bool, // the panel is open
 	scroll:   f32,
 	undone:   bool, // the user undid the last run's changes (the agent is told)
+	sid:      string, // this conversation (Session_Info.sid); "" until the first request
+	title:    string, // the agent's title for it; "" until it is named
+	attached: [dynamic]Context_Item, // what the agent may read, for this document
+	sessions: [dynamic]Session_Info, // every conversation about this document, newest first
+	delta:    bool, // Gemini: the last text item still grows
+	run_dir:  string, // the run's folder (mcp config, stderr, the marked view)
+}
+
+Agent_Title :: struct {
+	thread: ^Agent_Thread,
+	sid:    string,
+	title:  string,
 }
 
 Agent_Line :: struct {
@@ -88,20 +119,22 @@ agent_state: struct {
 	mutex:   sync.Mutex,
 	lines:   [dynamic]Agent_Line, // from the reader threads, under mutex
 	in_run:  ^Agent_Thread, // the run whose request is being handled (api_dispatch)
+	titles:  [dynamic]Agent_Title, // from the title jobs, under mutex
+	pending: string, // a request sent from the interface, started by agent_tick
 }
 
 // ---------------------------------------------------------------- the CLIs
 
 agent_cli :: proc(kind: Agent_Kind) -> string {
 	// tests point these at a fake CLI that speaks the same stream
-	override := "AGENTIC_AGENT_CLAUDE" if kind == .Claude else "AGENTIC_AGENT_CODEX"
-	if p := os.get_env(override, context.temp_allocator); p != "" do return p
+	overrides := [Agent_Kind]string{.Claude = "AGENTIC_AGENT_CLAUDE", .Codex = "AGENTIC_AGENT_CODEX", .Gemini = "AGENTIC_AGENT_GEMINI"}
+	if p := os.get_env(overrides[kind], context.temp_allocator); p != "" do return p
 	home, _ := os.user_home_dir(context.temp_allocator)
 	paths: []string
-	if kind == .Claude {
-		paths = {fmt.tprintf("%s/.local/bin/claude", home), "/opt/homebrew/bin/claude", "/usr/local/bin/claude", fmt.tprintf("%s/.claude/local/claude", home)}
-	} else {
-		paths = {"/opt/homebrew/bin/codex", "/usr/local/bin/codex", fmt.tprintf("%s/.local/bin/codex", home)}
+	switch kind {
+	case .Claude: paths = {fmt.tprintf("%s/.local/bin/claude", home), "/opt/homebrew/bin/claude", "/usr/local/bin/claude", fmt.tprintf("%s/.claude/local/claude", home)}
+	case .Codex: paths = {"/opt/homebrew/bin/codex", "/usr/local/bin/codex", fmt.tprintf("%s/.local/bin/codex", home)}
+	case .Gemini: paths = {"/opt/homebrew/bin/gemini", "/usr/local/bin/gemini", fmt.tprintf("%s/.local/bin/gemini", home), fmt.tprintf("%s/.npm-global/bin/gemini", home)}
 	}
 	for p in paths do if os.exists(p) do return p
 	return ""
@@ -164,6 +197,11 @@ agent_guide :: proc(t: ^Agent_Thread) -> string {
 	} else {
 		fmt.sbprintf(&b, "No document is open: the user is on the dashboard. For a new design, create the file with open {{\"path\": \"%s/<short-name>.pen\", \"create\": true}} (that folder unless the user names another); it is then shown. To work on an existing file, pass \"document\": <its path>.\n", agent_new_files_dir())
 	}
+	if len(t.attached) > 0 {
+		strings.write_string(&b, "The user attached context for this design; read and search it with your file tools (read only) when the request needs it:")
+		for c in t.attached do fmt.sbprintf(&b, "\n- %s: %s", "folder" if c.folder else "file", c.path)
+		strings.write_string(&b, "\n")
+	}
 	strings.write_string(&b, "Check your work with a screenshot. Answer briefly when done. The whole request is one undo step for the user.")
 	return strings.to_string(b)
 }
@@ -190,6 +228,7 @@ agent_env :: proc(token: string) -> []string {
 		case name == "PATH", strings.has_prefix(name, "AGENTIC_"):
 		case name == "HOME", name == "USER", name == "LOGNAME", name == "SHELL", name == "TMPDIR", name == "TERM", name == "LANG", strings.has_prefix(name, "LC_"),
 		     strings.has_prefix(name, "ANTHROPIC_"), strings.has_prefix(name, "CLAUDE_"), strings.has_prefix(name, "OPENAI_"), strings.has_prefix(name, "CODEX_"),
+		     strings.has_prefix(name, "GEMINI_"), strings.has_prefix(name, "GOOGLE_"),
 		     name == "HTTPS_PROXY", name == "HTTP_PROXY", name == "NO_PROXY", name == "SSL_CERT_FILE":
 			append(&env, kv)
 		}
@@ -197,8 +236,17 @@ agent_env :: proc(token: string) -> []string {
 	return env[:]
 }
 
-// Sends the prompt: a new run in the thread of what the window shows.
+// Sends the prompt: a new run in the thread of what the window shows. From the interface it
+// waits for the next frame's start: the marked view is drawn offscreen, which cannot happen
+// inside the window's frame.
 agent_send :: proc(prompt: string) {
+	delete(agent_state.pending)
+	agent_state.pending = strings.clone(prompt)
+	platform_wake()
+}
+
+@(private = "file")
+agent_send_now :: proc(prompt: string) {
 	text := strings.trim_space(prompt)
 	if text == "" do return
 	t := agent_current()
@@ -216,7 +264,23 @@ agent_send :: proc(prompt: string) {
 	sent := text
 	if t.undone && t.session != "" do sent = fmt.tprintf("(The user undid all the changes of your previous request.)\n%s", text)
 	t.undone = false
-	append(&t.items, Run_Item{kind = .User, text = strings.clone(text)})
+	if t.sid == "" {
+		t.sid = strings.clone(random_token()[:12])
+		delete(t.title)
+		t.title = ""
+	}
+
+	// an empty working folder per thread: the agent has no files of the user's to look at
+	// beyond the context the user attached
+	dir := fmt.tprintf("%s/agent-runs/%016x", support_dir(), hash.fnv64a(transmute([]u8)t.key))
+	_ = fs_mkdir_all(dir)
+	delete(t.run_dir)
+	t.run_dir = strings.clone(dir)
+	// the marks drawn on the canvas go with this request, then leave the canvas
+	marks_text, marks_image, marks_n := annotations_take(dir)
+	if marks_text != "" do sent = fmt.tprintf("%s\n\n%s", sent, marks_text)
+	append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n})
+	session_touch(t)
 	t.shown, t.scroll = true, 0
 	t.agent = kind
 	t.state = .Working
@@ -227,9 +291,6 @@ agent_send :: proc(prompt: string) {
 	t.token = strings.clone(random_token())
 	t.stopping = false
 
-	// an empty working folder per thread: the agent has no files of the user's to look at
-	dir := fmt.tprintf("%s/agent-runs/%016x", support_dir(), hash.fnv64a(transmute([]u8)t.key))
-	_ = fs_mkdir_all(dir)
 	delete(t.err_path)
 	t.err_path = fmt.aprintf("%s/stderr.txt", dir)
 	exe := mcp_executable()
@@ -246,14 +307,42 @@ agent_send :: proc(prompt: string) {
 		engine.json_write_string(&cb, exe)
 		fmt.sbprintf(&cb, `,"args":["mcp"],"env":{{"AGENTIC_PORT":"%d","AGENTIC_NO_LAUNCH":"1","AGENTIC_RUN":"%s"}}}}}}}}`, port, t.token)
 		_ = fs_write(cfg, strings.to_string(cb))
-		append(&args, cli, "-p", "--output-format", "stream-json", "--verbose", "--mcp-config", cfg, "--strict-mcp-config", "--tools", "", "--allowedTools", "mcp__agentic-design__*", "--setting-sources", "user", "--append-system-prompt", guide)
+		// built-in tools: reading only, and only what the user attached (and the marked view)
+		readable := make([dynamic]string, context.temp_allocator)
+		for c in t.attached do append(&readable, fmt.tprintf("Read(/%s%s)", c.path, "/**" if c.folder else ""))
+		if marks_image != "" do append(&readable, fmt.tprintf("Read(/%s)", marks_image))
+		// (one rule per argument: paths may hold spaces; the options that take several values
+		// come before others, so none of them takes the prompt)
+		append(&args, cli, "-p")
+		for c in t.attached do append(&args, "--add-dir", c.path if c.folder else fs_dir(c.path))
+		append(&args, "--output-format", "stream-json", "--verbose", "--mcp-config", cfg, "--strict-mcp-config", "--tools", "Read,Grep,Glob" if len(readable) > 0 else "", "--allowedTools", "mcp__agentic-design__*")
+		append(&args, ..readable[:])
+		append(&args, "--setting-sources", "user", "--append-system-prompt", guide)
 		if resume != "" do append(&args, "--resume", resume)
 		append(&args, sent)
 	case .Codex:
 		servers := fmt.tprintf(`mcp_servers={{"agentic-design"={{command=%s,args=["mcp"],env={{AGENTIC_PORT="%d",AGENTIC_NO_LAUNCH="1",AGENTIC_RUN="%s"}},default_tools_approval_mode="approve"}}}}`, json_quote(exe), port, t.token)
-		append(&args, cli, "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "-C", dir, "-c", servers, "-c", `approval_policy="never"`)
+		append(&args, cli, "exec")
+		if marks_image != "" do append(&args, "-i", marks_image) // (it takes several files: before other options)
+		append(&args, "--json", "--sandbox", "read-only", "--skip-git-repo-check", "-C", dir, "-c", servers, "-c", `approval_policy="never"`)
 		if resume != "" do append(&args, "resume", resume)
 		append(&args, fmt.tprintf("%s\n\nRequest: %s", guide, sent))
+	case .Gemini:
+		// its MCP server comes from settings we write (as system settings for this run only);
+		// the server is trusted, so its tools run without asking; other tools that change
+		// things would ask, and in a headless run asking means no
+		settings := fmt.tprintf("%s/gemini-settings.json", dir)
+		gb := strings.builder_make(context.temp_allocator)
+		strings.write_string(&gb, `{"mcpServers":{"agentic-design":{"command":`)
+		engine.json_write_string(&gb, exe)
+		fmt.sbprintf(&gb, `,"args":["mcp"],"trust":true,"env":{{"AGENTIC_PORT":"%d","AGENTIC_NO_LAUNCH":"1","AGENTIC_RUN":"%s"}}}}}}}}`, port, t.token)
+		_ = fs_write(settings, strings.to_string(gb))
+		append(&args, cli, "--output-format", "stream-json", "--allowed-mcp-server-names", "agentic-design", "--approval-mode", "default")
+		for c in t.attached do append(&args, "--include-directories", c.path if c.folder else fs_dir(c.path))
+		if resume != "" do append(&args, "--resume", resume)
+		g := fmt.tprintf("%s\n\nRequest: %s", guide, sent)
+		if marks_image != "" do g = fmt.tprintf("%s\n\nThe marked view: @%s", g, marks_image)
+		append(&args, "-p", g)
 	}
 
 	r, w, perr := os.pipe()
@@ -262,7 +351,14 @@ agent_send :: proc(prompt: string) {
 		return
 	}
 	errf, _ := os.create(t.err_path)
-	p, serr := os.process_start({command = args[:], env = agent_env(t.token), working_dir = dir, stdout = w, stderr = errf})
+	env := agent_env(t.token)
+	if kind == .Gemini {
+		e := make([dynamic]string, context.temp_allocator)
+		append(&e, ..env)
+		append(&e, fmt.tprintf("GEMINI_CLI_SYSTEM_SETTINGS_PATH=%s/gemini-settings.json", dir))
+		env = e[:]
+	}
+	p, serr := os.process_start({command = args[:], env = env, working_dir = dir, stdout = w, stderr = errf})
 	os.close(w)
 	if errf != nil do os.close(errf)
 	if serr != nil {
@@ -278,6 +374,7 @@ agent_send :: proc(prompt: string) {
 	rd := new(Reader)
 	rd^ = {r, t}
 	thread.create_and_start_with_data(rd, proc(data: rawptr) {
+			context = app_context()
 			rd := (^Reader)(data)
 			buf: [8192]u8
 			line := strings.builder_make()
@@ -301,7 +398,7 @@ agent_send :: proc(prompt: string) {
 			os.close(rd.file)
 			free(rd)
 			platform_wake()
-		}, self_cleanup = true)
+		}, app_context(), self_cleanup = true)
 	app_log("agent: %s started for %s", AGENT_KIND_NAMES[kind], t.key if t.key != "" else "the dashboard")
 }
 
@@ -331,6 +428,12 @@ agents_stop_all :: proc() {
 
 // Drains what the CLIs printed; called every frame.
 agent_tick :: proc() {
+	if agent_state.pending != "" {
+		p := agent_state.pending
+		agent_state.pending = ""
+		agent_send_now(p)
+		delete(p)
+	}
 	sync.mutex_lock(&agent_state.mutex)
 	lines := make([]Agent_Line, len(agent_state.lines), context.temp_allocator)
 	copy(lines, agent_state.lines[:])
@@ -349,6 +452,7 @@ agent_tick :: proc() {
 		if t.running && t.stopping && time.since(t.stop_at) > 0 do _ = os.process_kill(t.process)
 	}
 	agent_share_tick()
+	titles_take()
 }
 
 @(private = "file")
@@ -359,6 +463,14 @@ agent_finished :: proc(t: ^Agent_Thread) {
 	t.seconds = time.duration_seconds(time.since(t.started))
 	delete(t.token)
 	t.token = ""
+	// a session the CLI no longer has (it never finished, or it was cleaned up): the next
+	// request starts a fresh one
+	if t.state != .Done {
+		if data, err := os.read_entire_file(t.err_path, context.temp_allocator); err == nil && strings.contains(string(data), "No conversation found") {
+			delete(t.session)
+			t.session = ""
+		}
+	}
 	switch {
 	case t.stopping:
 		t.state = .Stopped
@@ -373,13 +485,16 @@ agent_finished :: proc(t: ^Agent_Thread) {
 		agent_fail(t, agent_sign_in_hint(t.agent, msg))
 	}
 	app_log("agent: %s %v after %.0f s", AGENT_KIND_NAMES[t.agent], t.state, t.seconds)
+	session_touch(t)
 	agent_thread_save(t)
+	if t.state == .Done do agent_title_request(t)
 }
 
 agent_sign_in_hint :: proc(kind: Agent_Kind, msg: string) -> string {
 	low := strings.to_lower(msg, context.temp_allocator)
 	if strings.contains(low, "log in") || strings.contains(low, "login") || strings.contains(low, "not authenticated") || strings.contains(low, "sign in") || strings.contains(low, "api key") {
-		return fmt.tprintf("%s\nRun `%s` in Terminal once to sign in, then try again.", msg, "claude" if kind == .Claude else "codex login")
+		cmds := [Agent_Kind]string{.Claude = "claude", .Codex = "codex login", .Gemini = "gemini"}
+		return fmt.tprintf("%s\nRun `%s` in Terminal once to sign in, then try again.", msg, cmds[kind])
 	}
 	return msg
 }
@@ -388,12 +503,16 @@ agent_sign_in_hint :: proc(kind: Agent_Kind, msg: string) -> string {
 add_text :: proc(t: ^Agent_Thread, text: string) {
 	s := strings.trim_space(text)
 	if s == "" do return
+	// the panel draws plain text: markdown's bold and heading marks go
+	s, _ = strings.remove_all(s, "**", context.temp_allocator)
+	s, _ = strings.replace_all(s, "\n### ", "\n", context.temp_allocator)
+	s, _ = strings.replace_all(s, "\n## ", "\n", context.temp_allocator)
 	append(&t.items, Run_Item{kind = .Text, text = strings.clone(s)})
 }
 
 @(private = "file")
 add_tool :: proc(t: ^Agent_Thread, name: string) {
-	tool := strings.trim_prefix(name, "mcp__agentic-design__")
+	tool := strings.trim_prefix(strings.trim_prefix(name, "mcp__agentic-design__"), "agentic-design__")
 	t.tools += 1
 	if n := len(t.items); n > 0 && t.items[n - 1].kind == .Tool && t.items[n - 1].text == tool {
 		t.items[n - 1].count += 1
@@ -428,7 +547,60 @@ agent_parse :: proc(t: ^Agent_Thread, line: string) {
 		case "result":
 			t.cost = f64(o["total_cost_usd"].(json.Float) or_else 0)
 			if o["is_error"].(json.Boolean) or_else false {
-				agent_fail(t, agent_sign_in_hint(.Claude, string(o["result"].(json.String) or_else "the request failed")))
+				msg := string(o["result"].(json.String) or_else "")
+				if msg == "" {
+					if errs, ok := o["errors"].(json.Array); ok && len(errs) > 0 do msg = string(errs[0].(json.String) or_else "")
+				}
+				if msg == "" && t.err_path != "" {
+					if data, err := os.read_entire_file(t.err_path, context.temp_allocator); err == nil do msg = strings.trim_space(string(data))
+				}
+				if strings.contains(msg, "No conversation found") {
+					delete(t.session)
+					t.session = ""
+					msg = "The agent's earlier conversation was not found; send the request again to start a fresh one."
+				}
+				agent_fail(t, agent_sign_in_hint(.Claude, msg if msg != "" else "the request failed"))
+			} else if t.state == .Working {
+				t.state = .Done
+			}
+		}
+	case .Gemini:
+		switch typ {
+		case "init":
+			if s, ok := o["session_id"].(json.String); ok && string(s) != "" {
+				delete(t.session)
+				t.session, t.sess_of = strings.clone(string(s)), .Gemini
+			}
+		case "message":
+			if string(o["role"].(json.String) or_else "") != "assistant" do break
+			text := string(o["content"].(json.String) or_else "")
+			n := len(t.items)
+			if (o["delta"].(json.Boolean) or_else false) && t.delta && n > 0 && t.items[n - 1].kind == .Text {
+				joined := strings.concatenate({t.items[n - 1].text, text})
+				delete(t.items[n - 1].text)
+				t.items[n - 1].text = joined
+			} else if strings.trim_space(text) != "" {
+				append(&t.items, Run_Item{kind = .Text, text = strings.clone(text)})
+			}
+			t.delta = true
+		case "tool_use":
+			t.delta = false
+			add_tool(t, string(o["tool_name"].(json.String) or_else ""))
+		case "tool_result":
+			if string(o["status"].(json.String) or_else "") == "error" {
+				e, _ := o["error"].(json.Object)
+				agent_fail(t, string(e["message"].(json.String) or_else "a tool call failed"))
+				t.state = .Working
+			}
+		case "error":
+			if string(o["severity"].(json.String) or_else "") == "error" {
+				agent_fail(t, agent_sign_in_hint(.Gemini, string(o["message"].(json.String) or_else "error")))
+				t.state = .Working
+			}
+		case "result":
+			if string(o["status"].(json.String) or_else "") == "error" {
+				e, _ := o["error"].(json.Object)
+				agent_fail(t, agent_sign_in_hint(.Gemini, string(e["message"].(json.String) or_else "the request failed")))
 			} else if t.state == .Working {
 				t.state = .Done
 			}
@@ -524,42 +696,129 @@ agent_undo_last :: proc(t: ^Agent_Thread) {
 
 // ---------------------------------------------------------------- history
 
-// Each thread is kept in Application Support/Agentic Design/threads/<hash of its key>.json
-// (never in the .pen: shared files must not carry private chats).
+// Each document's conversations are kept in Application Support/Agentic Design/threads/
+// <hash of its path>/: index.json (the current one, every session's title, agent and time,
+// and the attached context) and <sid>.json per session (its items and the CLI's session).
+// Never in the .pen: shared files must not carry private chats.
 @(private = "file")
-thread_file :: proc(key: string) -> string {
-	return fmt.tprintf("%s/threads/%016x.json", support_dir(), hash.fnv64a(transmute([]u8)key))
+thread_dir :: proc(key: string) -> string {
+	return fmt.tprintf("%s/threads/%016x", support_dir(), hash.fnv64a(transmute([]u8)key))
+}
+
+@(private = "file")
+history_on :: proc() -> bool {
+	return !pf.quiet || os.get_env("AGENTIC_AGENT_INPUT", context.temp_allocator) != ""
+}
+
+// The current session in the list, newest first.
+session_touch :: proc(t: ^Agent_Thread) {
+	now := time.now()._nsec / 1_000_000_000
+	for &s, i in t.sessions {
+		if s.sid != t.sid do continue
+		s.time, s.agent = now, t.agent
+		// to the top
+		si := s
+		ordered_remove(&t.sessions, i)
+		inject_at(&t.sessions, 0, si)
+		return
+	}
+	first := ""
+	for it in t.items do if it.kind == .User {
+		first = it.text
+		break
+	}
+	inject_at(&t.sessions, 0, Session_Info{sid = strings.clone(t.sid), title = strings.clone(t.title if t.title != "" else first), agent = t.agent, time = now})
 }
 
 agent_thread_save :: proc(t: ^Agent_Thread) {
-	if pf.quiet && os.get_env("AGENTIC_AGENT_INPUT", context.temp_allocator) == "" do return
+	if !history_on() do return
+	dir := thread_dir(t.key)
+	_ = fs_mkdir_all(dir)
+	// the index
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, `{"key":`)
 	engine.json_write_string(&b, t.key)
-	fmt.sbprintf(&b, `,"agent":"%v","session":`, t.sess_of)
+	strings.write_string(&b, `,"current":`)
+	engine.json_write_string(&b, t.sid)
+	strings.write_string(&b, `,"context":[`)
+	for c, i in t.attached {
+		if i > 0 do strings.write_byte(&b, ',')
+		strings.write_string(&b, `{"path":`)
+		engine.json_write_string(&b, c.path)
+		fmt.sbprintf(&b, `,"folder":%v}}`, c.folder)
+	}
+	strings.write_string(&b, `],"sessions":[`)
+	for s, i in t.sessions {
+		if i > 0 do strings.write_byte(&b, ',')
+		strings.write_string(&b, `{"sid":`)
+		engine.json_write_string(&b, s.sid)
+		strings.write_string(&b, `,"title":`)
+		engine.json_write_string(&b, s.title)
+		fmt.sbprintf(&b, `,"agent":"%v","time":%d}}`, s.agent, s.time)
+	}
+	strings.write_string(&b, "]}\n")
+	_ = fs_write(fmt.tprintf("%s/index.json", dir), strings.to_string(b))
+	if t.sid == "" do return
+	// the session
+	b = strings.builder_make(context.temp_allocator)
+	fmt.sbprintf(&b, `{{"agent":"%v","session":`, t.sess_of)
 	engine.json_write_string(&b, t.session)
+	strings.write_string(&b, `,"title":`)
+	engine.json_write_string(&b, t.title)
 	fmt.sbprintf(&b, `,"undone":%v,"items":[`, t.undone)
 	first := max(len(t.items) - 200, 0) // the last 200
 	for it, i in t.items[first:] {
 		if i > 0 do strings.write_byte(&b, ',')
-		fmt.sbprintf(&b, `{{"kind":"%v","count":%d,"text":`, it.kind, it.count)
+		fmt.sbprintf(&b, `{{"kind":"%v","count":%d,"marks":%d,"image":`, it.kind, it.count, it.marks)
+		engine.json_write_string(&b, it.image)
+		strings.write_string(&b, `,"text":`)
 		engine.json_write_string(&b, it.text)
 		strings.write_byte(&b, '}')
 	}
 	strings.write_string(&b, "]}\n")
-	_ = fs_mkdir_all(fmt.tprintf("%s/threads", support_dir()))
-	_ = fs_write(thread_file(t.key), strings.to_string(b))
+	_ = fs_write(fmt.tprintf("%s/%s.json", dir, t.sid), strings.to_string(b))
 }
 
-agent_thread_load :: proc(t: ^Agent_Thread) {
-	data, err := fs_read(thread_file(t.key), context.temp_allocator)
-	if err != nil do return
+@(private = "file")
+agent_kind_of :: proc(s: string) -> Agent_Kind {
+	switch s {
+	case "Codex": return .Codex
+	case "Gemini": return .Gemini
+	}
+	return .Claude
+}
+
+@(private = "file")
+session_clear :: proc(t: ^Agent_Thread) {
+	for it in t.items {
+		delete(it.text)
+		delete(it.image)
+	}
+	clear(&t.items)
+	delete(t.session)
+	t.session = ""
+	delete(t.title)
+	t.title = ""
+	delete(t.sid)
+	t.sid = ""
+	t.undone, t.delta = false, false
+	t.state = .Idle
+	t.scroll = 0
+}
+
+// Loads session `sid` of the thread into it (its items and the CLI's session).
+@(private = "file")
+session_load :: proc(t: ^Agent_Thread, sid: string) -> bool {
+	data, err := fs_read(fmt.tprintf("%s/%s.json", thread_dir(t.key), sid), context.temp_allocator)
+	if err != nil do return false
 	v, perr := json.parse_string(string(data), .JSON, true, context.temp_allocator)
-	if perr != nil do return
+	if perr != nil do return false
 	o, _ := v.(json.Object)
-	if string(o["key"].(json.String) or_else "") != t.key do return
+	session_clear(t)
+	t.sid = strings.clone(sid)
 	t.session = strings.clone(string(o["session"].(json.String) or_else ""))
-	t.sess_of = .Codex if string(o["agent"].(json.String) or_else "") == "Codex" else .Claude
+	t.sess_of = agent_kind_of(string(o["agent"].(json.String) or_else ""))
+	t.title = strings.clone(string(o["title"].(json.String) or_else ""))
 	t.undone = o["undone"].(json.Boolean) or_else false
 	items, _ := o["items"].(json.Array)
 	for iv in items {
@@ -571,22 +830,267 @@ agent_thread_load :: proc(t: ^Agent_Thread) {
 		case "Tool": kind = .Tool
 		case "Error": kind = .Error
 		}
-		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1)})
+		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0)})
 	}
 	if len(t.items) > 0 do t.state = .Done
+	return true
 }
 
-// Forgets every thread (Settings, Agents).
+agent_thread_load :: proc(t: ^Agent_Thread) {
+	dir := thread_dir(t.key)
+	data, err := fs_read(fmt.tprintf("%s/index.json", dir), context.temp_allocator)
+	if err != nil {
+		thread_migrate(t)
+		return
+	}
+	v, perr := json.parse_string(string(data), .JSON, true, context.temp_allocator)
+	if perr != nil do return
+	o, _ := v.(json.Object)
+	if string(o["key"].(json.String) or_else "") != t.key do return
+	ctx, _ := o["context"].(json.Array)
+	for cv in ctx {
+		co, _ := cv.(json.Object)
+		append(&t.attached, Context_Item{path = strings.clone(string(co["path"].(json.String) or_else "")), folder = co["folder"].(json.Boolean) or_else false})
+	}
+	sess, _ := o["sessions"].(json.Array)
+	for sv in sess {
+		so, _ := sv.(json.Object)
+		append(&t.sessions, Session_Info{sid = strings.clone(string(so["sid"].(json.String) or_else "")), title = strings.clone(string(so["title"].(json.String) or_else "")), agent = agent_kind_of(string(so["agent"].(json.String) or_else "")), time = i64(so["time"].(json.Float) or_else 0)})
+	}
+	if cur := string(o["current"].(json.String) or_else ""); cur != "" do session_load(t, cur)
+}
+
+// 0.3.0 and 0.3.1 kept one thread per document in threads/<hash>.json: it becomes the first
+// session (the old file stays, unused).
+@(private = "file")
+thread_migrate :: proc(t: ^Agent_Thread) {
+	old := fmt.tprintf("%s.json", thread_dir(t.key))
+	data, err := fs_read(old, context.temp_allocator)
+	if err != nil do return
+	v, perr := json.parse_string(string(data), .JSON, true, context.temp_allocator)
+	if perr != nil do return
+	o, _ := v.(json.Object)
+	if string(o["key"].(json.String) or_else "") != t.key do return
+	sid := strings.clone(random_token()[:12], context.temp_allocator)
+	dir := thread_dir(t.key)
+	_ = fs_mkdir_all(dir)
+	_ = fs_write(fmt.tprintf("%s/%s.json", dir, sid), string(data))
+	if !session_load(t, sid) do return
+	first := ""
+	for it in t.items do if it.kind == .User {
+		first = it.text
+		break
+	}
+	append(&t.sessions, Session_Info{sid = strings.clone(sid), title = strings.clone(first), agent = t.sess_of, time = time.now()._nsec / 1_000_000_000})
+	agent_thread_save(t)
+}
+
+// "New session": the current one stays in the list; the next request starts a fresh one.
+agent_session_new :: proc(t: ^Agent_Thread) {
+	if t.running do return
+	agent_thread_save(t)
+	session_clear(t)
+	agent_thread_save(t)
+}
+
+// Opens an earlier session again; the next request resumes the CLI's session.
+agent_session_resume :: proc(t: ^Agent_Thread, sid: string) {
+	if t.running || sid == t.sid do return
+	agent_thread_save(t)
+	if session_load(t, sid) {
+		t.shown = true
+		agent_thread_save(t)
+	}
+}
+
+// Forgets every conversation (Settings, Agents); the attached context stays.
 agent_history_clear :: proc() {
 	for t in agent_state.threads do if !t.running {
-		clear(&t.items)
-		delete(t.session)
-		t.session = ""
-		t.state = .Idle
+		session_clear(t)
+		for s in t.sessions {
+			delete(s.sid)
+			delete(s.title)
+		}
+		clear(&t.sessions)
 		t.shown = false
 	}
 	dir := fmt.tprintf("%s/threads", support_dir())
 	if entries, err := os.read_all_directory_by_path(dir, context.temp_allocator); err == nil {
-		for e in entries do _ = os.remove(e.fullpath)
+		for e in entries {
+			if sub, serr := os.read_all_directory_by_path(e.fullpath, context.temp_allocator); serr == nil {
+				for f in sub do if f.name != "index.json" do _ = os.remove(f.fullpath)
+			}
+		}
 	}
+	for t in agent_state.threads do agent_thread_save(t)
+}
+
+// ---------------------------------------------------------------- context
+
+agent_context_add :: proc(t: ^Agent_Thread, path: string, folder: bool) {
+	for c in t.attached do if same_file(c.path, path) do return
+	append(&t.attached, Context_Item{path = strings.clone(path), folder = folder})
+	agent_thread_save(t)
+}
+
+agent_context_remove :: proc(t: ^Agent_Thread, i: int) {
+	if i < 0 || i >= len(t.attached) do return
+	delete(t.attached[i].path)
+	ordered_remove(&t.attached, i)
+	agent_thread_save(t)
+}
+
+// ---------------------------------------------------------------- titles
+
+// After a session's first answer, its agent names it in a few words (a short run of the same
+// CLI with no tools), in the background.
+agent_title_request :: proc(t: ^Agent_Thread) {
+	if t.title != "" || t.sid == "" || len(os.get_env("AGENTIC_AGENT_NO_TITLES", context.temp_allocator)) > 0 do return
+	cli := agent_cli(t.agent)
+	if cli == "" do return
+	first := ""
+	for it in t.items do if it.kind == .User {
+		first = it.text
+		break
+	}
+	if first == "" do return
+	ask := fmt.tprintf("Write a title of 3 to 6 words for a design conversation that starts with this request. Answer with the title only, no quotes.\n\nRequest: %s", first)
+	args := make([dynamic]string, context.allocator)
+	switch t.agent {
+	case .Claude: append(&args, cli, "-p", "--model", "haiku", "--tools", "", "--strict-mcp-config", "--setting-sources", "user", ask)
+	case .Codex: append(&args, cli, "exec", "--skip-git-repo-check", "--sandbox", "read-only", "-C", t.run_dir, ask)
+	case .Gemini: append(&args, cli, "-m", "flash-lite", "-p", ask)
+	}
+	Job :: struct {
+		args:   [dynamic]string,
+		thread: ^Agent_Thread,
+		sid:    string,
+		dir:    string,
+		token:  string,
+	}
+	// everything the thread uses is its own copy (the arguments were temporary strings)
+	for &a in args do a = strings.clone(a)
+	j := new(Job)
+	j^ = {args, t, strings.clone(t.sid), strings.clone(t.run_dir), strings.clone(random_token())}
+	thread.create_and_start_with_data(j, proc(data: rawptr) {
+			context = app_context()
+			j := (^Job)(data)
+			defer {
+				for a in j.args do delete(a)
+				delete(j.args)
+				delete(j.dir)
+				delete(j.token)
+				free(j)
+				free_all(context.temp_allocator)
+			}
+			r, w, perr := os.pipe()
+			if perr != nil do return
+			p, serr := os.process_start({command = j.args[:], env = agent_env(j.token), working_dir = j.dir, stdout = w})
+			os.close(w)
+			if serr != nil {
+				os.close(r)
+				return
+			}
+			out := strings.builder_make()
+			buf: [4096]u8
+			for {
+				n, err := os.read(r, buf[:])
+				if n <= 0 || err != nil do break
+				strings.write_bytes(&out, buf[:n])
+			}
+			os.close(r)
+			_, _ = os.process_wait(p, 30 * time.Second)
+			// the last non-empty line is the answer (Codex prints its log before it)
+			lines := strings.split_lines(strings.to_string(out), context.temp_allocator)
+			title := ""
+			for i := len(lines) - 1; i >= 0; i -= 1 {
+				l := strings.trim(strings.trim_space(lines[i]), "\"'*#")
+				if l != "" && !strings.has_prefix(l, "tokens used") && len(l) < 90 {
+					title = l
+					break
+				}
+			}
+			title = strings.clone(title) // (it points into `out`)
+			strings.builder_destroy(&out)
+			if title == "" {
+				delete(j.sid)
+				return
+			}
+			sync.mutex_lock(&agent_state.mutex)
+			append(&agent_state.titles, Agent_Title{j.thread, j.sid, title})
+			sync.mutex_unlock(&agent_state.mutex)
+			platform_wake()
+		}, app_context(), self_cleanup = true)
+}
+
+// Titles that came back (agent_tick).
+@(private = "file")
+titles_take :: proc() {
+	sync.mutex_lock(&agent_state.mutex)
+	got := make([]Agent_Title, len(agent_state.titles), context.temp_allocator)
+	copy(got, agent_state.titles[:])
+	clear(&agent_state.titles)
+	sync.mutex_unlock(&agent_state.mutex)
+	for g in got {
+		t := g.thread
+		for &s in t.sessions do if s.sid == g.sid {
+			delete(s.title)
+			s.title = strings.clone(g.title)
+		}
+		if t.sid == g.sid {
+			delete(t.title)
+			t.title = strings.clone(g.title)
+		}
+		agent_thread_save(t)
+		delete(g.sid)
+		delete(g.title)
+	}
+}
+
+// ---------------------------------------------------------------- socket (tests)
+
+// {"action": "state" | "context_add" {path, folder} | "context_remove" {index} |
+//  "session_new" | "session_resume" {sid} | "annotate" {active, tool}}: the thread of what
+// the window shows.
+api_agent :: proc(b: ^strings.Builder, params: json.Object) -> string {
+	t := agent_current()
+	switch string(params["action"].(json.String) or_else "state") {
+	case "state":
+	case "context_add": agent_context_add(t, engine.absolute_path(string(params["path"].(json.String) or_else "")), params["folder"].(json.Boolean) or_else false)
+	case "context_remove": agent_context_remove(t, int(params["index"].(json.Float) or_else -1))
+	case "session_new": agent_session_new(t)
+	case "choose":
+		for k in Agent_Kind do if fmt.tprintf("%v", k) == string(params["agent"].(json.String) or_else "") do agent_state.choice = k
+	case "session_resume": agent_session_resume(t, string(params["sid"].(json.String) or_else ""))
+	case "annotate":
+		annot.active = params["active"].(json.Boolean) or_else true
+		if tool, ok := params["tool"].(json.String); ok {
+			for k in Mark_Tool do if strings.to_lower(MARK_TOOL_NAMES[k], context.temp_allocator) == string(tool) do annot.tool = k
+		}
+	case: return "action: state, context_add, context_remove, session_new, session_resume, choose or annotate"
+	}
+	strings.write_string(b, `{"key":`)
+	engine.json_write_string(b, t.key)
+	strings.write_string(b, `,"sid":`)
+	engine.json_write_string(b, t.sid)
+	strings.write_string(b, `,"title":`)
+	engine.json_write_string(b, t.title)
+	fmt.sbprintf(b, `,"state":"%v","running":%v,"marks":%d,"annotating":%v,"items":%d,"context":[`, t.state, t.running, annotations_count(), annot.active, len(t.items))
+	for c, i in t.attached {
+		if i > 0 do strings.write_byte(b, ',')
+		strings.write_string(b, `{"path":`)
+		engine.json_write_string(b, c.path)
+		fmt.sbprintf(b, `,"folder":%v}}`, c.folder)
+	}
+	strings.write_string(b, `],"sessions":[`)
+	for s, i in t.sessions {
+		if i > 0 do strings.write_byte(b, ',')
+		strings.write_string(b, `{"sid":`)
+		engine.json_write_string(b, s.sid)
+		strings.write_string(b, `,"title":`)
+		engine.json_write_string(b, s.title)
+		fmt.sbprintf(b, `,"agent":"%v"}}`, s.agent)
+	}
+	strings.write_string(b, "]}")
+	return ""
 }

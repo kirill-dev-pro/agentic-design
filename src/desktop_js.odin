@@ -44,6 +44,8 @@ agent_activity_touch :: proc() {}
 agent_activity_tick :: proc() {}
 background_tick :: proc() {}
 agent_tick :: proc() {}
+annotate_input :: proc(over_canvas: bool, page: [2]f32) -> bool {return false}
+draw_annotations :: proc(vg: ^nvg.Context) {}
 agents_stop_all :: proc() {}
 agent_history_clear :: proc() {}
 agent_user_edit :: proc(path: string) {}
