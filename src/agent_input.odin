@@ -131,7 +131,7 @@ draw_thread :: proc(vg: ^nvg.Context, t: ^Agent_Thread, bottom: f32) {
 			h = wrap_height(vg, inner - 20, it.text, 13) + 16
 			if it.image != "" || it.marks > 0 do h += THUMB_H + 10
 		case .Text, .Error: h = wrap_height(vg, inner, it.text, 13) + 8
-		case .Tool: h = 22
+		case .Tool, .Note: h = 22
 		}
 		heights[i] = h
 		content += h + 6
@@ -218,7 +218,7 @@ draw_thread :: proc(vg: ^nvg.Context, t: ^Agent_Thread, bottom: f32) {
 				chat_text(vg, x, y + 4, inner, it.text, 13, TEXT_FG, 1.35)
 			case .Error:
 				chat_text(vg, x, y + 4, inner, it.text, 13, {1, 0.5, 0.45, 1}, 1.35)
-			case .Tool:
+			case .Tool, .Note:
 				draw_lucide(vg, "wrench", x + 7, y + 11, 12, TEXT_DIM, 1.6)
 				label(vg, x + 20, y + 11, item_text(it), TEXT_DIM, 12)
 			}

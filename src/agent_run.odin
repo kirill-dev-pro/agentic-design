@@ -61,6 +61,7 @@ Run_Item_Kind :: enum {
 	Text,
 	Tool,
 	Error,
+	Note, // the conversation was compacted (its summary in detail)
 }
 
 Run_Item :: struct {
@@ -71,6 +72,8 @@ Run_Item :: struct {
 	marks: int, // how many marks it carried
 	notes: string, // a request: a line per mark ("Tag 1 · Email field")
 	ctx:   string, // a request: the context attached, a name per line ("/" ends a folder's)
+	detail: string, // a tool: each call's input and result; a note: the summary
+	open:  bool, // the details are shown (not kept)
 }
 
 run_item_free :: proc(it: Run_Item) {
@@ -78,6 +81,7 @@ run_item_free :: proc(it: Run_Item) {
 	delete(it.image)
 	delete(it.notes)
 	delete(it.ctx)
+	delete(it.detail)
 }
 
 Agent_Thread :: struct {
@@ -106,6 +110,11 @@ Agent_Thread :: struct {
 	attached: [dynamic]Context_Item, // what the agent may read, for this document
 	sessions: [dynamic]Session_Info, // every conversation about this document, newest first
 	delta:    bool, // Gemini: the last text item still grows
+	tool_ids: map[string]int, // a call's id -> its item, for its result
+	ctx_used: int, // tokens in the CLI's context after the last turn (0: not known)
+	ctx_window: int, // the model's context window
+	compacting: bool, // the run asks for a summary (agent_compact)
+	summary:  string, // a compacted conversation's summary, for the next request
 	run_dir:  string, // the run's folder (mcp config, stderr, the marked view)
 }
 
@@ -130,6 +139,7 @@ agent_state: struct {
 	in_run:  ^Agent_Thread, // the run whose request is being handled (api_dispatch)
 	titles:  [dynamic]Agent_Title, // from the title jobs, under mutex
 	pending: string, // a request sent from the interface, started by agent_tick
+	pending_hidden: bool, // ... not shown in the thread (a compaction)
 	choice_loaded: bool, // `choice` was read from settings
 }
 
@@ -257,7 +267,7 @@ agent_send :: proc(prompt: string) {
 }
 
 @(private = "file")
-agent_send_now :: proc(prompt: string) {
+agent_send_now :: proc(prompt: string, hidden := false) {
 	text := strings.trim_space(prompt)
 	if text == "" do return
 	t := agent_current()
@@ -275,6 +285,14 @@ agent_send_now :: proc(prompt: string) {
 	sent := text
 	if t.undone && t.session != "" do sent = fmt.tprintf("(The user undid all the changes of your previous request.)\n%s", text)
 	t.undone = false
+	// the first request after a compaction starts a fresh CLI session with the summary
+	if !hidden && t.summary != "" && t.session == "" {
+		sent = fmt.tprintf("Summary of our earlier conversation (it was compacted to save context):\n%s\n\n%s", t.summary, sent)
+		delete(t.summary)
+		t.summary = ""
+	}
+	t.compacting = hidden
+	clear(&t.tool_ids)
 	if t.sid == "" {
 		t.sid = strings.clone(random_token()[:12])
 		delete(t.title)
@@ -288,7 +306,9 @@ agent_send_now :: proc(prompt: string) {
 	delete(t.run_dir)
 	t.run_dir = strings.clone(dir)
 	// the marks drawn on the canvas go with this request, then leave the canvas
-	marks_text, marks_image, marks_n, marks_notes := annotations_take(dir)
+	marks_text, marks_image, marks_notes: string
+	marks_n: int
+	if !hidden do marks_text, marks_image, marks_n, marks_notes = annotations_take(dir)
 	if marks_text != "" do sent = fmt.tprintf("%s\n\n%s", sent, marks_text)
 	cb := strings.builder_make(context.temp_allocator)
 	for c, i in t.attached {
@@ -296,7 +316,8 @@ agent_send_now :: proc(prompt: string) {
 		strings.write_string(&cb, fs_base(c.path))
 		if c.folder do strings.write_byte(&cb, '/')
 	}
-	append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n, notes = strings.clone(marks_notes), ctx = strings.clone(strings.to_string(cb))})
+	if hidden do append(&t.items, Run_Item{kind = .Note, text = strings.clone("Compacting the conversation…")})
+	else do append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n, notes = strings.clone(marks_notes), ctx = strings.clone(strings.to_string(cb))})
 	session_touch(t)
 	t.shown, t.scroll = true, 0
 	t.agent = kind
@@ -454,8 +475,9 @@ agent_tick :: proc() {
 	}
 	if agent_state.pending != "" {
 		p := agent_state.pending
-		agent_state.pending = ""
-		agent_send_now(p)
+		hidden := agent_state.pending_hidden
+		agent_state.pending, agent_state.pending_hidden = "", false
+		agent_send_now(p, hidden)
 		delete(p)
 	}
 	sync.mutex_lock(&agent_state.mutex)
@@ -508,6 +530,7 @@ agent_finished :: proc(t: ^Agent_Thread) {
 		}
 		agent_fail(t, agent_sign_in_hint(t.agent, msg))
 	}
+	if t.compacting do compact_finish(t)
 	app_log("agent: %s %v after %.0f s", AGENT_KIND_NAMES[t.agent], t.state, t.seconds)
 	session_touch(t)
 	agent_thread_save(t)
@@ -532,14 +555,71 @@ add_text :: proc(t: ^Agent_Thread, text: string) {
 }
 
 @(private = "file")
-add_tool :: proc(t: ^Agent_Thread, name: string) {
+add_tool :: proc(t: ^Agent_Thread, name: string, input: json.Value = nil, id := "") {
 	tool := strings.trim_prefix(strings.trim_prefix(name, "mcp__agentic-design__"), "agentic-design__")
 	t.tools += 1
-	if n := len(t.items); n > 0 && t.items[n - 1].kind == .Tool && t.items[n - 1].text == tool {
+	call := detail_json(input, 1200)
+	n := len(t.items)
+	if n > 0 && t.items[n - 1].kind == .Tool && t.items[n - 1].text == tool {
 		t.items[n - 1].count += 1
-		return
+		old := t.items[n - 1].detail
+		t.items[n - 1].detail = fmt.aprintf("%s\n\n%s", old, call)
+		delete(old)
+	} else {
+		append(&t.items, Run_Item{kind = .Tool, text = strings.clone(tool), count = 1, detail = strings.clone(call)})
 	}
-	append(&t.items, Run_Item{kind = .Tool, text = strings.clone(tool), count = 1})
+	if id != "" do t.tool_ids[strings.clone(id)] = len(t.items) - 1
+}
+
+// A call's result, after its input in the tool's details.
+@(private = "file")
+add_tool_result :: proc(t: ^Agent_Thread, id: string, result: json.Value, failed := false) {
+	i, ok := t.tool_ids[id]
+	if !ok || i >= len(t.items) do return
+	text := ""
+	// MCP results: [{type: text, text}] (or a string)
+	#partial switch r in result {
+	case json.String: text = string(r)
+	case json.Array:
+		b := strings.builder_make(context.temp_allocator)
+		for c in r {
+			if o, is_obj := c.(json.Object); is_obj {
+				if s, has := o["text"].(json.String); has do strings.write_string(&b, string(s))
+				else if string(o["type"].(json.String) or_else "") == "image" do strings.write_string(&b, "[image]")
+			}
+		}
+		text = strings.to_string(b)
+	case json.Object:
+		if c, has := r["content"]; has {
+			add_tool_result(t, id, c, failed)
+			return
+		}
+		text = detail_json(result, 1500)
+	}
+	if len(text) > 1500 do text = fmt.tprintf("%s… (%d characters)", text[:1500], len(text))
+	old := t.items[i].detail
+	t.items[i].detail = fmt.aprintf("%s\n%s %s", old, "✕" if failed else "→", text)
+	delete(old)
+}
+
+// A JSON number as an int, whether it was read as an integer or a float.
+json_int :: proc(v: json.Value) -> int {
+	#partial switch x in v {
+	case json.Integer: return int(x)
+	case json.Float: return int(x)
+	}
+	return 0
+}
+
+// A JSON value on one line, cut at `limit` characters.
+@(private = "file")
+detail_json :: proc(v: json.Value, limit: int) -> string {
+	if v == nil do return ""
+	b := strings.builder_make(context.temp_allocator)
+	engine.write_json_value(&b, v)
+	s := strings.to_string(b)
+	if len(s) > limit do s = fmt.tprintf("%s… (%d characters)", s[:limit], len(s))
+	return s
 }
 
 // One line of the CLI's JSON stream.
@@ -562,11 +642,30 @@ agent_parse :: proc(t: ^Agent_Thread, line: string) {
 				co, _ := c.(json.Object)
 				switch string(co["type"].(json.String) or_else "") {
 				case "text": add_text(t, string(co["text"].(json.String) or_else ""))
-				case "tool_use": add_tool(t, string(co["name"].(json.String) or_else ""))
+				case "tool_use": add_tool(t, string(co["name"].(json.String) or_else ""), co["input"], string(co["id"].(json.String) or_else ""))
 				}
+			}
+			// how full the context is: this turn's input (cached parts too) and output
+			if u, ok := msg["usage"].(json.Object); ok {
+				used := 0
+				for k in ([4]string{"input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"}) do used += json_int(u[k])
+				if used > 0 do t.ctx_used = used
+			}
+		case "user":
+			msg, _ := o["message"].(json.Object)
+			content, _ := msg["content"].(json.Array)
+			for c in content {
+				co, _ := c.(json.Object)
+				if string(co["type"].(json.String) or_else "") == "tool_result" do add_tool_result(t, string(co["tool_use_id"].(json.String) or_else ""), co["content"], co["is_error"].(json.Boolean) or_else false)
 			}
 		case "result":
 			t.cost = f64(o["total_cost_usd"].(json.Float) or_else 0)
+			if mu, ok := o["modelUsage"].(json.Object); ok {
+				for _, v in mu do if m, mok := v.(json.Object); mok {
+					if w := json_int(m["contextWindow"]); w > 0 do t.ctx_window = w
+				}
+			}
+			if t.ctx_window == 0 do t.ctx_window = 200_000
 			if o["is_error"].(json.Boolean) or_else false {
 				msg := string(o["result"].(json.String) or_else "")
 				if msg == "" {
@@ -606,8 +705,9 @@ agent_parse :: proc(t: ^Agent_Thread, line: string) {
 			t.delta = true
 		case "tool_use":
 			t.delta = false
-			add_tool(t, string(o["tool_name"].(json.String) or_else ""))
+			add_tool(t, string(o["tool_name"].(json.String) or_else ""), o["parameters"], string(o["tool_id"].(json.String) or_else ""))
 		case "tool_result":
+			add_tool_result(t, string(o["tool_id"].(json.String) or_else ""), o["output"], string(o["status"].(json.String) or_else "") == "error")
 			if string(o["status"].(json.String) or_else "") == "error" {
 				e, _ := o["error"].(json.Object)
 				agent_fail(t, string(e["message"].(json.String) or_else "a tool call failed"))
@@ -634,18 +734,27 @@ agent_parse :: proc(t: ^Agent_Thread, line: string) {
 			delete(t.session)
 			t.session, t.sess_of = strings.clone(string(o["thread_id"].(json.String) or_else "")), .Codex
 		case "item.started":
-			if itype == "mcp_tool_call" do add_tool(t, string(item["tool"].(json.String) or_else ""))
+			if itype == "mcp_tool_call" do add_tool(t, string(item["tool"].(json.String) or_else ""), item["arguments"], string(item["id"].(json.String) or_else ""))
 		case "item.completed":
 			switch itype {
 			case "agent_message": add_text(t, string(item["text"].(json.String) or_else ""))
 			case "mcp_tool_call":
-				if string(item["status"].(json.String) or_else "") == "failed" {
+				failed := string(item["status"].(json.String) or_else "") == "failed"
+				res := item["result"]
+				if failed do res = item["error"]
+				add_tool_result(t, string(item["id"].(json.String) or_else ""), res, failed)
+				if failed {
 					e, _ := item["error"].(json.Object)
 					agent_fail(t, string(e["message"].(json.String) or_else "a tool call failed"))
 					t.state = .Working // the turn goes on
 				}
 			}
 		case "turn.completed":
+			if u, ok := o["usage"].(json.Object); ok {
+				used := json_int(u["input_tokens"]) + json_int(u["output_tokens"])
+				if used > 0 do t.ctx_used = used
+			}
+			if t.ctx_window == 0 do t.ctx_window = codex_context_window()
 			if t.state == .Working do t.state = .Done
 		case "turn.failed", "error":
 			e, _ := o["error"].(json.Object)
@@ -786,7 +895,9 @@ agent_thread_save :: proc(t: ^Agent_Thread) {
 	engine.json_write_string(&b, t.session)
 	strings.write_string(&b, `,"title":`)
 	engine.json_write_string(&b, t.title)
-	fmt.sbprintf(&b, `,"undone":%v,"items":[`, t.undone)
+	fmt.sbprintf(&b, `,"undone":%v,"contextUsed":%d,"contextWindow":%d,"summary":`, t.undone, t.ctx_used, t.ctx_window)
+	engine.json_write_string(&b, t.summary)
+	strings.write_string(&b, `,"items":[`)
 	first := max(len(t.items) - 200, 0) // the last 200
 	for it, i in t.items[first:] {
 		if i > 0 do strings.write_byte(&b, ',')
@@ -799,6 +910,10 @@ agent_thread_save :: proc(t: ^Agent_Thread) {
 		if it.ctx != "" {
 			strings.write_string(&b, `,"context":`)
 			engine.json_write_string(&b, it.ctx)
+		}
+		if it.detail != "" {
+			strings.write_string(&b, `,"detail":`)
+			engine.json_write_string(&b, it.detail)
 		}
 		strings.write_string(&b, `,"text":`)
 		engine.json_write_string(&b, it.text)
@@ -830,6 +945,11 @@ session_clear :: proc(t: ^Agent_Thread) {
 	t.undone, t.delta = false, false
 	t.state = .Idle
 	t.scroll = 0
+	t.ctx_used, t.ctx_window = 0, 0
+	delete(t.summary)
+	t.summary = ""
+	for k in t.tool_ids do delete(k)
+	clear(&t.tool_ids)
 }
 
 // Loads session `sid` of the thread into it (its items and the CLI's session).
@@ -846,6 +966,10 @@ session_load :: proc(t: ^Agent_Thread, sid: string) -> bool {
 	t.sess_of = agent_kind_of(string(o["agent"].(json.String) or_else ""))
 	t.title = strings.clone(string(o["title"].(json.String) or_else ""))
 	t.undone = o["undone"].(json.Boolean) or_else false
+	t.ctx_used = int(o["contextUsed"].(json.Float) or_else 0)
+	t.ctx_window = int(o["contextWindow"].(json.Float) or_else 0)
+	delete(t.summary)
+	t.summary = strings.clone(string(o["summary"].(json.String) or_else ""))
 	items, _ := o["items"].(json.Array)
 	for iv in items {
 		io, _ := iv.(json.Object)
@@ -855,8 +979,9 @@ session_load :: proc(t: ^Agent_Thread, sid: string) -> bool {
 		case "Text": kind = .Text
 		case "Tool": kind = .Tool
 		case "Error": kind = .Error
+		case "Note": kind = .Note
 		}
-		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0), notes = strings.clone(string(io["notes"].(json.String) or_else "")), ctx = strings.clone(string(io["context"].(json.String) or_else ""))})
+		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0), notes = strings.clone(string(io["notes"].(json.String) or_else "")), ctx = strings.clone(string(io["context"].(json.String) or_else "")), detail = strings.clone(string(io["detail"].(json.String) or_else ""))})
 	}
 	if len(t.items) > 0 do t.state = .Done
 	return true
@@ -1090,6 +1215,7 @@ api_agent :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		if m, ok := params["model"].(json.String); ok do agent_set_model(agent_state.choice, string(m))
 		if e, ok := params["effort"].(json.String); ok do agent_set_effort(agent_state.choice, string(e))
 	case "session_resume": agent_session_resume(t, string(params["sid"].(json.String) or_else ""))
+	case "compact": agent_compact(t)
 	case "mode": set_editor_mode(.Agent if string(params["mode"].(json.String) or_else "") == "agent" else .Design)
 	case "annotate":
 		annot.active = params["active"].(json.Boolean) or_else true
@@ -1105,7 +1231,7 @@ api_agent :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	engine.json_write_string(b, t.sid)
 	strings.write_string(b, `,"title":`)
 	engine.json_write_string(b, t.title)
-	fmt.sbprintf(b, `,"state":"%v","running":%v,"marks":%d,"annotating":%v,"mode":"%v","agent":"%v","model":%s,"effort":%s,"items":%d,"context":[`, t.state, t.running, annotations_count(), annotations_active(), editor_mode, agent_state.choice, json_quote(agent_model_of(agent_state.choice).id), json_quote(agent_effort_of(agent_state.choice)), len(t.items))
+	fmt.sbprintf(b, `,"contextUsed":%d,"contextWindow":%d,"summary":%v,"state":"%v","running":%v,"marks":%d,"annotating":%v,"mode":"%v","agent":"%v","model":%s,"effort":%s,"items":%d,"context":[`, t.ctx_used, t.ctx_window, t.summary != "", t.state, t.running, annotations_count(), annotations_active(), editor_mode, agent_state.choice, json_quote(agent_model_of(agent_state.choice).id), json_quote(agent_effort_of(agent_state.choice)), len(t.items))
 	for c, i in t.attached {
 		if i > 0 do strings.write_byte(b, ',')
 		strings.write_string(b, `{"path":`)
@@ -1123,4 +1249,59 @@ api_agent :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	}
 	strings.write_string(b, "]}")
 	return ""
+}
+
+// ---------------------------------------------------------------- compaction
+
+COMPACT_PROMPT :: "Summarize our conversation so far so that it can go on in a fresh session: what the user wants, what you did (with layer ids and names), the decisions made, and what is still open. Plain text, at most 250 words. Do not call any tools."
+
+// Compact: the agent sums the conversation up; the next request starts a fresh CLI session
+// that gets the summary, so the context is small again. Works the same for every CLI.
+agent_compact :: proc(t: ^Agent_Thread) {
+	if t.running || t.session == "" do return
+	delete(agent_state.pending)
+	agent_state.pending = strings.clone(COMPACT_PROMPT)
+	agent_state.pending_hidden = true
+	platform_wake()
+}
+
+@(private = "file")
+compact_finish :: proc(t: ^Agent_Thread) {
+	t.compacting = false
+	// the note, then the summary the agent wrote
+	note := -1
+	for i := len(t.items) - 1; i >= 0; i -= 1 do if t.items[i].kind == .Note {
+		note = i
+		break
+	}
+	if note < 0 do return
+	b := strings.builder_make(context.temp_allocator)
+	for i := len(t.items) - 1; i > note; i -= 1 {
+		it := t.items[i]
+		if it.kind == .Text {
+			if strings.builder_len(b) > 0 {
+				prev := strings.clone(strings.to_string(b), context.temp_allocator)
+				strings.builder_reset(&b)
+				strings.write_string(&b, it.text)
+				strings.write_string(&b, "\n\n")
+				strings.write_string(&b, prev)
+			} else do strings.write_string(&b, it.text)
+		}
+		run_item_free(it)
+		ordered_remove(&t.items, i)
+	}
+	summary := strings.trim_space(strings.to_string(b))
+	delete(t.items[note].text)
+	if t.state != .Done || summary == "" {
+		t.items[note].text = strings.clone("Compacting failed: the conversation goes on as it was")
+		return
+	}
+	t.items[note].text = strings.clone("Conversation compacted")
+	delete(t.items[note].detail)
+	t.items[note].detail = strings.clone(summary)
+	delete(t.summary)
+	t.summary = strings.clone(summary)
+	delete(t.session)
+	t.session = "" // the next request: a fresh CLI session, with the summary
+	t.ctx_used = 0
 }

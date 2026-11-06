@@ -387,6 +387,13 @@ agent_panel_hit :: proc(p: [2]f32) -> bool {
 }
 
 @(private = "file")
+tokens_text :: proc(n: int) -> string {
+	if n >= 1_000_000 do return fmt.tprintf("%.1fM", f64(n) / 1e6)
+	if n >= 1000 do return fmt.tprintf("%dk", (n + 500) / 1000)
+	return fmt.tprintf("%d", n)
+}
+
+@(private = "file")
 draw_panel_head :: proc(vg: ^nvg.Context, t: ^Agent_Thread, r: Rect) {
 	fill_rect(vg, r, C_PANEL)
 	fill_rect(vg, {r.x, r.y + r.h - 1, r.w, 1}, C_LINE)
@@ -397,7 +404,7 @@ draw_panel_head :: proc(vg: ^nvg.Context, t: ^Agent_Thread, r: Rect) {
 	}
 	if title == "" do title = "New session"
 	plus := Rect{r.x + r.w - 14 - 28, r.y + 10, 28, 28}
-	max_w := plus.x - 10 - (r.x + 14) - 48
+	max_w := plus.x - 10 - (r.x + 14) - 48 - (76 if t.ctx_used > 0 else 0)
 	shown := title
 	nvg.FontFace(vg, "ui")
 	nvg.FontSize(vg, 12.5)
@@ -416,6 +423,29 @@ draw_panel_head :: proc(vg: ^nvg.Context, t: ^Agent_Thread, r: Rect) {
 		panel_ui.ses_open = !panel_ui.ses_open
 		panel_ui.pick_open, agent_ui.ctx_open = false, false
 	}
+	if t.ctx_used > 0 && t.ctx_window > 0 {
+		// how full the agent's context is; a click offers Compact
+		frac := clamp(f32(t.ctx_used) / f32(t.ctx_window), 0, 1)
+		pct := fmt.tprintf("%d%%", int(frac * 100 + 0.5))
+		cw := text_width(vg, pct, 11.5) + 30
+		cr := Rect{plus.x - 6 - cw, r.y + 10, cw, 28}
+		if hovered(cr) do fill_rect(vg, cr, C_GHOST, 8)
+		cx, cy := cr.x + 12, cr.y + 14
+		nvg.BeginPath(vg)
+		nvg.Circle(vg, cx, cy, 6)
+		nvg.StrokeColor(vg, {1, 1, 1, 0.15})
+		nvg.StrokeWidth(vg, 2)
+		nvg.Stroke(vg)
+		ring := ACCENT if frac < 0.7 else (nvg.Color{1, 0.7, 0.2, 1} if frac < 0.9 else C_ERR)
+		nvg.BeginPath(vg)
+		nvg.Arc(vg, cx, cy, 6, -math.PI / 2, -math.PI / 2 + 2 * math.PI * max(frac, 0.02), .CW)
+		nvg.StrokeColor(vg, ring)
+		nvg.Stroke(vg)
+		label(vg, cx + 11, cy, pct, C_DIM, 11.5)
+		if hovered(cr) do tooltip_request(fmt.tprintf("Context: %s of %s tokens. Click to compact the conversation", tokens_text(t.ctx_used), tokens_text(t.ctx_window)), cr)
+		if clicked(cr) do menu_open("context.menu", cr, {fmt.tprintf("Compact the conversation\t%s → summary", tokens_text(t.ctx_used))})
+	}
+	if pick, ok := menu_take("context.menu"); ok && pick == 0 do agent_compact(t)
 	if !t.running && lucide_button(vg, plus, "plus", tip = "New session") {
 		agent_session_new(t)
 		panel_ui.ses_open = false
@@ -437,9 +467,50 @@ item_height :: proc(vg: ^nvg.Context, it: Run_Item, w: f32) -> f32 {
 		return h
 	case .Text: return md_draw(vg, 0, 0, w, it.text, C_TEXT, false)
 	case .Error: return chat_text_height(vg, w, it.text, 13.5)
-	case .Tool: return 28
+	case .Tool, .Note:
+		h: f32 = 28
+		if it.open && it.detail != "" do h += detail_height(vg, w, it.detail) + 6
+		return h
 	}
 	return 0
+}
+
+DETAIL_SIZE :: f32(11.5)
+
+@(private = "file")
+detail_height :: proc(vg: ^nvg.Context, w: f32, text: string) -> f32 {
+	nvg.FontFace(vg, chat_face(.Mono))
+	nvg.FontSize(vg, DETAIL_SIZE)
+	return f32(len(text_rows(vg, text, w - 20))) * DETAIL_SIZE * 1.45 + 16
+}
+
+// A tool's calls (inputs and results) or a compaction's summary, under its row.
+@(private = "file")
+draw_detail :: proc(vg: ^nvg.Context, x, y, w: f32, text: string) -> f32 {
+	h := detail_height(vg, w, text)
+	fill_rect(vg, {x, y, w, h}, {0x14 / 255.0, 0x14 / 255.0, 0x14 / 255.0, 1}, 8)
+	stroke_rect(vg, {x, y, w, h}, C_LINE, 8)
+	size := DETAIL_SIZE
+	lh := size * 1.45
+	nvg.FontFace(vg, chat_face(.Mono))
+	nvg.FontSize(vg, size)
+	rows := text_rows(vg, text, w - 20)
+	pieces := make([]Chat_Piece, len(rows), context.temp_allocator)
+	for row, i in rows {
+		nvg.FontFace(vg, chat_face(.Mono))
+		nvg.FontSize(vg, size)
+		pieces[i] = {row[0], row[1], x + 10, y + 8 + f32(i) * lh, nvg.TextBounds(vg, 0, 0, text[row[0]:row[1]]), .Mono, size}
+	}
+	chat_block(vg, text, pieces, lh)
+	nvg.FontFace(vg, chat_face(.Mono))
+	nvg.FontSize(vg, size)
+	nvg.TextAlign(vg, .LEFT, .MIDDLE)
+	for row, i in rows {
+		line := text[row[0]:row[1]]
+		nvg.FillColor(vg, C_DIM if strings.has_prefix(line, "→") || strings.has_prefix(line, "✕") else C_TEXT)
+		nvg.Text(vg, x + 10, y + 8 + f32(i) * lh + lh / 2, line)
+	}
+	return h
 }
 
 @(private = "file")
@@ -483,8 +554,6 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 	// newest at the bottom; scrolled up by t.scroll
 	y := area.y + PAD - (max_scroll - t.scroll)
 	x := area.x + PAD
-	last_tool := -1
-	for it, i in t.items do if it.kind == .Tool do last_tool = i
 	for it, i in t.items {
 		h := heights[i]
 		switch it.kind {
@@ -543,13 +612,27 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 			md_draw(vg, x, y, w, it.text, C_TEXT, true)
 		case .Error:
 			chat_text(vg, x, y, w, it.text, 13.5, C_ERR)
-		case .Tool:
-			working := t.running && i == last_tool && i == len(t.items) - 1
-			if working do spinner(vg, x + 6.5, y + 14, 5.5, ACCENT)
-			else do draw_lucide(vg, "check", x + 6.5, y + 14, 13, C_OK, 2)
-			text := item_text(it)
-			if working do text = fmt.tprintf("%s…", text)
+		case .Tool, .Note:
+			row := Rect{x - 4, y, w + 8, 28}
+			can_open := it.detail != ""
+			if can_open && hovered(row) do fill_rect(vg, row, C_GHOST, 6)
+			working := t.running && i == len(t.items) - 1
+			if it.kind == .Tool {
+				if working do spinner(vg, x + 6.5, y + 14, 5.5, ACCENT)
+				else if strings.contains(it.detail, "\n✕") do draw_lucide(vg, "x", x + 6.5, y + 14, 13, C_ERR, 2)
+				else do draw_lucide(vg, "check", x + 6.5, y + 14, 13, C_OK, 2)
+			} else {
+				if working do spinner(vg, x + 6.5, y + 14, 5.5, ACCENT)
+				else do draw_lucide(vg, "fold-vertical", x + 6.5, y + 14, 13, C_DIM, 1.8)
+			}
+			text := item_text(it) if it.kind == .Tool else it.text
+			if working && it.kind == .Tool do text = fmt.tprintf("%s…", text)
 			label(vg, x + 21, y + 14, text, C_DIM, 12.5)
+			if can_open {
+				draw_lucide(vg, "chevron-down" if it.open else "chevron-right", x + 21 + text_width(vg, text, 12.5) + 12, y + 14, 12, C_DIM, 1.6)
+				if clicked(row) do t.items[i].open = !it.open
+				if it.open do draw_detail(vg, x, y + 30, w, it.detail)
+			}
 		}
 		y += h + GAP
 	}

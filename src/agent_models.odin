@@ -20,6 +20,7 @@ import "core:time"
 Agent_Model :: struct {
 	id, name, hint: string,
 	efforts:        []string,
+	window:         int, // tokens of context (0: not known)
 }
 
 CLAUDE_EFFORTS := [?]string{"low", "medium", "high", "xhigh", "max"}
@@ -70,6 +71,8 @@ codex_models :: proc() -> []Agent_Model {
 			}
 		}
 		m.efforts = efforts[:]
+		pct := f64(o["effective_context_window_percent"].(json.Float) or_else 100)
+		m.window = int(f64(o["context_window"].(json.Float) or_else 0) * pct / 100)
 		if m.id == "" {
 			delete(m.id)
 			delete(m.name)
@@ -89,18 +92,18 @@ agent_models :: proc(k: Agent_Kind) -> []Agent_Model {
 	out := make([dynamic]Agent_Model, context.temp_allocator)
 	switch k {
 	case .Claude:
-		append(&out, Agent_Model{"", "Default", "Your Claude Code setting", CLAUDE_EFFORTS[:]})
-		append(&out, Agent_Model{"fable", "Fable 5.1", "Most capable, for the hardest work", CLAUDE_EFFORTS[:]})
-		append(&out, Agent_Model{"opus", "Opus 5.5", "For big redesigns", CLAUDE_EFFORTS[:]})
-		append(&out, Agent_Model{"sonnet", "Sonnet 5.5", "Balanced", CLAUDE_EFFORTS[:]})
-		append(&out, Agent_Model{"haiku", "Haiku 5.5", "Fastest, for small edits", CLAUDE_EFFORTS[:]})
+		append(&out, Agent_Model{"", "Default", "Your Claude Code setting", CLAUDE_EFFORTS[:], 200_000})
+		append(&out, Agent_Model{"fable", "Fable 5.1", "Most capable, for the hardest work", CLAUDE_EFFORTS[:], 200_000})
+		append(&out, Agent_Model{"opus", "Opus 5.5", "For big redesigns", CLAUDE_EFFORTS[:], 200_000})
+		append(&out, Agent_Model{"sonnet", "Sonnet 5.5", "Balanced", CLAUDE_EFFORTS[:], 200_000})
+		append(&out, Agent_Model{"haiku", "Haiku 5.5", "Fastest, for small edits", CLAUDE_EFFORTS[:], 200_000})
 	case .Codex:
 		cm := codex_models()
 		all := cm[0].efforts if len(cm) > 0 else nil
-		append(&out, Agent_Model{"", "Default", "Your Codex setting", all})
+		append(&out, Agent_Model{"", "Default", "Your Codex setting", all, 0})
 		append(&out, ..cm)
 	case .Gemini:
-		append(&out, Agent_Model{"", "Default", "Your Gemini CLI setting", nil})
+		append(&out, Agent_Model{"", "Default", "Your Gemini CLI setting", nil, 0})
 	}
 	return out[:]
 }
@@ -172,4 +175,13 @@ agent_choose :: proc(k: Agent_Kind) {
 	agent_state.choice_loaded = true
 	settings.agent_choice = int(k)
 	settings_save()
+}
+
+// The context window of the model Codex runs with (its first listed model by default).
+codex_context_window :: proc() -> int {
+	m := agent_model_of(.Codex)
+	if m.window > 0 do return m.window
+	cm := codex_models()
+	if len(cm) > 0 && cm[0].window > 0 do return cm[0].window
+	return 0
 }
