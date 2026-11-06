@@ -235,6 +235,7 @@ app_frame :: proc() {
 	agent_tick()
 	update_tick()
 	share_tick()
+	dash_cloud_tick()
 	if app.needs_layout do engine.layout_invalidate()
 	if ran || app.needs_layout {
 		engine.layout_document(&app.doc)

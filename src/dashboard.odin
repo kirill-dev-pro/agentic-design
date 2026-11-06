@@ -26,7 +26,11 @@ dash: struct {
 	trash_path:  string, // the file the confirmation is for
 	content_h:   f32,
 	drawn_frame: int, // the last frame the dashboard was drawn in
+	renaming:    string, // the card whose name is being edited
+	cloud_path:  string, // the file being copied to the cloud
 }
+
+DASH_CARD_MENU := [?]string{"Open", "Reveal in Finder", "Duplicate", "Copy to cloud", "Rename", "-", "Remove from list", "Hide this folder", "-", "Move to Trash…"}
 
 DASH_SORT_NAMES := [4]string{"Last modified", "Last opened", "Name", "Created"} // in Dash_Sort's order
 
@@ -160,7 +164,7 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 		if hovered(card) && mouse_pressed(MOUSE_BUTTON_RIGHT) {
 			set_string(&dash.selected, e.path)
 			set_string(&dash.menu_path, e.path)
-			menu_open("dash.card", {app.mouse.x, app.mouse.y, 0, 0}, {"Open", "Show in Finder", "-", "Remove from list", "Hide this folder", "-", "Move to Trash…"})
+			menu_open("dash.card", {app.mouse.x, app.mouse.y, 0, 0}, DASH_CARD_MENU[:])
 		}
 	}
 	ui.clip = saved_clip
@@ -181,16 +185,21 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	}
 	if pick, ok := menu_take("dash.card"); ok && dash.menu_path != "" {
 		p := dash.menu_path
-		switch pick {
-		case 0: dash_open(p)
-		case 1: reveal_in_finder(p)
-		case 3:
+		switch DASH_CARD_MENU[pick] {
+		case "Open": dash_open(p)
+		case "Reveal in Finder": reveal_in_finder(p)
+		case "Duplicate": dash_duplicate(p)
+		case "Copy to cloud": dash_copy_to_cloud(p)
+		case "Rename":
+			set_string(&dash.renaming, p)
+			field_focus(0, "dash.rename", engine.file_title(p))
+		case "Remove from list":
 			files_hide(p)
 			set_status("“%s” is off the list; the file stays where it is", fs_base(p))
-		case 4:
+		case "Hide this folder":
 			files_hide(fs_dir(p))
 			set_status("Files in %s are off the list", short_dir(fs_dir(p)))
-		case 6: dash_confirm_trash(p)
+		case "Move to Trash…": dash_confirm_trash(p)
 		}
 	}
 	if pick, ok := dialog_take("dash.trash"); ok && pick == 1 && dash.trash_path != "" {
@@ -207,9 +216,12 @@ draw_card :: proc(vg: ^nvg.Context, card: Rect, e: File_Item) {
 	fill_rect(vg, card, {0.145, 0.145, 0.145, 1}, 10)
 	if selected do stroke_rect(vg, card, ACCENT, 10, 2)
 	else do stroke_rect(vg, card, {1, 1, 1, 0.12 if hover else 0.06}, 10)
+	renaming := dash.renaming == e.path && field_is_focused(0, "dash.rename")
+	if renaming do field(vg, 0, "dash.rename", "", {card.x + 8, card.y + 6, card.w - 16, 28}, engine.file_title(e.path))
+	else if dash.renaming == e.path do set_string(&dash.renaming, "")
 	nvg.Save(vg)
 	nvg.IntersectScissor(vg, card.x + 14, card.y, card.w - 28, 56)
-	label(vg, card.x + 14, card.y + 20, engine.file_title(e.path), TEXT_FG, 13)
+	if !renaming do label(vg, card.x + 14, card.y + 20, engine.file_title(e.path), TEXT_FG, 13)
 	when_text: string
 	switch {
 	case dash.recents || settings.dash_sort == .Opened && e.opened > 0: when_text = fmt.tprintf("Opened %s", ago(e.opened))
@@ -280,3 +292,75 @@ ago :: proc(unix: i64) -> string {
 MONTH_SHORT := [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
 
 _ :: os
+
+// A copy beside the file: "<name> copy.pen" (numbered when that exists).
+dash_duplicate :: proc(path: string) {
+	dir, title := fs_dir(path), engine.file_title(path)
+	dst := fmt.tprintf("%s/%s copy.pen", dir, title)
+	for k := 2; fs_exists(dst); k += 1 do dst = fmt.tprintf("%s/%s copy %d.pen", dir, title, k)
+	if err := fs_copy(dst, path); err != nil {
+		set_status("Could not duplicate: %v", err)
+		return
+	}
+	files_refresh(true)
+	set_string(&dash.selected, dst)
+	set_status("Duplicated as %s", fs_base(dst))
+}
+
+// Copy to cloud (decision 87, cloud-docs plan: a local file stays local; the cloud gets an
+// unlinked copy, private to the signed-in account).
+dash_copy_to_cloud :: proc(path: string) {
+	if !cloud_signed_in() {
+		settings_section = .Account
+		settings_scroll = 0
+		settings_open = true
+		set_status("Sign in to copy files to the cloud")
+		return
+	}
+	if cloud.running {
+		set_status("Another upload is running; try again in a moment")
+		return
+	}
+	if !cloud_share_as(path, engine.file_title(path), .Private, false, false) {
+		set_status("The upload could not start")
+		return
+	}
+	set_string(&dash.cloud_path, path)
+	set_status("Copying “%s” to the cloud…", engine.file_title(path))
+}
+
+// Every frame: the end of a Copy to cloud.
+dash_cloud_tick :: proc() {
+	if dash.cloud_path == "" || cloud.running do return
+	if cloud_phase() == .Failed do set_status("Copy to cloud failed: %s", cloud_text(&cloud.error))
+	else do set_status("“%s” is in your cloud files (only you can see it)", engine.file_title(dash.cloud_path))
+	set_string(&dash.cloud_path, "")
+}
+
+// The card name typed in place (Rename): the file is renamed on disk.
+dash_field_apply :: proc(key, text: string) -> bool {
+	if key != "dash.rename" do return false
+	p := dash.renaming
+	if p == "" do return true
+	title := strings.trim_space(text)
+	if strings.has_suffix(title, ".pen") do title = title[:len(title) - 4]
+	if title == "" || strings.contains(title, "/") || title == engine.file_title(p) do return true
+	for t in app.tabs do if t.path == p || app.file_path == p {
+		set_status("“%s” is open: rename it from its tab (double click)", engine.file_title(p))
+		return true
+	}
+	dst := fmt.tprintf("%s/%s.pen", fs_dir(p), title)
+	if fs_exists(dst) {
+		set_status("%s already exists", fs_base(dst))
+		return true
+	}
+	if err := fs_rename(p, dst); err != nil {
+		set_status("Rename failed: %v", err)
+		return true
+	}
+	recents_rename(p, dst)
+	files_refresh(true)
+	set_string(&dash.selected, dst)
+	set_string(&dash.renaming, "")
+	return true
+}

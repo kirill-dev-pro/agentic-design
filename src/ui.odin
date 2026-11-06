@@ -598,20 +598,12 @@ draw_inspector :: proc(vg: ^nvg.Context) {
 	if ui.insp_h + 16 > area.h do ui.insp_scroll = scrollbar(vg, "inspector", area, ui.insp_h + 16, ui.insp_scroll)
 }
 
-// Zoom, Export and Share at the right of the tab bar, while a document is shown.
+// The zoom at the right of the tab bar, while a document is shown (export: the canvas's
+// context menu and ⇧⌘E; the cloud: Copy to cloud on the Dashboard).
 draw_view_controls :: proc(vg: ^nvg.Context) {
 	right := app.screen.x - 12
 	y := (TAB_H - 28) / 2
-	share := Rect{right - 64, y, 64, 28}
-	if button(vg, share, "Share", primary = true) do share_sheet_open()
-	export := Rect{share.x - 8 - 70, y, 70, 28}
-	if button(vg, export, "Export") do menu_open("export", export, {"PNG\tShift Cmd E", "HTML + CSS", "React + Tailwind"})
-	if pick, ok := menu_take("export"); ok {
-		switch pick {
-		case 0: export_request()
-		case 1, 2: export_code_ui(.HTML if pick == 1 else .React)
-		}
-	}
+	export := Rect{right + 8, y, 0, 28} // (the zoom sits where Export was)
 	zoom_text := fmt.tprintf("%d%%", int(view_zoom() * 100 + 0.5))
 	zoom := Rect{export.x - 8 - 72, y, 72, 28}
 	if hovered(zoom) do fill_rect(vg, zoom, HOVER_BG, 6)
@@ -1189,6 +1181,7 @@ field_apply :: proc() {
 	if ui.focus_uid == 0 {
 		if variables_table_apply(ui.focus, text) do return
 		if settings_field_apply(ui.focus, text) do return
+		if dash_field_apply(ui.focus, text) do return
 		if ui.focus == "vt.search" || ui.focus == "comp.search" || ui.focus == "layers.search" || ui.focus == "dash.search" || ui.focus == "agent.prompt" || ui.focus == "mark.comment" do return
 		if ui.focus == "picker.hex" || ui.focus == "picker.alpha" {
 			picker_apply_text(ui.focus, text)

@@ -392,7 +392,7 @@ paste_text_layer :: proc(text: string) {
 
 // ---------------------------------------------------------------- context menu
 
-CONTEXT_ITEMS := [?]string{"Rename", "Duplicate", "Copy", "Paste", "Group", "Frame selection", "Add auto layout", "Ungroup", "Create component", "Create instance", "Outline text", "Bring to front", "Send to back", "Export PNG", "Delete"}
+CONTEXT_ITEMS := [?]string{"Rename", "Duplicate", "Copy", "Paste", "Group", "Frame selection", "Add auto layout", "Ungroup", "Create component", "Create instance", "Outline text", "Bring to front", "Send to back", "Export PNG", "Export HTML + CSS", "Export React + Tailwind", "Delete"}
 
 context_menu_open :: proc(at: [2]f32) {
 	menu_open("context", {at.x, at.y, 0, 0}, CONTEXT_ITEMS[:])
@@ -421,6 +421,8 @@ context_menu_apply :: proc() {
 	case "Bring to front": arrange_selection(.Front)
 	case "Send to back": arrange_selection(.Back)
 	case "Export PNG": export_request()
+	case "Export HTML + CSS": export_code_ui(.HTML)
+	case "Export React + Tailwind": export_code_ui(.React)
 	case "Delete":
 		push_undo()
 		engine.doc_delete_layers(&app.doc, app.sel[:])
