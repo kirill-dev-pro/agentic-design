@@ -2340,3 +2340,36 @@ reasoning effort were the CLIs' own.
 **Consequences.** tests/ui/text_editing.py, tests/agent/input.py (⌘L, ⌘., mark lines,
 --model/--effort), tests/dashboard/files.py. The Codex list follows Codex's cache; models
 for Gemini CLI are not listed until it can be run here.
+
+## 92. The chat with the agent
+
+**Problem** (Kirill, 2026-11-06). Trailing spaces did not show in the agent's field; ⌥⌫
+and ⌘⌫ did nothing; no right-click menus; the answers were plain text with Markdown marks
+stripped; the agent could not point at the design; tool calls showed only their names; the
+context's size was unknown and could not be reduced; the panel had a fixed width; the
+thread scrolled against the trackpad; sparkles everywhere.
+
+**Decision.**
+
+- The agent's text is kept as Markdown and drawn by chat_markdown.odin: headings, lists,
+  quotes, code blocks, rules, bold, italic, code and links. Without Inter, bold and italic
+  are drawn (double stroke, slant). Links `node:<id>` select a layer and bring it into view,
+  `canvas:x,y[,w,h]` shows a place; `![caption](node:<id>)` alone on a line draws a live
+  picture of the layer (rendered before the frame, again after edits, at most every 2 s).
+  The in-app agent's guide tells it the syntax.
+- Text in the thread is selectable as styled pieces; ⌘C, and a right-click menu: Copy,
+  Quote in reply (`> ` lines at the start of the field), Select All. The field's menu: Cut,
+  Copy, Paste, Select All. Every field takes ⌥⌫ ⌥⌦ ⌘⌫ ⌘⌦ and word and line moves.
+- Tool calls keep each call's input and result (CLI stream: Claude's tool_use/tool_result,
+  Codex's mcp_tool_call, Gemini's tool_use/tool_result) and open in the thread.
+- The context used comes from the CLI's usage (Claude: the last turn's input, cache and
+  output tokens, the window from modelUsage; Codex: turn usage and models_cache.json's
+  window). The head shows a meter; Compact asks the agent for a summary (hidden in the
+  thread as "Conversation compacted", the summary inside), then the next request starts a
+  fresh CLI session with the summary. The same for every CLI.
+- The Agent panel's right edge drags its width (320 to half the window), kept in settings.
+- The thread's scroll counts from the newest message, so the wheel's sign is flipped.
+- Sparkles remain only on the Agent mode switch.
+
+**Consequences.** tests/agent/input.py covers tool details, context use, compaction and
+Markdown answers (fake_claude.py writes them). UI tests run in a home of their own.
