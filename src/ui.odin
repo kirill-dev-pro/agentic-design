@@ -20,8 +20,12 @@ ROW_H :: f32(30)
 draw_ui :: proc() {
 	vg := app.vg
 	widgets_begin_frame()
+	agent_focus_keys()
 	if app.tab < 0 {
 		draw_dashboard(vg)
+	} else if agent_mode() {
+		draw_marks_bar(vg)
+		draw_agent_panel(vg)
 	} else {
 		draw_tools(vg)
 		draw_sidebar(vg)
@@ -73,6 +77,7 @@ draw_tab_bar :: proc(vg: ^nvg.Context) {
 	fill_rect(vg, {0, TAB_H - 1, app.screen.x, 1}, PANEL_LINE)
 
 	x: f32 = 12
+	x = draw_mode_switch(vg, x)
 	// dashboard
 	dw := text_width(vg, "Dashboard", 13) + 44
 	home := Rect{x, 7, dw, TAB_H - 14}

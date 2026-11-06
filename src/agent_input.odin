@@ -45,6 +45,8 @@ agent_input_reserve :: proc() -> f32 {
 
 // The pointer is on the input or what floats above it (not the canvas).
 agent_chrome_hit :: proc(p: [2]f32) -> bool {
+	if agent_mode() do return agent_panel_hit(p)
+	if app.tab >= 0 do return false // Design mode: no agent input
 	if in_rect(input_rect(), p) do return true
 	for r in ([4]Rect{agent_ui.panel, agent_ui.chips, agent_ui.toolbar, agent_ui.popover}) do if r.w > 0 && in_rect(r, p) do return true
 	return false
@@ -92,14 +94,12 @@ tool_verb :: proc(tool: string) -> string {
 	return tool
 }
 
-@(private = "file")
 item_text :: proc(it: Run_Item) -> string {
 	if it.kind != .Tool do return it.text
 	verb := tool_verb(it.text)
 	return verb if it.count == 1 else fmt.tprintf("%s ×%d", verb, it.count)
 }
 
-@(private = "file")
 thumb_of :: proc(vg: ^nvg.Context, path: string) -> int {
 	if path == "" do return 0
 	if img, ok := agent_ui.thumbs[path]; ok do return img
@@ -213,11 +213,11 @@ draw_thread :: proc(vg: ^nvg.Context, t: ^Agent_Thread, bottom: f32) {
 					if it.marks > 0 do label(vg, tr.x + tr.w + 10, tr.y + 12, fmt.tprintf("%d mark%s", it.marks, "" if it.marks == 1 else "s"), {1, 0.45, 0.6, 1}, 12)
 					ty += THUMB_H + 10
 				}
-				wrap_text(vg, b.x + 10, ty, bw - 20, it.text, 13, TEXT_FG)
+				chat_text(vg, b.x + 10, ty, bw - 20, it.text, 13, TEXT_FG, 1.35)
 			case .Text:
-				wrap_text(vg, x, y + 4, inner, it.text, 13, TEXT_FG)
+				chat_text(vg, x, y + 4, inner, it.text, 13, TEXT_FG, 1.35)
 			case .Error:
-				wrap_text(vg, x, y + 4, inner, it.text, 13, {1, 0.5, 0.45, 1})
+				chat_text(vg, x, y + 4, inner, it.text, 13, {1, 0.5, 0.45, 1}, 1.35)
 			case .Tool:
 				draw_lucide(vg, "wrench", x + 7, y + 11, 12, TEXT_DIM, 1.6)
 				label(vg, x + 20, y + 11, item_text(it), TEXT_DIM, 12)
@@ -425,14 +425,19 @@ draw_marks_toolbar :: proc(vg: ^nvg.Context, bottom: f32) -> (top: f32) {
 }
 
 // The context popover (agent-context.pen frame 1), above the paperclip.
-@(private = "file")
-draw_context_popover :: proc(vg: ^nvg.Context, t: ^Agent_Thread, anchor: Rect) {
+// `left` >= 0 places it there with `width` (the agent's panel), else centred on the anchor.
+draw_context_popover :: proc(vg: ^nvg.Context, t: ^Agent_Thread, anchor: Rect, left := f32(-1), width := f32(400)) {
 	if !agent_ui.ctx_open do return
-	w: f32 = 400
+	w := width
 	rows := len(t.attached)
 	h := 44 + 2 * 50 + (f32(rows) * 50 + 30 if rows > 0 else 0) + 52
 	r := Rect{clamp(anchor.x + anchor.w / 2 - w / 2, 12, app.screen.x - w - 12), anchor.y - 10 - h, w, h}
+	if left >= 0 {
+		r.x = left
+		r.y = panel_ui.composer.y - 10 - h
+	}
 	agent_ui.popover = r
+	if agent_mode() do panel_ui.popover = r
 	float_surface(vg, r, 12)
 	label(vg, r.x + 16, r.y + 22, "Context", TEXT_FG, 13, true)
 	label(vg, r.x + r.w - 16, r.y + 22, fmt.tprintf("for %s", fs_base(t.key)) if t.key != "" else "for the Dashboard", TEXT_DIM, 11, false, .RIGHT)
@@ -475,7 +480,7 @@ draw_context_popover :: proc(vg: ^nvg.Context, t: ^Agent_Thread, anchor: Rect) {
 	wrap_text(vg, r.x + 38, y + 14, r.w - 54, note, 11, TEXT_DIM)
 	if remove >= 0 do agent_context_remove(t, remove)
 	// a click elsewhere closes it
-	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(r, app.mouse) && !in_rect(anchor, app.mouse) do agent_ui.ctx_open = false
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !in_rect(r, app.mouse) && !in_rect(anchor, app.mouse) && !(left >= 0 && in_rect(panel_ui.composer, app.mouse)) do agent_ui.ctx_open = false
 	if key_pressed(KEY_ESCAPE) do agent_ui.ctx_open = false
 }
 
@@ -487,7 +492,16 @@ round_button :: proc(vg: ^nvg.Context, r: Rect, icon: string, on: bool, tip: str
 	return clicked(r)
 }
 
+// ⌘L anywhere: the agent's field (in a file, Agent mode).
+agent_focus_keys :: proc() {
+	if ui_modal() || !mod_cmd() || !key_pressed(KEY_L) || field_is_focused(0, "agent.prompt") do return
+	if app.tab >= 0 do set_editor_mode(.Agent)
+	field_focus(0, "agent.prompt", agent_state.draft)
+}
+
+// The Dashboard's agent input (a file's is in its Agent mode, agent_panel.odin).
 draw_agent_input :: proc(vg: ^nvg.Context) {
+	if app.tab >= 0 do return
 	if pf.quiet && fs_env("AGENTIC_AGENT_INPUT", context.temp_allocator) == "" do return // test windows: only when asked
 	r := input_rect()
 	t := agent_current()
@@ -542,7 +556,7 @@ draw_agent_input :: proc(vg: ^nvg.Context) {
 		for k in Agent_Kind do items[int(k)] = AGENT_KIND_NAMES[k] if agent_available(k) else fmt.tprintf("%s (not installed)", AGENT_KIND_NAMES[k])
 		menu_open("agent.pick", pick, items, int(agent_state.choice))
 	}
-	if p, ok := menu_take("agent.pick"); ok && p >= 0 && p < len(Agent_Kind) do agent_state.choice = Agent_Kind(p)
+	if p, ok := menu_take("agent.pick"); ok && p >= 0 && p < len(Agent_Kind) do agent_choose(Agent_Kind(p))
 
 	running := t.running
 	nvg.BeginPath(vg)
@@ -596,7 +610,6 @@ draw_agent_input :: proc(vg: ^nvg.Context) {
 	draw_context_popover(vg, t, clip)
 	// ⌘L focuses the field, ⌘. stops the run
 	if !ui_modal() && mod_cmd() {
-		if key_pressed(KEY_L) && !focused do field_focus(0, "agent.prompt", agent_state.draft)
 		if key_pressed(KEY_PERIOD) && running do agent_stop(t)
 	}
 	// a finished run's panel comes back when the input gets the focus

@@ -69,6 +69,15 @@ Run_Item :: struct {
 	count: int, // tool calls of the same tool in a row
 	image: string, // a user request: the marked view sent with it (annotations.odin)
 	marks: int, // how many marks it carried
+	notes: string, // a request: a line per mark ("Tag 1 · Email field")
+	ctx:   string, // a request: the context attached, a name per line ("/" ends a folder's)
+}
+
+run_item_free :: proc(it: Run_Item) {
+	delete(it.text)
+	delete(it.image)
+	delete(it.notes)
+	delete(it.ctx)
 }
 
 Agent_Thread :: struct {
@@ -121,6 +130,7 @@ agent_state: struct {
 	in_run:  ^Agent_Thread, // the run whose request is being handled (api_dispatch)
 	titles:  [dynamic]Agent_Title, // from the title jobs, under mutex
 	pending: string, // a request sent from the interface, started by agent_tick
+	choice_loaded: bool, // `choice` was read from settings
 }
 
 // ---------------------------------------------------------------- the CLIs
@@ -277,9 +287,15 @@ agent_send_now :: proc(prompt: string) {
 	delete(t.run_dir)
 	t.run_dir = strings.clone(dir)
 	// the marks drawn on the canvas go with this request, then leave the canvas
-	marks_text, marks_image, marks_n := annotations_take(dir)
+	marks_text, marks_image, marks_n, marks_notes := annotations_take(dir)
 	if marks_text != "" do sent = fmt.tprintf("%s\n\n%s", sent, marks_text)
-	append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n})
+	cb := strings.builder_make(context.temp_allocator)
+	for c, i in t.attached {
+		if i > 0 do strings.write_byte(&cb, '\n')
+		strings.write_string(&cb, fs_base(c.path))
+		if c.folder do strings.write_byte(&cb, '/')
+	}
+	append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n, notes = strings.clone(marks_notes), ctx = strings.clone(strings.to_string(cb))})
 	session_touch(t)
 	t.shown, t.scroll = true, 0
 	t.agent = kind
@@ -318,6 +334,7 @@ agent_send_now :: proc(prompt: string) {
 		append(&args, "--output-format", "stream-json", "--verbose", "--mcp-config", cfg, "--strict-mcp-config", "--tools", "Read,Grep,Glob" if len(readable) > 0 else "", "--allowedTools", "mcp__agentic-design__*")
 		append(&args, ..readable[:])
 		append(&args, "--setting-sources", "user", "--append-system-prompt", guide)
+		agent_args_model(kind, &args)
 		if resume != "" do append(&args, "--resume", resume)
 		append(&args, sent)
 	case .Codex:
@@ -325,6 +342,7 @@ agent_send_now :: proc(prompt: string) {
 		append(&args, cli, "exec")
 		if marks_image != "" do append(&args, "-i", marks_image) // (it takes several files: before other options)
 		append(&args, "--json", "--sandbox", "read-only", "--skip-git-repo-check", "-C", dir, "-c", servers, "-c", `approval_policy="never"`)
+		agent_args_model(kind, &args)
 		if resume != "" do append(&args, "resume", resume)
 		append(&args, fmt.tprintf("%s\n\nRequest: %s", guide, sent))
 	case .Gemini:
@@ -339,6 +357,7 @@ agent_send_now :: proc(prompt: string) {
 		_ = fs_write(settings, strings.to_string(gb))
 		append(&args, cli, "--output-format", "stream-json", "--allowed-mcp-server-names", "agentic-design", "--approval-mode", "default")
 		for c in t.attached do append(&args, "--include-directories", c.path if c.folder else fs_dir(c.path))
+		agent_args_model(kind, &args)
 		if resume != "" do append(&args, "--resume", resume)
 		g := fmt.tprintf("%s\n\nRequest: %s", guide, sent)
 		if marks_image != "" do g = fmt.tprintf("%s\n\nThe marked view: @%s", g, marks_image)
@@ -428,6 +447,10 @@ agents_stop_all :: proc() {
 
 // Drains what the CLIs printed; called every frame.
 agent_tick :: proc() {
+	if !agent_state.choice_loaded {
+		agent_state.choice = Agent_Kind(clamp(settings.agent_choice, 0, len(Agent_Kind) - 1))
+		agent_state.choice_loaded = true
+	}
 	if agent_state.pending != "" {
 		p := agent_state.pending
 		agent_state.pending = ""
@@ -661,7 +684,7 @@ agent_request_end :: proc(t: ^Agent_Thread, path, method: string, ok: bool, save
 	if t != nil && ok && method == "open" && t.key == "" && app.tab >= 0 && app.file_path != "" {
 		for o, i in agent_state.threads {
 			if o != t && o.key != "" && same_file(o.key, app.file_path) && !o.running {
-				for it in o.items do delete(it.text)
+				for it in o.items do run_item_free(it)
 				delete(o.items)
 				delete(o.key)
 				delete(o.session)
@@ -771,6 +794,14 @@ agent_thread_save :: proc(t: ^Agent_Thread) {
 		if i > 0 do strings.write_byte(&b, ',')
 		fmt.sbprintf(&b, `{{"kind":"%v","count":%d,"marks":%d,"image":`, it.kind, it.count, it.marks)
 		engine.json_write_string(&b, it.image)
+		if it.notes != "" {
+			strings.write_string(&b, `,"notes":`)
+			engine.json_write_string(&b, it.notes)
+		}
+		if it.ctx != "" {
+			strings.write_string(&b, `,"context":`)
+			engine.json_write_string(&b, it.ctx)
+		}
 		strings.write_string(&b, `,"text":`)
 		engine.json_write_string(&b, it.text)
 		strings.write_byte(&b, '}')
@@ -790,10 +821,7 @@ agent_kind_of :: proc(s: string) -> Agent_Kind {
 
 @(private = "file")
 session_clear :: proc(t: ^Agent_Thread) {
-	for it in t.items {
-		delete(it.text)
-		delete(it.image)
-	}
+	for it in t.items do run_item_free(it)
 	clear(&t.items)
 	delete(t.session)
 	t.session = ""
@@ -830,7 +858,7 @@ session_load :: proc(t: ^Agent_Thread, sid: string) -> bool {
 		case "Tool": kind = .Tool
 		case "Error": kind = .Error
 		}
-		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0)})
+		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0), notes = strings.clone(string(io["notes"].(json.String) or_else "")), ctx = strings.clone(string(io["context"].(json.String) or_else ""))})
 	}
 	if len(t.items) > 0 do t.state = .Done
 	return true
@@ -1060,10 +1088,14 @@ api_agent :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	case "context_remove": agent_context_remove(t, int(params["index"].(json.Float) or_else -1))
 	case "session_new": agent_session_new(t)
 	case "choose":
-		for k in Agent_Kind do if fmt.tprintf("%v", k) == string(params["agent"].(json.String) or_else "") do agent_state.choice = k
+		for k in Agent_Kind do if fmt.tprintf("%v", k) == string(params["agent"].(json.String) or_else "") do agent_choose(k)
+		if m, ok := params["model"].(json.String); ok do agent_set_model(agent_state.choice, string(m))
+		if e, ok := params["effort"].(json.String); ok do agent_set_effort(agent_state.choice, string(e))
 	case "session_resume": agent_session_resume(t, string(params["sid"].(json.String) or_else ""))
+	case "mode": set_editor_mode(.Agent if string(params["mode"].(json.String) or_else "") == "agent" else .Design)
 	case "annotate":
 		annot.active = params["active"].(json.Boolean) or_else true
+		set_editor_mode(.Agent if annot.active else .Design) // marks are drawn in Agent mode
 		if tool, ok := params["tool"].(json.String); ok {
 			for k in Mark_Tool do if strings.to_lower(MARK_TOOL_NAMES[k], context.temp_allocator) == string(tool) do annot.tool = k
 		}
@@ -1075,7 +1107,7 @@ api_agent :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	engine.json_write_string(b, t.sid)
 	strings.write_string(b, `,"title":`)
 	engine.json_write_string(b, t.title)
-	fmt.sbprintf(b, `,"state":"%v","running":%v,"marks":%d,"annotating":%v,"items":%d,"context":[`, t.state, t.running, annotations_count(), annot.active, len(t.items))
+	fmt.sbprintf(b, `,"state":"%v","running":%v,"marks":%d,"annotating":%v,"mode":"%v","agent":"%v","model":%s,"effort":%s,"items":%d,"context":[`, t.state, t.running, annotations_count(), annotations_active(), editor_mode, agent_state.choice, json_quote(agent_model_of(agent_state.choice).id), json_quote(agent_effort_of(agent_state.choice)), len(t.items))
 	for c, i in t.attached {
 		if i > 0 do strings.write_byte(b, ',')
 		strings.write_string(b, `{"path":`)

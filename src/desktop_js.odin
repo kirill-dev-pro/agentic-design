@@ -126,3 +126,10 @@ draw_settings_account :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 
 // whats_new.odin: settings are kept by the page
 settings_test_writes :: proc() -> bool {return false}
+
+// agent_panel.odin: the web editor has no agents
+annot_leave_agent_mode :: proc() {}
+draw_agent_panel :: proc(vg: ^nvg.Context) {}
+draw_mode_switch :: proc(vg: ^nvg.Context, x: f32) -> f32 {return x}
+draw_marks_bar :: proc(vg: ^nvg.Context) {}
+agent_focus_keys :: proc() {}

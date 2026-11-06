@@ -69,7 +69,7 @@ annot_init :: proc "contextless" () {
 }
 
 annotations_active :: proc() -> bool {
-	return annot.active && app.tab >= 0
+	return agent_mode() // a file in Agent mode: the pointer draws marks
 }
 
 annotations_count :: proc() -> int {
@@ -249,7 +249,7 @@ draw_marks :: proc(vg: ^nvg.Context, to: proc(p: [2]f32) -> [2]f32, s: f32) {
 
 // On the canvas (draw_canvas), with the comment being typed.
 draw_annotations :: proc(vg: ^nvg.Context) {
-	if app.tab < 0 || len(annot.marks) == 0 do return
+	if !agent_mode() || len(annot.marks) == 0 do return
 	draw_marks(vg, to_screen, 1)
 	if annot.editing >= 0 && annot.editing < len(annot.marks) {
 		m := &annot.marks[annot.editing]
@@ -468,9 +468,35 @@ overlay_marks :: proc(vg: ^nvg.Context, s: f32) {
 
 // Takes the marks for a request: a description, the path of a picture of the view with the
 // marks drawn, and how many there were; the canvas is left without them.
-annotations_take :: proc(dir: string) -> (text: string, image: string, count: int) {
-	if len(annot.marks) == 0 || app.tab < 0 do return "", "", 0
+annotations_take :: proc(dir: string) -> (text: string, image: string, count: int, notes: string) {
+	if len(annot.marks) == 0 || app.tab < 0 do return "", "", 0, ""
 	if ui.focus == "mark.comment" do field_commit()
+	// a line per mark for the thread ("Tag 1 · Email field")
+	nb := strings.builder_make(context.temp_allocator)
+	short :: proc(n: ^engine.Node) -> string {
+		if n == nil do return "the canvas"
+		return engine.node_label(n)
+	}
+	for m, i in annot.marks {
+		if i > 0 do strings.write_byte(&nb, '\n')
+		switch m.tool {
+		case .Comment:
+			t := m.text if len(m.text) <= 48 else fmt.tprintf("%s…", m.text[:45])
+			fmt.sbprintf(&nb, "Comment · “%s”", t)
+		case .Pen:
+			r := bounds_of_pts(m.pts[:])
+			closed := linalg_len(m.pts[0] - m.pts[len(m.pts) - 1]) < max(r[2], r[3]) * 0.25
+			fmt.sbprintf(&nb, "Pen · %s %s", "circle on" if closed else "stroke over", short(layer_at({r[0] + r[2] / 2, r[1] + r[3] / 2})))
+		case .Arrow: fmt.sbprintf(&nb, "Arrow · from %s to %s", short(layer_at(m.pts[0])), short(layer_at(m.pts[1])))
+		case .Area:
+			r := bounds_of_pts(m.pts[:])
+			fmt.sbprintf(&nb, "Area · %s × %s", num(r[2]), num(r[3]))
+		case .Tag:
+			n, _ := engine.doc_find_uid(&app.doc, m.uid)
+			fmt.sbprintf(&nb, "Tag %d · %s", m.num, short(n))
+		}
+	}
+	notes = strings.to_string(nb)
 	b := strings.builder_make(context.temp_allocator)
 	strings.write_string(&b, "The user drew marks on the canvas to show what they mean (page coordinates; the marks are not part of the design):")
 	for m, i in annot.marks {

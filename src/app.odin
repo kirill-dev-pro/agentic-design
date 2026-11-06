@@ -297,7 +297,7 @@ frame_size :: proc() -> [2]i32 {
 	app.dpr = f32(fb.x) / max(app.screen.x, 1)
 	app.mouse = pf.mouse / ui_scale()
 	// the canvas fills the window under the tab bar; the panels float over it (panels.odin)
-	app.canvas = {0, TAB_H, app.screen.x, app.screen.y - TAB_H}
+	app.canvas = canvas_rect()
 	if p, ok := ui_rescale_center.?; ok {
 		ui_rescale_center = nil
 		app.cam = p - (canvas_center() - [2]f32{app.canvas.x, app.canvas.y}) / app.zoom

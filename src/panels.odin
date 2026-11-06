@@ -18,6 +18,38 @@ CORNER_BUTTON :: f32(36)
 TOOLBAR_H :: f32(44)
 TOOLBAR_BUTTON :: f32(32)
 
+// Design or Agent (app-ui.pen "1 · Context popover" … "7 · Thread"): in Agent the floating
+// panels and the tools give way to the agent's panel at the left (agent_panel.odin) and the
+// marks bar at the bottom of the canvas.
+Editor_Mode :: enum {
+	Design,
+	Agent,
+}
+
+editor_mode: Editor_Mode
+AGENT_SIDE_W :: f32(400)
+
+agent_mode :: proc() -> bool {
+	return editor_mode == .Agent && app.tab >= 0
+}
+
+// Where the canvas is: under the tab bar, right of the agent's panel in Agent mode.
+canvas_rect :: proc() -> Rect {
+	left := AGENT_SIDE_W if agent_mode() else 0
+	return {left, TAB_H, app.screen.x - left, app.screen.y - TAB_H}
+}
+
+// Switches mode keeping the view's centre where it is.
+set_editor_mode :: proc(m: Editor_Mode) {
+	if editor_mode == m do return
+	if ui.focus != "" do field_commit()
+	centre := to_page(canvas_center())
+	editor_mode = m
+	app.canvas = canvas_rect()
+	app.cam = centre - (canvas_center() - [2]f32{app.canvas.x, app.canvas.y}) / app.zoom
+	if m == .Design do annot_leave_agent_mode()
+}
+
 Panel_Side :: enum {
 	Left,
 	Right,
@@ -66,6 +98,7 @@ toolbar_rect :: proc() -> Rect {
 // True when p is on the editor's floating chrome rather than the canvas.
 chrome_hit :: proc(p: [2]f32) -> bool {
 	if app.tab < 0 do return false
+	if agent_mode() do return agent_chrome_hit(p)
 	for side in Panel_Side {
 		if panel_shown(side) {
 			if in_rect(panel_rect(side), p) do return true
@@ -82,6 +115,7 @@ canvas_hit :: proc(p: [2]f32) -> bool {
 // The part of the canvas the panels leave open: zoom to fit and the view's centre use it.
 canvas_visible :: proc() -> Rect {
 	c := app.canvas
+	if agent_mode() do return c
 	l := c.x
 	r := c.x + c.w
 	if app.tab >= 0 && panel_shown(.Left) do l = PANEL_MARGIN + LEFT_W
