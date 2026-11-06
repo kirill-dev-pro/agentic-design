@@ -1,4 +1,34 @@
 "use strict";
+// The hero's flow of light: placed between Download and the app window, with motes rising
+// from the window's whole width into the stream.
+(() => {
+	const hero = document.querySelector('.hero-in');
+	const flow = hero && hero.querySelector('.flow');
+	const btn = hero && hero.querySelector('.btn-glow');
+	const win = hero && hero.querySelector('.window');
+	if (!flow || !btn || !win) return;
+	const layout = () => {
+		const h = hero.getBoundingClientRect(), b = btn.getBoundingClientRect(), w = win.getBoundingClientRect();
+		const set = (k, v) => flow.style.setProperty(k, v + 'px');
+		set('--fl', w.left - h.left); set('--ft', b.bottom - h.top);
+		set('--fw', w.width); set('--fh', Math.max(0, w.top - b.bottom));
+		set('--cx', b.left + b.width / 2 - w.left);
+	};
+	new ResizeObserver(layout).observe(hero);
+	addEventListener('resize', layout);
+	layout();
+	if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+	const dust = flow.querySelector('.flow-dust');
+	const colors = ['#FFD3BF', '#FFB48F', '#FFF1EA', '#E8876A'];
+	for (let i = 0; i < 46; i++) {
+		const m = document.createElement('i');
+		m.className = 'mote';
+		const d = 2.6 + Math.random() * 2.6;
+		m.style.cssText = `--r:${(Math.random() * 1.04 - .02).toFixed(3)};--d:${d.toFixed(2)}s;--del:${(-Math.random() * d).toFixed(2)}s;--s:${(1.5 + Math.random() * 2).toFixed(1)}px;--o:${(.45 + Math.random() * .55).toFixed(2)};--c:${colors[i % colors.length]}`;
+		m.appendChild(document.createElement('b'));
+		dust.appendChild(m);
+	}
+})();
 // The landing page: the mode switch, the agents scene, and (as in main.js) the return after
 // a sign-in and the download button pointing at the latest release's dmg.
 	// Mode switch: the chosen pill lights its card.

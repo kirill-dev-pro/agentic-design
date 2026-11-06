@@ -122,29 +122,35 @@ h1 {
 .ctas.left { justify-content: flex-start; }
 .cta-beam-anchor { position: relative; display: inline-flex; }
 
-/* The beam: light rises from the app window up to Download */
-.beam { position: absolute; left: 50%; top: -50px; width: 320px; height: 300px; margin-left: -160px; pointer-events: none; z-index: 1; }
-.beam i { position: absolute; display: block; }
-.beam-spot { left: 0; top: 21px; width: 320px; height: 100px; border-radius: 50%; background: radial-gradient(closest-side, #E8876A99, #E8876A00); filter: blur(16px); animation: pulse 3.2s ease-in-out infinite; }
-.beam-cone { left: 120px; top: 80px; width: 80px; height: 182px; background: linear-gradient(0deg, #E8876AAA, #E8876A22); filter: blur(20px); }
-.beam-halo { left: 150px; top: 88px; width: 20px; height: 174px; background: linear-gradient(0deg, #FFB48FDD, #FFB48F33); filter: blur(6px); }
-.beam-core { left: 159px; top: 92px; width: 2px; height: 170px; background: linear-gradient(0deg, #FFF1EA, #E8876A66); overflow: hidden; }
-.beam-core::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; background: linear-gradient(0deg, #FFFFFF00, #FFFFFF, #FFFFFF00); animation: rise 1.8s cubic-bezier(.4,0,.6,1) infinite; }
-.beam-impact { left: 40px; top: 244px; width: 240px; height: 36px; border-radius: 50%; background: radial-gradient(closest-side, #FFB48FAA, #FFB48F00); filter: blur(8px); animation: pulse 3.2s ease-in-out infinite reverse; }
-.spark { width: 3px; height: 3px; border-radius: 50%; background: #FFD3BF; opacity: 0; animation: spark 3s linear infinite; }
-.s1 { left: 150px; top: 231px; }
-.s2 { left: 171px; top: 251px; width: 2px; height: 2px; animation-delay: -.6s; }
-.s3 { left: 143px; top: 257px; width: 2px; height: 2px; background: #FFB48F; animation-delay: -1.3s; }
-.s4 { left: 178px; top: 241px; background: #FFB48F; animation-delay: -2s; }
-.s5 { left: 165px; top: 259px; width: 2px; height: 2px; animation-delay: -2.5s; }
-
-@keyframes rise { from { top: 100%; } to { top: -60px; } }
-@keyframes pulse { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
-@keyframes spark {
+/* The flow: light gathers from the whole width of the app window and rises in a narrowing
+   stream into Download. landing.js measures the gap and sets --fl, --ft, --fw, --fh (the box
+   from the button to the window) and --cx (the button's centre in that box). */
+.hero-in { position: relative; }
+.flow { position: absolute; left: var(--fl, 0); top: var(--ft, 0); width: var(--fw, 100%); height: var(--fh, 0); pointer-events: none; z-index: 1; }
+.flow i, .flow span { position: absolute; display: block; }
+.flow-cone { inset: -10px 0 0; filter: blur(22px); opacity: .9; }
+.flow-cone i { inset: 0; background: linear-gradient(0deg, #E8876A66, #E8876A1F 55%, #FFB48F88);
+	clip-path: polygon(calc(var(--cx) - 18px) 0, calc(var(--cx) + 18px) 0, 100% 100%, 0 100%); animation: breathe 4s ease-in-out infinite; }
+.flow-core { left: calc(var(--cx) - 1px); top: 0; width: 2px; height: 62%; overflow: hidden;
+	background: linear-gradient(180deg, #FFF1EA, #FFB48F99 55%, #E8876A00); box-shadow: 0 0 10px 2px #FFB48F66; }
+.flow-core::after { content: ""; position: absolute; left: 0; right: 0; height: 50px; background: linear-gradient(0deg, #fff0, #fff, #fff0); animation: rise 1.8s cubic-bezier(.4, 0, .6, 1) infinite; }
+.flow-spot { left: calc(var(--cx) - 160px); top: -70px; width: 320px; height: 100px; border-radius: 50%; background: radial-gradient(closest-side, #E8876A99, #E8876A00); filter: blur(16px); animation: breathe 3.2s ease-in-out infinite; }
+.flow-pool { left: -6%; right: -6%; bottom: -40px; height: 80px; border-radius: 50%; background: radial-gradient(closest-side, #FFB48F70, #E8876A30 55%, #E8876A00); filter: blur(10px); animation: breathe 3.2s ease-in-out infinite reverse; }
+.flow-dust { inset: 0; }
+/* a particle rises (the outer element) while it drifts to the centre (the inner one), so
+   the paths bend inwards and meet in the stream */
+.mote { position: absolute; bottom: 0; left: calc(var(--r) * 100%); animation: mote-y var(--d) linear var(--del) infinite; opacity: 0; }
+.mote b { display: block; width: var(--s); height: var(--s); border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c);
+	animation: mote-x var(--d) cubic-bezier(.55, 0, .35, 1) var(--del) infinite; }
+@keyframes mote-y {
 	0% { transform: translateY(0); opacity: 0; }
-	15% { opacity: 1; }
-	100% { transform: translateY(-150px); opacity: 0; }
+	12% { opacity: var(--o); }
+	80% { opacity: var(--o); }
+	100% { transform: translateY(calc(-1 * var(--fh, 200px))); opacity: 0; }
 }
+@keyframes mote-x { from { transform: translateX(0); } to { transform: translateX(calc(var(--cx) - var(--r) * var(--fw))); } }
+@keyframes rise { from { top: 100%; } to { top: -50px; } }
+@keyframes breathe { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
 
 .hero-art { width: 100%; padding-top: 140px; position: relative; z-index: 2; }
 .window {
