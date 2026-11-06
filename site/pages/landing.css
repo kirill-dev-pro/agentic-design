@@ -139,22 +139,22 @@ h1 {
 /* the column: a white-hot line in a clay glow, with light running up it */
 .flow-core { left: calc(var(--cx) - 1.5px); top: 0; width: 3px; height: 100%; overflow: hidden; border-radius: 2px;
 	background: linear-gradient(180deg, #FFE6DA, #FFFFFF 70%, #FFFFFF); box-shadow: 0 0 8px 2px #FFC7AE, 0 0 26px 8px #E8876A88, 0 0 70px 18px #E8876A44; }
-.flow-core::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; background: linear-gradient(0deg, #fff0, #fff, #fff0); animation: rise 1.6s cubic-bezier(.4, 0, .6, 1) infinite; }
+.flow-core::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; background: linear-gradient(180deg, #fff0, #fff, #fff0); animation: pour 1.3s cubic-bezier(.5, 0, .9, .6) infinite; }
 .flow-spot { left: calc(var(--cx) - 170px); top: -70px; width: 340px; height: 110px; border-radius: 50%; background: radial-gradient(closest-side, #E8876A99, #E8876A00); filter: blur(16px); animation: breathe 3.2s ease-in-out infinite; }
-.flow-dust { inset: 0; }
+.flow-dust { inset: 0 0 -6px; overflow: hidden; }
 /* a particle rises (the outer element) while it drifts to the centre (the inner one), so
    the paths bend inwards and meet in the stream */
-.mote { position: absolute; bottom: 0; left: calc(var(--r) * 100%); animation: mote-y var(--d) linear var(--del) infinite; opacity: 0; }
-.mote b { display: block; width: var(--s); height: var(--s); border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c);
-	animation: mote-x var(--d) cubic-bezier(.55, 0, .35, 1) var(--del) infinite; }
-@keyframes mote-y {
-	0% { transform: translateY(0); opacity: 0; }
+.thread { position: absolute; left: 0; top: 0; width: var(--len); height: var(--w); border-radius: 2px; opacity: 0;
+	offset-rotate: auto; offset-anchor: 100% 50%;
+	background: linear-gradient(90deg, #fff0, var(--c) 70%, #fff); box-shadow: 0 0 8px 1px var(--c), 0 0 2px #fff;
+	animation: thread var(--d) cubic-bezier(.45, 0, .85, .5) var(--del) infinite; }
+@keyframes thread {
+	0% { offset-distance: 0%; opacity: 0; }
 	12% { opacity: var(--o); }
-	80% { opacity: var(--o); }
-	100% { transform: translateY(calc(-1 * var(--fh, 200px))); opacity: 0; }
+	88% { opacity: var(--o); }
+	100% { offset-distance: 100%; opacity: 0; }
 }
-@keyframes mote-x { from { transform: translateX(0); } to { transform: translateX(calc(var(--cx) - var(--r) * var(--fw))); } }
-@keyframes rise { from { top: 100%; } to { top: -50px; } }
+@keyframes pour { from { top: -60px; } to { top: 100%; } }
 @keyframes breathe { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
 
 .hero-art { width: 100%; padding-top: 140px; position: relative; z-index: 2; }
@@ -168,6 +168,12 @@ h1 {
 /* the window's top edge, lit across its width from where the light lands (--cx from landing.js) */
 .window-edge { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 2px;
 	background: radial-gradient(farthest-side at var(--cx, 50%) 50%, #FFFFFF, #FFE3D6 35%, #FFB48F 70%, #E8876A99); box-shadow: 0 0 10px 1px #FFB48F, 0 0 28px 4px #E8876A88; }
+@property --sweep { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.window-edge::before { content: ""; position: absolute; inset: -3px 0; animation: sweep 2.4s cubic-bezier(.2, .6, .4, 1) infinite;
+	background: radial-gradient(60px 4px at calc(var(--cx, 50%) - var(--sweep)) 50%, #fff, #fff0), radial-gradient(60px 4px at calc(var(--cx, 50%) + var(--sweep)) 50%, #fff, #fff0); }
+@keyframes sweep { from { --sweep: 0px; opacity: 1; } 80% { opacity: .8; } to { --sweep: 640px; opacity: 0; } }
+.window.pour img { clip-path: inset(0 0 100% 0); filter: brightness(1.8) saturate(.6); transition: clip-path 1.5s cubic-bezier(.3, .1, .2, 1), filter 2.2s ease; }
+.window.poured img { clip-path: inset(0 0 0 0); filter: none; }
 .window-edge::after { content: ""; position: absolute; left: calc(var(--cx, 50%) - 45%); width: 90%; top: 0; height: 140px;
 	background: radial-gradient(closest-side at 50% 0, #FFB48F55, #E8876A00); }
 
