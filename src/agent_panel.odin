@@ -1,6 +1,8 @@
 #+build !js
 package agentic_design
 
+import "engine"
+
 import "core:fmt"
 import "core:math"
 import "core:strings"
@@ -72,13 +74,38 @@ draw_mode_switch :: proc(vg: ^nvg.Context, x: f32) -> f32 {
 // ---------------------------------------------------------------- selectable text
 
 // Text in the thread can be selected with the pointer (drag, double click for a word) and
-// copied with ⌘C. Each wrapped block drawn this frame is listed; the selection runs from one
-// block's offset to another's, in drawing order.
+// copied with ⌘C. Each block of text drawn this frame is listed as pieces (a run of one style
+// on one line) of its plain text; the selection runs from one block's offset to another's,
+// in drawing order.
+Chat_Style :: enum u8 {
+	Regular,
+	Bold,
+	Italic,
+	Bold_Italic,
+	Mono,
+}
+
+// The face of a style: Inter's weights and italics when the app has them.
+chat_face :: proc(st: Chat_Style) -> string {
+	if st == .Mono do return "ui-mono" if ui_mono_loaded else "ui"
+	bold := st == .Bold || st == .Bold_Italic
+	italic := st == .Italic || st == .Bold_Italic
+	if engine.family_find("Inter") != nil do return engine.font_face("Inter", 650 if bold else 400, italic)
+	return "ui-bold" if bold && ui_bold_loaded else "ui"
+}
+
+Chat_Piece :: struct {
+	a, b:  int, // byte range of the block's text
+	x, y:  f32, // left and the line's top
+	w:     f32,
+	style: Chat_Style,
+	size:  f32,
+}
+
 Chat_Block :: struct {
-	text:     string,
-	rows:     [][2]int,
-	x, y, lh: f32,
-	size:     f32,
+	text:   string,
+	pieces: []Chat_Piece,
+	lh:     f32,
 }
 
 Chat_Pos :: struct {
@@ -100,32 +127,51 @@ pos_less :: proc(p, q: Chat_Pos) -> bool {
 	return p.block < q.block || (p.block == q.block && p.at < q.at)
 }
 
+@(private = "file")
+piece_x :: proc(vg: ^nvg.Context, text: string, p: Chat_Piece, at: int) -> f32 {
+	nvg.FontFace(vg, chat_face(p.style))
+	nvg.FontSize(vg, p.size)
+	return p.x + nvg.TextBounds(vg, 0, 0, text[p.a:clamp(at, p.a, p.b)])
+}
+
+// Lists a block drawn by the caller (pieces in temp memory) and draws the selection over it.
+// Call before drawing its glyphs.
+chat_block :: proc(vg: ^nvg.Context, text: string, pieces: []Chat_Piece, lh: f32) {
+	index := len(chat.blocks)
+	append(&chat.blocks, Chat_Block{text = text, pieces = pieces, lh = lh})
+	if !chat.has do return
+	lo, hi := chat.a, chat.b
+	if pos_less(hi, lo) do lo, hi = hi, lo
+	if index < lo.block || index > hi.block do return
+	a := lo.at if index == lo.block else 0
+	b := hi.at if index == hi.block else len(text)
+	nvg.BeginPath(vg)
+	for p, i in pieces {
+		s, e := max(a, p.a), min(b, p.b)
+		last_on_line := i + 1 >= len(pieces) || pieces[i + 1].y != p.y
+		past := b > p.b && last_on_line
+		if s > e || (s == e && !past) do continue
+		x0 := piece_x(vg, text, p, s)
+		x1 := piece_x(vg, text, p, e) + (p.size * 0.3 if past else 0)
+		nvg.Rect(vg, x0, p.y, x1 - x0, lh)
+	}
+	nvg.FillColor(vg, {ACCENT.r, ACCENT.g, ACCENT.b, 0.35})
+	nvg.Fill(vg)
+}
+
 // Draws `text` wrapped at w (font "ui"), with the selection over it; returns its height.
 chat_text :: proc(vg: ^nvg.Context, x, y, w: f32, text: string, size: f32, color: nvg.Color, line := f32(1.45)) -> f32 {
 	nvg.FontFace(vg, "ui")
 	nvg.FontSize(vg, size)
 	rows := text_rows(vg, text, w)
 	lh := size * line
-	index := len(chat.blocks)
-	append(&chat.blocks, Chat_Block{text = text, rows = rows, x = x, y = y, lh = lh, size = size})
-	if chat.has {
-		lo, hi := chat.a, chat.b
-		if pos_less(hi, lo) do lo, hi = hi, lo
-		if index >= lo.block && index <= hi.block {
-			a := lo.at if index == lo.block else 0
-			b := hi.at if index == hi.block else len(text)
-			nvg.BeginPath(vg)
-			for row, i in rows {
-				s, e := max(a, row[0]), min(b, row[1])
-				if s > e || (s == e && !(b > row[1] && s == row[1])) do continue
-				x0 := x + nvg.TextBounds(vg, 0, 0, text[row[0]:s])
-				x1 := x + nvg.TextBounds(vg, 0, 0, text[row[0]:e]) + (size * 0.3 if b > row[1] else 0)
-				nvg.Rect(vg, x0, y + f32(i) * lh, x1 - x0, lh)
-			}
-			nvg.FillColor(vg, {ACCENT.r, ACCENT.g, ACCENT.b, 0.35})
-			nvg.Fill(vg)
-		}
+	pieces := make([]Chat_Piece, len(rows), context.temp_allocator)
+	for row, i in rows {
+		nvg.FontFace(vg, "ui")
+		nvg.FontSize(vg, size)
+		pieces[i] = {row[0], row[1], x, y + f32(i) * lh, nvg.TextBounds(vg, 0, 0, text[row[0]:row[1]]), .Regular, size}
 	}
+	chat_block(vg, text, pieces, lh)
 	nvg.FontFace(vg, "ui")
 	nvg.FontSize(vg, size)
 	nvg.TextAlign(vg, .LEFT, .MIDDLE)
@@ -146,27 +192,41 @@ chat_hit :: proc(vg: ^nvg.Context, p: [2]f32) -> (Chat_Pos, bool) {
 	if len(chat.prev) == 0 do return {}, false
 	best := -1
 	for b, i in chat.prev {
-		h := f32(len(b.rows)) * b.lh
-		if p.y >= b.y && p.y < b.y + h {
+		if len(b.pieces) == 0 do continue
+		top, bottom := b.pieces[0].y, b.pieces[len(b.pieces) - 1].y + b.lh
+		if p.y >= top && p.y < bottom {
 			best = i
 			break
 		}
-		if p.y >= b.y + h do best = i // the last block above
+		if p.y >= bottom do best = i // the last block above
 	}
 	if best < 0 do return {0, 0}, true
 	b := chat.prev[best]
-	h := f32(len(b.rows)) * b.lh
-	if p.y >= b.y + h do return {best, len(b.text)}, true
-	ri := clamp(int((p.y - b.y) / b.lh), 0, len(b.rows) - 1)
-	row := b.rows[ri]
-	nvg.FontFace(vg, "ui")
-	nvg.FontSize(vg, b.size)
-	at, best_d := row[0], abs(p.x - b.x)
-	k := row[0]
-	for k < row[1] {
-		_, size := utf8.decode_rune_in_string(b.text[k:row[1]])
+	if len(b.pieces) == 0 do return {best, 0}, true
+	if p.y >= b.pieces[len(b.pieces) - 1].y + b.lh do return {best, len(b.text)}, true
+	// the line, then the piece on it, then the glyph boundary
+	line_y := b.pieces[0].y
+	for pc in b.pieces do if pc.y <= p.y do line_y = pc.y
+	first, last := -1, -1
+	for pc, i in b.pieces do if pc.y == line_y {
+		if first < 0 do first = i
+		last = i
+	}
+	if first < 0 do return {best, 0}, true
+	pc := b.pieces[last]
+	for i in first ..= last do if p.x < b.pieces[i].x + b.pieces[i].w {
+		pc = b.pieces[i]
+		break
+	}
+	if p.x <= pc.x do return {best, pc.a}, true
+	nvg.FontFace(vg, chat_face(pc.style))
+	nvg.FontSize(vg, pc.size)
+	at, best_d := pc.a, abs(p.x - pc.x)
+	k := pc.a
+	for k < pc.b {
+		_, size := utf8.decode_rune_in_string(b.text[k:pc.b])
 		k += size
-		if d := abs(p.x - (b.x + nvg.TextBounds(vg, 0, 0, b.text[row[0]:k]))); d < best_d do at, best_d = k, d
+		if d := abs(p.x - (pc.x + nvg.TextBounds(vg, 0, 0, b.text[pc.a:k]))); d < best_d do at, best_d = k, d
 	}
 	return {best, at}, true
 }
@@ -247,18 +307,15 @@ chat_selected_text :: proc() -> string {
 chat_frame_end :: proc() {
 	for b in chat.prev {
 		delete(b.text)
-		delete(b.rows)
+		delete(b.pieces)
 	}
 	clear(&chat.prev)
-	for b in chat.blocks do append(&chat.prev, Chat_Block{strings.clone(b.text), slice_clone(b.rows), b.x, b.y, b.lh, b.size})
+	for b in chat.blocks {
+		pieces := make([]Chat_Piece, len(b.pieces))
+		copy(pieces, b.pieces)
+		append(&chat.prev, Chat_Block{strings.clone(b.text), pieces, b.lh})
+	}
 	clear(&chat.blocks)
-}
-
-@(private = "file")
-slice_clone :: proc(s: [][2]int) -> [][2]int {
-	out := make([][2]int, len(s))
-	copy(out, s)
-	return out
 }
 
 // ---------------------------------------------------------------- the panel
@@ -378,7 +435,8 @@ item_height :: proc(vg: ^nvg.Context, it: Run_Item, w: f32) -> f32 {
 		if it.image != "" do h += 120 + 10
 		if it.notes != "" do h += f32(strings.count(it.notes, "\n") + 1) * 24 + (10 if it.image == "" else 0)
 		return h
-	case .Text, .Error: return chat_text_height(vg, w, it.text, 13.5)
+	case .Text: return md_draw(vg, 0, 0, w, it.text, C_TEXT, false)
+	case .Error: return chat_text_height(vg, w, it.text, 13.5)
 	case .Tool: return 28
 	}
 	return 0
@@ -482,7 +540,7 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 				}
 			}
 		case .Text:
-			chat_text(vg, x, y, w, it.text, 13.5, C_TEXT)
+			md_draw(vg, x, y, w, it.text, C_TEXT, true)
 		case .Error:
 			chat_text(vg, x, y, w, it.text, 13.5, C_ERR)
 		case .Tool:

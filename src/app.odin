@@ -258,6 +258,7 @@ app_frame :: proc() {
 	presence_tick(platform_time())
 	if shot_pending() do render_screenshot()
 	thumbs_render()
+	chat_previews_render()
 	export_render()
 	copy_png_render()
 

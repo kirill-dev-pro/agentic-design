@@ -217,6 +217,7 @@ platform_load_fonts :: proc(vg: ^nvg.Context) {
 	font(vg, "sans-bold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
 	// The interface uses the system font; fall back to Arial when it cannot be read.
 	if font(vg, "ui", "/System/Library/Fonts/SFNS.ttf") < 0 do font(vg, "ui", "/System/Library/Fonts/Supplemental/Arial.ttf")
+	ui_mono_loaded = font(vg, "ui-mono", "/System/Library/Fonts/SFNSMono.ttf") >= 0 || font(vg, "ui-mono", "/System/Library/Fonts/Menlo.ttc") >= 0
 }
 
 // What the renderer needs from the window: the GL context is current (GL), or the

@@ -212,7 +212,8 @@ agent_guide :: proc(t: ^Agent_Thread) -> string {
 		for c in t.attached do fmt.sbprintf(&b, "\n- %s: %s", "folder" if c.folder else "file", c.path)
 		strings.write_string(&b, "\n")
 	}
-	strings.write_string(&b, "Check your work with a screenshot. Answer briefly when done. The whole request is one undo step for the user.")
+	strings.write_string(&b, "Check your work with a screenshot. Answer briefly when done. The whole request is one undo step for the user.\n")
+	strings.write_string(&b, "Your answers are shown as Markdown in the app's chat. Point at the design with links the user can click: [the sign-in button](node:<layer id>) selects that layer and brings it into view; [this area](canvas:<x>,<y>,<w>,<h>) shows that part of the page (page coordinates). To show what you made, put ![a caption](node:<layer id>) alone on a line: the chat draws a live picture of that layer (a frame, a component or any node).")
 	return strings.to_string(b)
 }
 
@@ -526,10 +527,7 @@ agent_sign_in_hint :: proc(kind: Agent_Kind, msg: string) -> string {
 add_text :: proc(t: ^Agent_Thread, text: string) {
 	s := strings.trim_space(text)
 	if s == "" do return
-	// the panel draws plain text: markdown's bold and heading marks go
-	s, _ = strings.remove_all(s, "**", context.temp_allocator)
-	s, _ = strings.replace_all(s, "\n### ", "\n", context.temp_allocator)
-	s, _ = strings.replace_all(s, "\n## ", "\n", context.temp_allocator)
+	// kept as Markdown: the panel draws it (chat_markdown.odin)
 	append(&t.items, Run_Item{kind = .Text, text = strings.clone(s)})
 }
 

@@ -15,6 +15,7 @@ ob_face :: proc(weight: int) -> string {
 }
 
 ui_bold_loaded: bool
+ui_mono_loaded: bool // SF Mono, for code in the agent's answers
 
 ob_text :: proc(vg: ^nvg.Context, x, y: f32, text: string, size: f32, color: nvg.Color, weight := 400, align := nvg.AlignHorizontal.LEFT) {
 	nvg.FontFace(vg, ob_face(weight))
