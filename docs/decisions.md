@@ -2306,3 +2306,37 @@ document's index.
 and compares the window pictures byte for byte. A change that alters drawing without
 bumping the document version or the layout epoch would leave a stale canvas until the next
 change: such state must join the key.
+
+## 91. Design and Agent modes; text editing on the canvas
+
+**Problem.** The agent's input floated over the canvas with the layers, the inspector and
+the tools around it, and its thread grew over the design. Marks had a mode of their own
+behind a pencil. Text on the canvas could only be typed at its end; the agent's answers
+could not be copied; a copied text layer pasted as .pen JSON in other apps. The model and
+reasoning effort were the CLIs' own.
+
+**Decision** (app-ui.pen, Kirill's notes of 2026-11-06).
+
+- A Design | Agent switch leads the tab bar while a file is shown. Agent hides the floating
+  panels and the tools: a 400-wide panel docks at the left (session picker and "+", the
+  thread, a two-row input) and the marks bar sits at the bottom of the canvas; marks are
+  always on there. The canvas is the rest; switching keeps the view's centre. ⌘L goes to
+  Agent with the field focused. The Dashboard keeps its floating input.
+- Text in the thread is drawn as selectable blocks: drag or double click selects across
+  them, ⌘C copies.
+- The agent picker lists agents, models and efforts. Claude Code: --model fable | opus |
+  sonnet | haiku and --effort low…max. Codex: the visible models of
+  ~/.codex/models_cache.json with their efforts (-m, model_reasoning_effort). Gemini CLI:
+  its default. "" leaves a CLI's own setting; the choice is kept in settings.json.
+- A request keeps a line per mark and the context's names for the thread.
+- The canvas text editor (text_editor.odin): caret and selection from engine text geometry
+  (rows as drawn, rich text included), the keys of a text editor, one undo step per session.
+- A copied text layer puts its words on the system clipboard (the layers stay in the
+  window); plain text pasted on the canvas becomes a text layer.
+- Shortcuts leave the inspector: an empty file shows them (Settings › Canvas › Shortcuts).
+  The tab bar keeps the zoom; Export moves to the canvas's menu; the Dashboard's file menu
+  gets Duplicate, Copy to cloud and Rename.
+
+**Consequences.** tests/ui/text_editing.py, tests/agent/input.py (⌘L, ⌘., mark lines,
+--model/--effort), tests/dashboard/files.py. The Codex list follows Codex's cache; models
+for Gemini CLI are not listed until it can be run here.
