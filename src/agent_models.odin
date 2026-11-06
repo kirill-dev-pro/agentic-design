@@ -151,7 +151,7 @@ agent_model_label :: proc(k: Agent_Kind) -> string {
 	case name != "": return name
 	case e != "": return e
 	}
-	return ""
+	return "Default" // the CLI's own model and effort
 }
 
 // The CLI options for the chosen model and effort.

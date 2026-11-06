@@ -235,7 +235,8 @@ chat_hit :: proc(vg: ^nvg.Context, p: [2]f32) -> (Chat_Pos, bool) {
 @(private = "file")
 chat_input :: proc(vg: ^nvg.Context, area: Rect) {
 	if hovered(area) && len(chat.prev) > 0 do ui.cursor_hint = .IBeam
-	if mouse_pressed(MOUSE_BUTTON_LEFT) {
+	// (a click a row, a link or a button took is theirs: no selection starts there)
+	if mouse_pressed(MOUSE_BUTTON_LEFT) && !ui.click_taken {
 		if hovered(area) {
 			if pos, ok := chat_hit(vg, app.mouse); ok {
 				now := time.now()
