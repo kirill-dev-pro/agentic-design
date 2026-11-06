@@ -1298,3 +1298,79 @@ annot_leave_agent_mode :: proc() {
 	panel_ui.pick_open, panel_ui.ses_open, agent_ui.ctx_open = false, false, false
 	chat.has = false
 }
+
+// ---------------------------------------------------------------- an agent at work
+
+// Whether an agent works on the file now: a run from this window's agent panel, or an
+// agent's calls to it in the last few seconds (presence.odin). Its colour for the animation.
+agent_working_on :: proc(path: string) -> (working: bool, color: nvg.Color) {
+	if path == "" do return
+	for t in agent_state.threads do if t.running && t.key != "" && same_file(t.key, path) do return true, AGENT_DOTS[t.agent]
+	now := platform_time()
+	for &c in cursors do if !c.person && c.file != "" && same_file(c.file, path) && now - c.active < 4 do return true, c.color
+	return
+}
+
+// Any agent at work: the window keeps drawing (slowly) for the tabs' and cards' animation.
+agent_any_working :: proc() -> bool {
+	for t in agent_state.threads do if t.running do return true
+	now := platform_time()
+	for &c in cursors do if !c.person && now - c.active < 4 do return true
+	return false
+}
+
+// A spinning arc (a tab's icon while an agent works on its file).
+agent_spinner :: proc(vg: ^nvg.Context, cx, cy, r: f32, color: nvg.Color) {
+	a := f32(platform_time()) * 5
+	nvg.BeginPath(vg)
+	nvg.Circle(vg, cx, cy, r)
+	nvg.StrokeColor(vg, {color.r, color.g, color.b, 0.25})
+	nvg.StrokeWidth(vg, 1.8)
+	nvg.Stroke(vg)
+	nvg.BeginPath(vg)
+	nvg.Arc(vg, cx, cy, r, a, a + math.PI * 1.2, .CW)
+	nvg.StrokeColor(vg, color)
+	nvg.LineCap(vg, .ROUND)
+	nvg.Stroke(vg)
+}
+
+// A card on the Dashboard while an agent works on its file: a light running round its
+// edge, and the agent's name over the preview.
+agent_card_glow :: proc(vg: ^nvg.Context, card: Rect, color: nvg.Color, who: string) {
+	t := f32(platform_time())
+	pulse := 0.45 + 0.35 * math.sin(t * 3)
+	stroke_rect(vg, card, {color.r, color.g, color.b, pulse}, 10, 2)
+	// a bright spot travelling round the border
+	per := 2 * (card.w + card.h)
+	d := math.mod(t * 260, per)
+	p: [2]f32
+	switch {
+	case d < card.w: p = {card.x + d, card.y}
+	case d < card.w + card.h: p = {card.x + card.w, card.y + d - card.w}
+	case d < 2 * card.w + card.h: p = {card.x + card.w - (d - card.w - card.h), card.y + card.h}
+	case: p = {card.x, card.y + card.h - (d - 2 * card.w - card.h)}
+	}
+	glow := nvg.RadialGradient(p.x, p.y, 0, 40, {color.r, color.g, color.b, 0.9}, {color.r, color.g, color.b, 0})
+	nvg.Save(vg)
+	nvg.BeginPath(vg)
+	nvg.RoundedRect(vg, card.x - 1, card.y - 1, card.w + 2, card.h + 2, 11)
+	nvg.RoundedRect(vg, card.x + 2, card.y + 2, card.w - 4, card.h - 4, 8)
+	nvg.PathWinding(vg, .CW)
+	nvg.FillPaint(vg, glow)
+	nvg.Fill(vg)
+	nvg.Restore(vg)
+	text := fmt.tprintf("%s is working", who)
+	tw := text_width(vg, text, 11.5) + 30
+	pill := Rect{card.x + card.w - 10 - tw, card.y + 62, tw, 22}
+	fill_rect(vg, pill, {0, 0, 0, 0.65}, 11)
+	agent_spinner(vg, pill.x + 12, pill.y + 11, 4.5, color)
+	label(vg, pill.x + 22, pill.y + 11, text, {1, 1, 1, 0.95}, 11.5)
+}
+
+// The working agent's name for a file (for the card).
+agent_working_name :: proc(path: string) -> string {
+	for t in agent_state.threads do if t.running && t.key != "" && same_file(t.key, path) do return AGENT_KIND_NAMES[t.agent]
+	now := platform_time()
+	for &c in cursors do if !c.person && c.file != "" && same_file(c.file, path) && now - c.active < 4 do return c.name
+	return "An agent"
+}

@@ -136,3 +136,6 @@ agent_focus_keys :: proc() {}
 chat_previews_render :: proc() {}
 agent_take_drop :: proc(paths: []string) -> bool {return false}
 draw_update_button :: proc(vg: ^nvg.Context, right: f32) -> f32 {return 0}
+agent_working_on :: proc(path: string) -> (bool, nvg.Color) {return false, {}}
+agent_any_working :: proc() -> bool {return false}
+agent_spinner :: proc(vg: ^nvg.Context, cx, cy, r: f32, color: nvg.Color) {}

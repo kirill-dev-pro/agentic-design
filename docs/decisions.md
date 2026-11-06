@@ -2373,3 +2373,28 @@ thread scrolled against the trackpad; sparkles everywhere.
 
 **Consequences.** tests/agent/input.py covers tool details, context use, compaction and
 Markdown answers (fake_claude.py writes them). UI tests run in a home of their own.
+
+## 93. Pictures for a request, visible updates, agents at work
+
+**Problem** (Kirill, 2026-11-06). Pictures could not go to the agent; an update waited
+in Settings until the user went looking; the Dashboard opened on All files; nothing showed
+which files an agent was working on.
+
+**Decision.**
+
+- ⌘V in the agent's field takes a picture from the clipboard (PNG, TIFF converted, or a
+  copied image file); image files dropped on the agent's panel (or the Dashboard's input) do
+  the same, other files and folders become context. Pictures go with the next request only:
+  Claude gets a Read rule per picture, Codex `-i`, Gemini `@path`, and the prompt lists them.
+  The request keeps them (`images`) and the thread shows thumbnails.
+- Updates are checked every hour and downloaded and verified at once (as before, the
+  signature and hash first). A verified update puts "Restart to update" at the right of the
+  tab bar; a click installs it when agents are idle and relaunches.
+- The Dashboard opens on Recents.
+- A file an agent works on (a run from the agent panel, or MCP calls in the last 4 s) shows
+  a spinner in its tab and a travelling glow with "<agent> is working" on its Dashboard card;
+  the window draws 20 frames a second meanwhile.
+
+**Consequences.** tests/agent/input.py drops a picture; tests/update/e2e.py checks the
+button (its fake newer version is now the next patch); tests/dashboard/files.py selects All
+files. The input API takes `drop` for tests.

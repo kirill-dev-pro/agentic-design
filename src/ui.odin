@@ -102,7 +102,9 @@ draw_tab_bar :: proc(vg: ^nvg.Context) {
 		hover := in_rect(tab, app.mouse)
 		if active do fill_rect(vg, tab, ACTIVE_BG, 7)
 		else if hover do fill_rect(vg, tab, HOVER_BG, 7)
-		draw_icon(vg, .File, tab.x + 18, TAB_H / 2, TEXT_FG if active else TEXT_DIM, 15)
+		// an agent at work on the file: a spinner in its colour instead of the icon
+		if working, color := agent_working_on(app.file_path if i == app.tab else app.tabs[i].path); working do agent_spinner(vg, tab.x + 18, TAB_H / 2, 6, color)
+		else do draw_icon(vg, .File, tab.x + 18, TAB_H / 2, TEXT_FG if active else TEXT_DIM, 15)
 		renaming := active && ui.focus == "filename" && ui.focus_uid == 0
 		if renaming do field(vg, 0, "filename", "", {tab.x + 30, tab.y + 3, tab.w - 58, tab.h - 6}, engine.file_title(app.file_path))
 		else do label(vg, tab.x + 34, TAB_H / 2, name, TEXT_FG if active else TEXT_DIM, 13)

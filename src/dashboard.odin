@@ -32,6 +32,12 @@ dash: struct {
 
 DASH_CARD_MENU := [?]string{"Open", "Reveal in Finder", "Duplicate", "Copy to cloud", "Rename", "-", "Remove from list", "Hide this folder", "-", "Move to Trash…"}
 
+// The Dashboard opens on Recents (Kirill 2026-11-06).
+@(init)
+dash_init :: proc "contextless" () {
+	dash.recents = true
+}
+
 DASH_SORT_NAMES := [4]string{"Last modified", "Last opened", "Name", "Created"} // in Dash_Sort's order
 
 @(private = "file")
@@ -173,6 +179,7 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	if len(items) == 0 {
 		msg := "No files yet. Create one with + New file."
 		if dash.search != "" do msg = "No file names match."
+		else if dash.recents do msg = "The files you open show here. All files lists every .pen on this Mac."
 		else if files.running do msg = "Looking for .pen files…"
 		label(vg, x0, area.y + 28, msg, TEXT_DIM, 13)
 	}
@@ -247,6 +254,7 @@ draw_card :: proc(vg: ^nvg.Context, card: Rect, e: File_Item) {
 	} else {
 		label(vg, thumb.x + thumb.w / 2, thumb.y + thumb.h / 2, "Drawing a preview…" if thumb_pending(e.path) else ("Empty file" if e.path in thumb_empty else "No preview"), TEXT_DIM, 12, false, .CENTER)
 	}
+	if working, color := agent_working_on(e.path); working do agent_card_glow(vg, card, color, agent_working_name(e.path))
 }
 
 // "~/OpenBot/Shared" for a folder under the home folder.

@@ -375,6 +375,8 @@ idle_wait :: proc() -> f64 {
 		step := max(1 / pf.refresh, 1.0 / 60, cost * 3) if fast else max(1.0 / 20, cost * 15)
 		return max(frame_started + step - now, 0.001)
 	}
+	// an agent at work: the tabs' and the Dashboard's animation, at 20 frames a second
+	if agent_any_working() do return max(frame_started + 1.0 / 20 - now, 0.001)
 	into := time.now()._nsec % 500_000_000 // carets blink on every half second
 	return f64(500_000_000 - into) / 1e9 + 0.002
 }
