@@ -122,6 +122,8 @@ draw_tab_bar :: proc(vg: ^nvg.Context) {
 	if close_me >= 0 do close_tab(close_me)
 	if icon_button(vg, {x + 2, 8, 28, 28}, .Plus) do new_document()
 	if app.tab >= 0 do draw_view_controls(vg)
+	// a downloaded update: Restart, left of the zoom
+	draw_update_button(vg, app.screen.x - 12 - (80 if app.tab >= 0 else 0))
 }
 
 // The layers panel, floating at the top left (panels.odin). Its content is drawn where the

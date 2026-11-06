@@ -10,6 +10,7 @@ import "core:encoding/base64"
 import "core:encoding/hex"
 import "core:encoding/json"
 import "core:fmt"
+import nvg "nanovg"
 import "core:os"
 import "core:strings"
 import "core:sync"
@@ -32,7 +33,7 @@ import "core:time"
 
 UPDATE_FEED :: #config(UPDATE_FEED, "https://github.com/kirill-dev-pro/agentic-design/releases/latest/download/latest.json")
 UPDATE_PUBLIC_KEY :: "uoWalaT1HbHqv6yYLY/Q1TRXp9zvOd+wCSmCd6W7yFI="
-UPDATE_INTERVAL :: 24 * time.Hour
+UPDATE_INTERVAL :: time.Hour // a check an hour; a found update downloads at once
 UPDATE_FIRST_CHECK :: 8 * time.Second // after launch, so starting stays quick
 UPDATE_AGENT_QUIET :: 5 * time.Second // no agent request for this long before installing
 
@@ -94,7 +95,7 @@ update_tick :: proc() {
 	}
 	if update_phase() == .Ready && !update.announced {
 		update.announced = true
-		set_status("Agentic Design %s is ready: restart to update (Settings)", update.version)
+		set_status("Agentic Design %s is downloaded: Restart at the top right installs it", update.version)
 	}
 	if update_phase() == .Waiting_For_Agents && !agents_busy() do update_install()
 }
@@ -311,6 +312,31 @@ update_install :: proc() {
 		_, _ = os.process_wait(p)
 	}
 	platform_request_close()
+}
+
+// ---------------------------------------------------------------- the tab bar's button
+
+// "Restart to update" at the right of the tab bar once an update is downloaded and checked
+// (`right`: where it ends). Returns the width it takes.
+draw_update_button :: proc(vg: ^nvg.Context, right: f32) -> f32 {
+	phase := update_phase()
+	text: string
+	#partial switch phase {
+	case .Ready: text = "Restart to update"
+	case .Waiting_For_Agents: text = "Restarting after the agent"
+	case .Installing: text = "Restarting…"
+	case: return 0
+	}
+	w := text_width(vg, text, 12.5) + 40
+	r := Rect{right - w, (TAB_H - 28) / 2, w, 28}
+	ready := phase == .Ready
+	fill_rect(vg, r, ACCENT if ready else {1, 1, 1, 0.08}, 8)
+	if ready && hovered(r) do fill_rect(vg, r, {1, 1, 1, 0.12}, 8)
+	draw_lucide(vg, "refresh-cw", r.x + 16, r.y + 14, 13, {1, 1, 1, 1} if ready else TEXT_DIM, 1.8)
+	label(vg, r.x + 29, r.y + 14, text, {1, 1, 1, 1} if ready else TEXT_DIM, 12.5)
+	if hovered(r) do tooltip_request(fmt.tprintf("Agentic Design %s is downloaded. Restart to install it; your files are saved and reopened.", update.version), r)
+	if ready && clicked(r) do update_request_install()
+	return w + 8
 }
 
 // ---------------------------------------------------------------- socket (tests)

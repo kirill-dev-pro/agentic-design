@@ -135,3 +135,4 @@ draw_marks_bar :: proc(vg: ^nvg.Context) {}
 agent_focus_keys :: proc() {}
 chat_previews_render :: proc() {}
 agent_take_drop :: proc(paths: []string) -> bool {return false}
+draw_update_button :: proc(vg: ^nvg.Context, right: f32) -> f32 {return 0}
