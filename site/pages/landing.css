@@ -128,14 +128,19 @@ h1 {
 .hero-in { position: relative; }
 .flow { position: absolute; left: var(--fl, 0); top: var(--ft, 0); width: var(--fw, 100%); height: var(--fh, 0); pointer-events: none; z-index: 1; }
 .flow i, .flow span { position: absolute; display: block; }
-.flow-cone { inset: -10px 0 0; filter: blur(22px); opacity: .9; }
-.flow-cone i { inset: 0; background: linear-gradient(0deg, #E8876A66, #E8876A1F 55%, #FFB48F88);
-	clip-path: polygon(calc(var(--cx) - 18px) 0, calc(var(--cx) + 18px) 0, 100% 100%, 0 100%); animation: breathe 4s ease-in-out infinite; }
-.flow-core { left: calc(var(--cx) - 1px); top: 0; width: 2px; height: 62%; overflow: hidden;
-	background: linear-gradient(180deg, #FFF1EA, #FFB48F99 55%, #E8876A00); box-shadow: 0 0 10px 2px #FFB48F66; }
-.flow-core::after { content: ""; position: absolute; left: 0; right: 0; height: 50px; background: linear-gradient(0deg, #fff0, #fff, #fff0); animation: rise 1.8s cubic-bezier(.4, 0, .6, 1) infinite; }
-.flow-spot { left: calc(var(--cx) - 160px); top: -70px; width: 320px; height: 100px; border-radius: 50%; background: radial-gradient(closest-side, #E8876A99, #E8876A00); filter: blur(16px); animation: breathe 3.2s ease-in-out infinite; }
-.flow-pool { left: -6%; right: -6%; bottom: -40px; height: 80px; border-radius: 50%; background: radial-gradient(closest-side, #FFB48F70, #E8876A30 55%, #E8876A00); filter: blur(10px); animation: breathe 3.2s ease-in-out infinite reverse; }
+.fx { position: absolute; left: 0; top: 0; overflow: visible; }
+.fx-halo { filter: blur(30px); opacity: .95; animation: breathe 4.5s ease-in-out infinite; }
+.fx-tint { filter: blur(16px); opacity: .8; mix-blend-mode: screen; }
+.fx-flare { filter: blur(5px); }
+/* the flash where the light lands on the window */
+.flow-base { left: calc(var(--cx) - 45%); width: 90%; bottom: -18px; height: 36px; border-radius: 50%;
+	background: radial-gradient(closest-side, #FFFFFF, #FFD3BFcc 30%, #E8876A66 65%, #E8876A00); filter: blur(7px); animation: breathe 3.2s ease-in-out infinite; }
+.fx-sharp { filter: blur(.6px); }
+/* the column: a white-hot line in a clay glow, with light running up it */
+.flow-core { left: calc(var(--cx) - 1.5px); top: 0; width: 3px; height: 100%; overflow: hidden; border-radius: 2px;
+	background: linear-gradient(180deg, #FFE6DA, #FFFFFF 70%, #FFFFFF); box-shadow: 0 0 8px 2px #FFC7AE, 0 0 26px 8px #E8876A88, 0 0 70px 18px #E8876A44; }
+.flow-core::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; background: linear-gradient(0deg, #fff0, #fff, #fff0); animation: rise 1.6s cubic-bezier(.4, 0, .6, 1) infinite; }
+.flow-spot { left: calc(var(--cx) - 170px); top: -70px; width: 340px; height: 110px; border-radius: 50%; background: radial-gradient(closest-side, #E8876A99, #E8876A00); filter: blur(16px); animation: breathe 3.2s ease-in-out infinite; }
 .flow-dust { inset: 0; }
 /* a particle rises (the outer element) while it drifts to the centre (the inner one), so
    the paths bend inwards and meet in the stream */
@@ -160,7 +165,11 @@ h1 {
 }
 .window img { width: 100%; aspect-ratio: 1200 / 750; object-fit: cover; }
 .window::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px #E8876A66; pointer-events: none; }
-.window-edge { position: absolute; z-index: 1; top: 0; left: 16.4%; width: 50%; height: 1px; background: linear-gradient(90deg, #FFB48F00, #FFD3BF, #FFB48F00); }
+/* the window's top edge, lit across its width from where the light lands (--cx from landing.js) */
+.window-edge { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 2px;
+	background: radial-gradient(farthest-side at var(--cx, 50%) 50%, #FFFFFF, #FFE3D6 35%, #FFB48F 70%, #E8876A99); box-shadow: 0 0 10px 1px #FFB48F, 0 0 28px 4px #E8876A88; }
+.window-edge::after { content: ""; position: absolute; left: calc(var(--cx, 50%) - 45%); width: 90%; top: 0; height: 140px;
+	background: radial-gradient(closest-side at 50% 0, #FFB48F55, #E8876A00); }
 
 /* Sections */
 .section { padding-block: var(--pad-y); position: relative; }
