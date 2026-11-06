@@ -73,6 +73,7 @@ Run_Item :: struct {
 	notes: string, // a request: a line per mark ("Tag 1 · Email field")
 	ctx:   string, // a request: the context attached, a name per line ("/" ends a folder's)
 	detail: string, // a tool: each call's input and result; a note: the summary
+	images: string, // a request: the pictures sent with it, a path per line
 	open:  bool, // the details are shown (not kept)
 }
 
@@ -82,6 +83,7 @@ run_item_free :: proc(it: Run_Item) {
 	delete(it.notes)
 	delete(it.ctx)
 	delete(it.detail)
+	delete(it.images)
 }
 
 Agent_Thread :: struct {
@@ -316,8 +318,17 @@ agent_send_now :: proc(prompt: string, hidden := false) {
 		strings.write_string(&cb, fs_base(c.path))
 		if c.folder do strings.write_byte(&cb, '/')
 	}
+	// pictures pasted or dropped for this request
+	pictures: []string
+	if !hidden do pictures = chat_images_take()
+	if len(pictures) > 0 {
+		pb := strings.builder_make(context.temp_allocator)
+		strings.write_string(&pb, "\n\nThe user attached pictures for this request; look at them:")
+		for p in pictures do fmt.sbprintf(&pb, "\n- %s", p)
+		sent = fmt.tprintf("%s%s", sent, strings.to_string(pb))
+	}
 	if hidden do append(&t.items, Run_Item{kind = .Note, text = strings.clone("Compacting the conversation…")})
-	else do append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n, notes = strings.clone(marks_notes), ctx = strings.clone(strings.to_string(cb))})
+	else do append(&t.items, Run_Item{kind = .User, text = strings.clone(text), image = strings.clone(marks_image), marks = marks_n, notes = strings.clone(marks_notes), ctx = strings.clone(strings.to_string(cb)), images = strings.join(pictures, "\n")})
 	session_touch(t)
 	t.shown, t.scroll = true, 0
 	t.agent = kind
@@ -349,6 +360,7 @@ agent_send_now :: proc(prompt: string, hidden := false) {
 		readable := make([dynamic]string, context.temp_allocator)
 		for c in t.attached do append(&readable, fmt.tprintf("Read(/%s%s)", c.path, "/**" if c.folder else ""))
 		if marks_image != "" do append(&readable, fmt.tprintf("Read(/%s)", marks_image))
+		for p in pictures do append(&readable, fmt.tprintf("Read(/%s)", p))
 		// (one rule per argument: paths may hold spaces; the options that take several values
 		// come before others, so none of them takes the prompt)
 		append(&args, cli, "-p")
@@ -363,6 +375,7 @@ agent_send_now :: proc(prompt: string, hidden := false) {
 		servers := fmt.tprintf(`mcp_servers={{"agentic-design"={{command=%s,args=["mcp"],env={{AGENTIC_PORT="%d",AGENTIC_NO_LAUNCH="1",AGENTIC_RUN="%s"}},default_tools_approval_mode="approve"}}}}`, json_quote(exe), port, t.token)
 		append(&args, cli, "exec")
 		if marks_image != "" do append(&args, "-i", marks_image) // (it takes several files: before other options)
+		for p in pictures do append(&args, "-i", p)
 		append(&args, "--json", "--sandbox", "read-only", "--skip-git-repo-check", "-C", dir, "-c", servers, "-c", `approval_policy="never"`)
 		agent_args_model(kind, &args)
 		if resume != "" do append(&args, "resume", resume)
@@ -383,6 +396,7 @@ agent_send_now :: proc(prompt: string, hidden := false) {
 		if resume != "" do append(&args, "--resume", resume)
 		g := fmt.tprintf("%s\n\nRequest: %s", guide, sent)
 		if marks_image != "" do g = fmt.tprintf("%s\n\nThe marked view: @%s", g, marks_image)
+		for p in pictures do g = fmt.tprintf("%s\n@%s", g, p)
 		append(&args, "-p", g)
 	}
 
@@ -915,6 +929,10 @@ agent_thread_save :: proc(t: ^Agent_Thread) {
 			strings.write_string(&b, `,"detail":`)
 			engine.json_write_string(&b, it.detail)
 		}
+		if it.images != "" {
+			strings.write_string(&b, `,"images":`)
+			engine.json_write_string(&b, it.images)
+		}
 		strings.write_string(&b, `,"text":`)
 		engine.json_write_string(&b, it.text)
 		strings.write_byte(&b, '}')
@@ -981,7 +999,7 @@ session_load :: proc(t: ^Agent_Thread, sid: string) -> bool {
 		case "Error": kind = .Error
 		case "Note": kind = .Note
 		}
-		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0), notes = strings.clone(string(io["notes"].(json.String) or_else "")), ctx = strings.clone(string(io["context"].(json.String) or_else "")), detail = strings.clone(string(io["detail"].(json.String) or_else ""))})
+		append(&t.items, Run_Item{kind = kind, text = strings.clone(string(io["text"].(json.String) or_else "")), count = int(io["count"].(json.Float) or_else 1), image = strings.clone(string(io["image"].(json.String) or_else "")), marks = int(io["marks"].(json.Float) or_else 0), notes = strings.clone(string(io["notes"].(json.String) or_else "")), ctx = strings.clone(string(io["context"].(json.String) or_else "")), detail = strings.clone(string(io["detail"].(json.String) or_else "")), images = strings.clone(string(io["images"].(json.String) or_else ""))})
 	}
 	if len(t.items) > 0 do t.state = .Done
 	return true

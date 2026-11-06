@@ -134,3 +134,4 @@ draw_mode_switch :: proc(vg: ^nvg.Context, x: f32) -> f32 {return x}
 draw_marks_bar :: proc(vg: ^nvg.Context) {}
 agent_focus_keys :: proc() {}
 chat_previews_render :: proc() {}
+agent_take_drop :: proc(paths: []string) -> bool {return false}

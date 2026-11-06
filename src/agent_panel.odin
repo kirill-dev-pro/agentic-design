@@ -464,6 +464,7 @@ item_height :: proc(vg: ^nvg.Context, it: Run_Item, w: f32) -> f32 {
 		h: f32 = 24 + chat_text_height(vg, inner, it.text, 13.5)
 		if it.ctx != "" || it.marks > 0 do h += 26 + 10
 		if it.image != "" do h += 120 + 10
+		if it.images != "" do h += 72 + 10
 		if it.notes != "" do h += f32(strings.count(it.notes, "\n") + 1) * 24 + (10 if it.image == "" else 0)
 		return h
 	case .Text: return md_draw(vg, 0, 0, w, it.text, C_TEXT, false)
@@ -581,6 +582,30 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 				cy += 36
 			}
 			cy += chat_text(vg, ix, cy, w - 28, it.text, 13.5, C_TEXT)
+			if it.images != "" {
+				cy += 10
+				px := ix
+				for p in strings.split_lines(it.images, context.temp_allocator) {
+					if p == "" || px + 96 > ix + w - 28 do continue
+					tr := Rect{px, cy, 96, 72}
+					fill_rect(vg, tr, {0x28 / 255.0, 0x28 / 255.0, 0x28 / 255.0, 1}, 8)
+					if img := thumb_of(vg, p); img > 0 {
+						iw, ih := nvg.ImageSize(vg, img)
+						sc := max(tr.w / f32(iw), tr.h / f32(ih))
+						nvg.Save(vg)
+						nvg.IntersectScissor(vg, tr.x, tr.y, tr.w, tr.h)
+						nvg.BeginPath(vg)
+						nvg.RoundedRect(vg, tr.x, tr.y, tr.w, tr.h, 8)
+						nvg.FillPaint(vg, nvg.ImagePattern(tr.x + (tr.w - f32(iw) * sc) / 2, tr.y + (tr.h - f32(ih) * sc) / 2, f32(iw) * sc, f32(ih) * sc, 0, img, 1))
+						nvg.Fill(vg)
+						nvg.Restore(vg)
+					}
+					stroke_rect(vg, tr, C_LINE, 8)
+					if hovered(tr) do tooltip_request(fs_base(p), tr)
+					px += 102
+				}
+				cy += 72
+			}
 			if it.image != "" {
 				cy += 10
 				tr := Rect{ix, cy, 190, 120}
@@ -789,6 +814,7 @@ composer_height :: proc(vg: ^nvg.Context, t: ^Agent_Thread) -> f32 {
 	lines := len(prompt_rows(vg, text, w))
 	h := 10 + f32(clamp(lines, 1, 8)) * PROMPT_LH + 10 + 36 + 10
 	if len(t.attached) > 0 || annotations_count() > 0 do h += 26 + 10
+	if len(chat_images) > 0 do h += 44 + 10
 	return h
 }
 
@@ -803,6 +829,11 @@ draw_composer :: proc(vg: ^nvg.Context, t: ^Agent_Thread, comp: Rect) {
 	fill_rect(vg, comp, C_INPUT, 14)
 	stroke_rect(vg, comp, ACCENT if focused else {1, 1, 1, 0.09}, 14)
 	y := comp.y + 10
+	// the pictures for this request
+	if len(chat_images) > 0 {
+		draw_chat_images(vg, comp.x + 12, y)
+		y += 54
+	}
 	// chips: context and marks
 	if len(t.attached) > 0 || annotations_count() > 0 {
 		x := comp.x + 12
@@ -925,7 +956,7 @@ text_menus :: proc() {
 				replace(a, b, "")
 			}
 		case 1: if b > a do platform_clipboard_set(text[a:b])
-		case 2: replace(a, b, platform_clipboard_get())
+		case 2: if !chat_paste_image() do replace(a, b, platform_clipboard_get())
 		case 4: ui.sel, ui.caret = 0, len(text)
 		}
 		s := strings.to_string(ui.buf)
@@ -1044,6 +1075,8 @@ prompt_area :: proc(vg: ^nvg.Context, area: Rect, x, y, w: f32, placeholder: str
 					return
 				}
 			} else {
+				// ⌘V with a picture on the clipboard attaches it
+				if mod_cmd() && key_pressed(KEY_V) && chat_paste_image() do pf.key_pressed[KEY_V] = false
 				index := ui.field_count
 				ui.field_count += 1
 				field_keys(index, false)

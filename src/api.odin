@@ -1012,7 +1012,11 @@ inject_input :: proc(params: json.Object) {
 	}
 	if m, ok := params["magnify"].(json.Float); ok do pf.magnify = f32(m)
 	if params["smart"].(json.Boolean) or_else false do pf.smart = true
-	if text, ok := params["chars"].(json.String); ok {
+	// files dropped on the window (tests): {"drop": ["/path", ...]} at the pointer
+	if drops, ok := params["drop"].(json.Array); ok {
+		for d in drops do if p, is_str := d.(json.String); is_str do append(&pf.dropped, strings.clone(string(p)))
+	}
+		if text, ok := params["chars"].(json.String); ok {
 		for r in string(text) do append(&pf.chars, r)
 	}
 	key_code :: proc(name: string) -> c.int {

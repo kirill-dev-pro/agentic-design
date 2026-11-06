@@ -311,7 +311,7 @@ draw_chips :: proc(vg: ^nvg.Context, t: ^Agent_Thread, input: Rect) -> (top: f32
 	agent_ui.chips = {}
 	top = input.y
 	n := annotations_count()
-	if len(t.attached) == 0 && n == 0 do return
+	if len(t.attached) == 0 && n == 0 && len(chat_images) == 0 do return
 	h: f32 = 26
 	y := input.y - 8 - h
 	x := input.x + 16
@@ -354,6 +354,16 @@ draw_chips :: proc(vg: ^nvg.Context, t: ^Agent_Thread, input: Rect) -> (top: f32
 		label(vg, cr.x + 26, cr.y + h / 2, text, TEXT_FG, 12)
 		xr := Rect{cr.x + cw - 22, cr.y + 4, 18, 18}
 		if lucide_button(vg, xr, "x", tip = "Clear marks") do annotations_clear()
+		x += cw + 6
+	}
+	if len(chat_images) > 0 {
+		text := fmt.tprintf("%d picture%s", len(chat_images), "" if len(chat_images) == 1 else "s")
+		cw := text_width(vg, text, 12) + 52
+		cr := Rect{x, y, cw, h}
+		fill_rect(vg, cr, {0.2, 0.2, 0.22, 0.95}, h / 2)
+		draw_lucide(vg, "image", cr.x + 14, cr.y + h / 2, 12, TEXT_FG, 1.6)
+		label(vg, cr.x + 26, cr.y + h / 2, text, TEXT_FG, 12)
+		if lucide_button(vg, {cr.x + cw - 22, cr.y + 4, 18, 18}, "x", tip = "Remove the pictures") do for len(chat_images) > 0 do chat_image_remove(0)
 		x += cw + 6
 	}
 	if remove >= 0 do agent_context_remove(t, remove)
@@ -597,6 +607,7 @@ draw_agent_input :: proc(vg: ^nvg.Context) {
 		agent_send(text)
 		agent_draft_clear()
 	} else {
+		if focused && mod_cmd() && key_pressed(KEY_V) && chat_paste_image() do pf.key_pressed[KEY_V] = false
 		field(vg, 0, "agent.prompt", "", fr, agent_state.draft, placeholder = placeholder, bare = true)
 		if field_is_focused(0, "agent.prompt") {
 			s := strings.to_string(ui.buf)

@@ -47,6 +47,8 @@ handle_drops :: proc() {
 		for p in pf.dropped do delete(p)
 		clear(&pf.dropped)
 	}
+	// on the agent's panel or input: pictures and context for the agent
+	if agent_take_drop(pf.dropped[:]) do return
 	at := to_page(app.mouse) if canvas_hit(app.mouse) else to_page(canvas_center())
 	fonts_dropped := make([dynamic]string, context.temp_allocator)
 	for p in pf.dropped do if engine.is_font_file(p) && app.tab >= 0 do append(&fonts_dropped, p)
