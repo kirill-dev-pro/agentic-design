@@ -10,7 +10,14 @@ import nvg "nanovg"
 
 // Inter when it is installed (the onboarding's type), else the interface font.
 ob_face :: proc(weight: int) -> string {
-	if engine.family_find("Inter") != nil do return engine.font_face("Inter", weight, false)
+	// (looked up once per font change: finding a family goes through every font on the Mac)
+	@(static) inter: bool
+	@(static) epoch := -1
+	if epoch != engine.layout_epoch {
+		inter = engine.family_find("Inter") != nil
+		epoch = engine.layout_epoch
+	}
+	if inter do return engine.font_face("Inter", weight, false)
 	return "ui-bold" if weight >= 600 && ui_bold_loaded else "ui"
 }
 

@@ -252,9 +252,31 @@ fonts_scan_dir :: proc(d: string) -> bool {
 	return true
 }
 
+// (an index of lower-case names, rebuilt when the list changes: lowering every family's name
+// on each call took seconds a frame for text drawn word by word)
+@(private = "file")
+family_index: map[string]int
+@(private = "file")
+family_index_n := -1
+
 family_find :: proc(name: string) -> ^Family {
+	if family_index_n != len(families) {
+		for k in family_index do delete(k)
+		clear(&family_index)
+		for fam, i in families {
+			k := strings.to_lower(fam.name)
+			if k in family_index do delete(k)
+			else do family_index[k] = i
+		}
+		family_index_n = len(families)
+	}
 	key := strings.to_lower(strings.trim_space(name), context.temp_allocator)
-	for &fam in families do if strings.to_lower(fam.name, context.temp_allocator) == key do return &fam
+	if i, ok := family_index[key]; ok && i < len(families) && strings.equal_fold(families[i].name, key) do return &families[i]
+	// renamed meanwhile: the long way, and a fresh index next time
+	for &fam in families do if strings.equal_fold(fam.name, key) {
+		family_index_n = -1
+		return &fam
+	}
 	return nil
 }
 

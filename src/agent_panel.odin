@@ -85,13 +85,40 @@ Chat_Style :: enum u8 {
 	Mono,
 }
 
-// The face of a style: Inter's weights and italics when the app has them.
+// The face of a style: Inter's weights and italics when the app has them. Looked up once
+// and kept (finding a family goes through every font on the Mac: thousands of lookups a
+// frame for a long thread made a frame take seconds).
+chat_faces: struct {
+	faces:  [Chat_Style]string,
+	inter:  bool,
+	done:   bool,
+	epoch:  int, // engine.layout_epoch: fonts installed meanwhile
+}
+
 chat_face :: proc(st: Chat_Style) -> string {
-	if st == .Mono do return "ui-mono" if ui_mono_loaded else "ui"
-	bold := st == .Bold || st == .Bold_Italic
-	italic := st == .Italic || st == .Bold_Italic
-	if engine.family_find("Inter") != nil do return engine.font_face("Inter", 650 if bold else 400, italic)
-	return "ui-bold" if bold && ui_bold_loaded else "ui"
+	if !chat_faces.done || chat_faces.epoch != engine.layout_epoch {
+		for f in chat_faces.faces do delete(f)
+		chat_faces.inter = engine.family_find("Inter") != nil
+		for style in Chat_Style {
+			face: string
+			bold := style == .Bold || style == .Bold_Italic
+			italic := style == .Italic || style == .Bold_Italic
+			switch {
+			case style == .Mono: face = "ui-mono" if ui_mono_loaded else "ui"
+			case chat_faces.inter: face = engine.font_face("Inter", 650 if bold else 400, italic)
+			case: face = "ui-bold" if bold && ui_bold_loaded else "ui"
+			}
+			chat_faces.faces[style] = strings.clone(face)
+		}
+		chat_faces.done, chat_faces.epoch = true, engine.layout_epoch
+	}
+	return chat_faces.faces[st]
+}
+
+// Inter is installed (bold and italic are its own faces, not drawn ones).
+chat_has_inter :: proc() -> bool {
+	_ = chat_face(.Regular)
+	return chat_faces.inter
 }
 
 Chat_Piece :: struct {
@@ -106,6 +133,18 @@ Chat_Block :: struct {
 	text:   string,
 	pieces: []Chat_Piece,
 	lh:     f32,
+	id:     int, // item × 1024 + its block: kept while scrolling, when only some are drawn
+}
+
+// The thread item whose blocks are drawn next.
+chat_item :: proc(i: int) {
+	chat.item, chat.sub = i, 0
+}
+
+@(private = "file")
+block_by_id :: proc(id: int) -> ^Chat_Block {
+	for &b in chat.prev do if b.id == id do return &b
+	return nil
 }
 
 Chat_Pos :: struct {
@@ -120,6 +159,7 @@ chat: struct {
 	dragging:   bool,
 	area:       Rect, // where selecting starts
 	last_click: time.Time,
+	item, sub:  int, // the item being drawn and its next block
 }
 
 @(private = "file")
@@ -137,8 +177,9 @@ piece_x :: proc(vg: ^nvg.Context, text: string, p: Chat_Piece, at: int) -> f32 {
 // Lists a block drawn by the caller (pieces in temp memory) and draws the selection over it.
 // Call before drawing its glyphs.
 chat_block :: proc(vg: ^nvg.Context, text: string, pieces: []Chat_Piece, lh: f32) {
-	index := len(chat.blocks)
-	append(&chat.blocks, Chat_Block{text = text, pieces = pieces, lh = lh})
+	index := chat.item * 1024 + chat.sub
+	chat.sub += 1
+	append(&chat.blocks, Chat_Block{text = text, pieces = pieces, lh = lh, id = index})
 	if !chat.has do return
 	lo, hi := chat.a, chat.b
 	if pos_less(hi, lo) do lo, hi = hi, lo
@@ -200,10 +241,10 @@ chat_hit :: proc(vg: ^nvg.Context, p: [2]f32) -> (Chat_Pos, bool) {
 		}
 		if p.y >= bottom do best = i // the last block above
 	}
-	if best < 0 do return {0, 0}, true
+	if best < 0 do return {chat.prev[0].id, 0}, true
 	b := chat.prev[best]
-	if len(b.pieces) == 0 do return {best, 0}, true
-	if p.y >= b.pieces[len(b.pieces) - 1].y + b.lh do return {best, len(b.text)}, true
+	if len(b.pieces) == 0 do return {b.id, 0}, true
+	if p.y >= b.pieces[len(b.pieces) - 1].y + b.lh do return {b.id, len(b.text)}, true
 	// the line, then the piece on it, then the glyph boundary
 	line_y := b.pieces[0].y
 	for pc in b.pieces do if pc.y <= p.y do line_y = pc.y
@@ -212,13 +253,13 @@ chat_hit :: proc(vg: ^nvg.Context, p: [2]f32) -> (Chat_Pos, bool) {
 		if first < 0 do first = i
 		last = i
 	}
-	if first < 0 do return {best, 0}, true
+	if first < 0 do return {b.id, 0}, true
 	pc := b.pieces[last]
 	for i in first ..= last do if p.x < b.pieces[i].x + b.pieces[i].w {
 		pc = b.pieces[i]
 		break
 	}
-	if p.x <= pc.x do return {best, pc.a}, true
+	if p.x <= pc.x do return {b.id, pc.a}, true
 	nvg.FontFace(vg, chat_face(pc.style))
 	nvg.FontSize(vg, pc.size)
 	at, best_d := pc.a, abs(p.x - pc.x)
@@ -228,7 +269,7 @@ chat_hit :: proc(vg: ^nvg.Context, p: [2]f32) -> (Chat_Pos, bool) {
 		k += size
 		if d := abs(p.x - (pc.x + nvg.TextBounds(vg, 0, 0, b.text[pc.a:k]))); d < best_d do at, best_d = k, d
 	}
-	return {best, at}, true
+	return {b.id, at}, true
 }
 
 // The pointer and ⌘C over the thread (after its blocks are drawn).
@@ -242,8 +283,8 @@ chat_input :: proc(vg: ^nvg.Context, area: Rect) {
 				now := time.now()
 				double := time.duration_seconds(time.diff(chat.last_click, now)) < 0.35
 				chat.last_click = now
-				if double && pos.block < len(chat.prev) {
-					text := chat.prev[pos.block].text
+				if blk := block_by_id(pos.block); double && blk != nil {
+					text := blk.text
 					a, b := pos.at, pos.at
 					for a > 0 {
 						r, s := utf8.decode_last_rune_in_string(text[:a])
@@ -276,8 +317,10 @@ chat_input :: proc(vg: ^nvg.Context, area: Rect) {
 	if hovered(area) && mouse_pressed(MOUSE_BUTTON_RIGHT) && len(chat.prev) > 0 {
 		// without a selection: the message under the pointer
 		if !chat.has {
-			if pos, ok := chat_hit(vg, app.mouse); ok && pos.block < len(chat.prev) {
-				chat.a, chat.b, chat.has = {pos.block, 0}, {pos.block, len(chat.prev[pos.block].text)}, true
+			if pos, ok := chat_hit(vg, app.mouse); ok {
+				// the whole message: every block of its item
+				item := pos.block / 1024
+				chat.a, chat.b, chat.has = {item * 1024, 0}, {item * 1024 + 1023, max(int)}, true
 			}
 		}
 		if chat.has do menu_open("chat.menu", {app.mouse.x, app.mouse.y, 0, 0}, {"Copy\t⌘C", "Quote in reply", "-", "Select All"})
@@ -289,18 +332,35 @@ chat_input :: proc(vg: ^nvg.Context, area: Rect) {
 	if chat.has && ui.focus == "" && key_pressed(KEY_ESCAPE) do chat.has = false
 }
 
+// The selected text: the drawn blocks in range, and the items between them that scrolled
+// out of view (their own text).
 chat_selected_text :: proc() -> string {
 	lo, hi := chat.a, chat.b
 	if pos_less(hi, lo) do lo, hi = hi, lo
 	b := strings.builder_make(context.temp_allocator)
-	for i in lo.block ..= hi.block {
-		if i < 0 || i >= len(chat.prev) do continue
-		t := chat.prev[i].text
-		s := clamp(lo.at if i == lo.block else 0, 0, len(t))
-		e := clamp(hi.at if i == hi.block else len(t), s, len(t))
-		if i > lo.block do strings.write_string(&b, "\n\n")
-		strings.write_string(&b, t[s:e])
+	t := agent_current()
+	last_item := -1
+	add :: proc(b: ^strings.Builder, text: string) {
+		if strings.builder_len(b^) > 0 do strings.write_string(b, "\n\n")
+		strings.write_string(b, text)
 	}
+	gap :: proc(b: ^strings.Builder, t: ^Agent_Thread, from, to: int) {
+		for k in from ..< to do if k >= 0 && k < len(t.items) {
+			it := t.items[k]
+			if it.kind == .User || it.kind == .Text || it.kind == .Error do add(b, it.text)
+		}
+	}
+	for blk in chat.prev {
+		if blk.id < lo.block || blk.id > hi.block do continue
+		item := blk.id / 1024
+		if last_item >= 0 && item > last_item + 1 do gap(&b, t, last_item + 1, item)
+		if last_item < 0 && item > lo.block / 1024 do gap(&b, t, lo.block / 1024, item)
+		last_item = item
+		s := clamp(lo.at if blk.id == lo.block else 0, 0, len(blk.text))
+		e := clamp(hi.at if blk.id == hi.block else len(blk.text), s, len(blk.text))
+		add(&b, blk.text[s:e])
+	}
+	if last_item >= 0 && hi.block / 1024 > last_item do gap(&b, t, last_item + 1, hi.block / 1024 + 1)
 	return strings.to_string(b)
 }
 
@@ -314,7 +374,7 @@ chat_frame_end :: proc() {
 	for b in chat.blocks {
 		pieces := make([]Chat_Piece, len(b.pieces))
 		copy(pieces, b.pieces)
-		append(&chat.prev, Chat_Block{strings.clone(b.text), pieces, b.lh})
+		append(&chat.prev, Chat_Block{strings.clone(b.text), pieces, b.lh, b.id})
 	}
 	clear(&chat.blocks)
 }
@@ -477,6 +537,44 @@ item_height :: proc(vg: ^nvg.Context, it: Run_Item, w: f32) -> f32 {
 	return 0
 }
 
+// Heights of the thread's items, kept until the item, the width or the session changes.
+@(private = "file")
+Item_Key :: struct {
+	kind:                               Run_Item_Kind,
+	text, detail, images, notes, ctx: int,
+	marks:                              int,
+	image, open:                        bool,
+	w:                                  f32,
+}
+
+@(private = "file")
+item_heights: struct {
+	sid:  string,
+	keys: [dynamic]Item_Key,
+	hs:   [dynamic]f32,
+}
+
+@(private = "file")
+item_height_cached :: proc(vg: ^nvg.Context, t: ^Agent_Thread, i: int, w: f32) -> f32 {
+	if item_heights.sid != t.sid || len(item_heights.keys) > len(t.items) {
+		delete(item_heights.sid)
+		item_heights.sid = strings.clone(t.sid)
+		clear(&item_heights.keys)
+		clear(&item_heights.hs)
+	}
+	it := t.items[i]
+	k := Item_Key{it.kind, len(it.text), len(it.detail), len(it.images), len(it.notes), len(it.ctx), it.marks, it.image != "", it.open, w}
+	for len(item_heights.keys) <= i {
+		append(&item_heights.keys, Item_Key{w = -1})
+		append(&item_heights.hs, 0)
+	}
+	if item_heights.keys[i] != k {
+		item_heights.keys[i] = k
+		item_heights.hs[i] = item_height(vg, it, w)
+	}
+	return item_heights.hs[i]
+}
+
 DETAIL_SIZE :: f32(11.5)
 
 @(private = "file")
@@ -543,7 +641,7 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 	heights := make([]f32, len(t.items), context.temp_allocator)
 	content: f32 = PAD
 	for it, i in t.items {
-		heights[i] = item_height(vg, it, w)
+		heights[i] = item_height_cached(vg, t, i, w)
 		content += heights[i] + GAP
 	}
 	status_h: f32 = 34
@@ -558,6 +656,12 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 	x := area.x + PAD
 	for it, i in t.items {
 		h := heights[i]
+		chat_item(i)
+		// only what is in view is laid out and drawn (heights are cached)
+		if y + h < area.y || y > area.y + area.h {
+			y += h + GAP
+			continue
+		}
 		switch it.kind {
 		case .User:
 			card := Rect{x, y, w, h}
@@ -972,9 +1076,7 @@ text_menus :: proc() {
 			set_status("Copied")
 		case 1: quote_in_reply(chat_selected_text())
 		case 3:
-			if len(chat.prev) > 0 {
-				chat.a, chat.b, chat.has = {0, 0}, {len(chat.prev) - 1, len(chat.prev[len(chat.prev) - 1].text)}, true
-			}
+			chat.a, chat.b, chat.has = {0, 0}, {max(int) / 2, 0}, true
 		}
 	}
 }

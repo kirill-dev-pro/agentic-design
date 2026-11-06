@@ -329,7 +329,7 @@ chat_styled_text :: proc(vg: ^nvg.Context, x, y: f32, text: string, st: Chat_Sty
 	nvg.FontSize(vg, size)
 	nvg.TextAlign(vg, .LEFT, .MIDDLE)
 	nvg.FillColor(vg, color)
-	real := engine.family_find("Inter") != nil
+	real := chat_has_inter()
 	bold := (st == .Bold || st == .Bold_Italic) && !real && face == "ui"
 	italic := (st == .Italic || st == .Bold_Italic) && !real
 	if italic {

@@ -187,6 +187,7 @@ draw_thread :: proc(vg: ^nvg.Context, t: ^Agent_Thread, bottom: f32) {
 	x := r.x + 16
 	for it, i in t.items {
 		hh := heights[i]
+		chat_item(i)
 		if y + hh >= area.y && y <= area.y + area.h {
 			switch it.kind {
 			case .User:
