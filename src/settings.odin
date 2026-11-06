@@ -28,6 +28,7 @@ Settings :: struct {
 	hide_layers:    bool, // the editor's floating panels (panels.odin)
 	ui_scale:       f32, // the interface size, 0.9 to 1.3 (Settings, General)
 	hide_inspector: bool,
+	shortcuts_on_empty: bool, // an empty file shows the main shortcuts on its canvas
 }
 
 Dash_Sort :: enum i32 {
@@ -53,6 +54,7 @@ settings := Settings {
 	smart_guides = true,
 	agent_cursors = true,
 	auto_update  = true,
+	shortcuts_on_empty = true,
 }
 
 settings_open, shortcuts_open: bool
@@ -85,6 +87,7 @@ settings_load :: proc() {
 	if b, ok := obj["hideLayers"].(json.Boolean); ok do settings.hide_layers = bool(b)
 	if f, ok := obj["interfaceScale"].(json.Float); ok do settings.ui_scale = clamp(f32(f), UI_SCALES[0], UI_SCALES[len(UI_SCALES) - 1])
 	if b, ok := obj["hideInspector"].(json.Boolean); ok do settings.hide_inspector = bool(b)
+	if b, ok := obj["shortcutsOnEmpty"].(json.Boolean); ok do settings.shortcuts_on_empty = bool(b)
 	if arr, ok := obj["dashboardHidden"].(json.Array); ok {
 		for v in arr do if s, sok := v.(json.String); sok do append(&settings.dash_hidden, strings.clone(string(s)))
 	}
@@ -97,8 +100,8 @@ settings_save :: proc(in_test_window := false) {
 	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v,\n  \"interfaceScale\": %s\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector, engine.num_text(ui_scale()),
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v,\n  \"interfaceScale\": %s,\n  \"shortcutsOnEmpty\": %v\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector, engine.num_text(ui_scale()), s.shortcuts_on_empty,
 	)
 	_ = fs_write(settings_path(), text)
 }
@@ -202,6 +205,7 @@ SETTINGS_SECTION_ICONS := [Settings_Section]string {
 }
 
 settings_section := Settings_Section.General
+settings_scroll, settings_content_h: f32
 
 // A switch at the right of a settings row; true when clicked.
 settings_switch :: proc(vg: ^nvg.Context, x, cy: f32, on: bool) -> bool {
@@ -286,6 +290,7 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 		if clicked(r) && !active {
 			if ui.focus != "" do field_commit()
 			settings_section = sec
+			settings_scroll = 0
 		}
 		ny += 32
 	}
@@ -294,7 +299,14 @@ draw_settings_sheet :: proc(vg: ^nvg.Context) {
 	x := nav.x + nav.w + 24
 	cw := sheet.x + sheet.w - 24 - x
 	ob_text(vg, x, sheet.y + 30, SETTINGS_SECTION_NAMES[settings_section], 18, TEXT_FG, 600)
-	y := sheet.y + 60
+	// the section scrolls when it is taller than the sheet
+	body := Rect{nav.x + nav.w, sheet.y + 52, sheet.w - nav.w, sheet.h - 52}
+	settings_scroll = clamp(settings_scroll - wheel_over(body), 0, max(settings_content_h - body.h, 0))
+	nvg.Save(vg)
+	nvg.IntersectScissor(vg, body.x, body.y, body.w, body.h)
+	defer nvg.Restore(vg)
+	y := sheet.y + 60 - settings_scroll
+	defer settings_content_h = y + settings_scroll - body.y
 	switch settings_section {
 	case .Account: draw_settings_account(vg, x, cw, &y)
 	case .General: draw_settings_general(vg, x, cw, &y)
@@ -352,6 +364,57 @@ draw_settings_canvas :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 			settings_save()
 		}
 	}
+	box = settings_group(vg, x, w, y, "Shortcuts", 1)
+	cy = settings_row_text(vg, box, 0, "Show on empty files", "A new or empty file shows the main shortcuts in the middle of the canvas")
+	if settings_switch(vg, box.x + box.w - 14, cy, settings.shortcuts_on_empty) {
+		settings.shortcuts_on_empty = !settings.shortcuts_on_empty
+		settings_save()
+	}
+	// every main shortcut, in two columns
+	rows := max(len(CANVAS_SHORTCUTS_LEFT), len(CANVAS_SHORTCUTS_RIGHT))
+	list := Rect{x, y^ - 8, w, f32(rows) * 30 + 16}
+	fill_rect(vg, list, {1, 1, 1, 0.03}, 10)
+	stroke_rect(vg, list, {1, 1, 1, 0.08}, 10)
+	col := (w - 28) / 2
+	for cols, c in ([2][]Shortcut_Row{CANVAS_SHORTCUTS_LEFT[:], CANVAS_SHORTCUTS_RIGHT[:]}) {
+		cx := list.x + 14 + f32(c) * (col + 14)
+		for row, i in cols {
+			ry := list.y + 8 + f32(i) * 30 + 15
+			label(vg, cx, ry, row.name, TEXT_FG, 12.5)
+			keycaps(vg, cx + col - 6, ry, row.keys)
+		}
+	}
+	y^ += list.h + 12
+}
+
+// A shortcut as the canvas placeholder and Settings › Canvas show it: keys are drawn as
+// keycaps, a part starting with "+" as plain text ("+ drag").
+Shortcut_Row :: struct {
+	name: string,
+	keys: []string,
+}
+
+CANVAS_SHORTCUTS_LEFT := [?]Shortcut_Row{{"Move", {"V"}}, {"Hand", {"H"}}, {"Frame", {"F"}}, {"Rectangle", {"R"}}, {"Ellipse", {"E"}}, {"Text", {"T"}}}
+CANVAS_SHORTCUTS_RIGHT := [?]Shortcut_Row{{"Pan", {"Space", "+ drag"}}, {"Zoom", {"⌘", "+ scroll"}}, {"Zoom to fit", {"⇧1"}}, {"Zoom to 100%", {"⌘0"}}, {"Duplicate", {"⌘D"}}, {"Undo / Redo", {"⌘Z", "⇧⌘Z"}}}
+EMPTY_FILE_SHORTCUTS := [?]Shortcut_Row{{"Tools", {"V", "H", "F", "R", "E", "T"}}, {"Pan", {"Space", "+ drag"}}, {"Zoom", {"⌘", "+ scroll"}}, {"Zoom to fit / 100%", {"⇧1", "⌘0"}}, {"Duplicate", {"⌘D"}}, {"Undo / Redo", {"⌘Z", "⇧⌘Z"}}}
+
+// Keycaps right-aligned at `right`, centred on cy; returns the width they take.
+keycaps :: proc(vg: ^nvg.Context, right, cy: f32, keys: []string) -> f32 {
+	x := right
+	#reverse for k in keys {
+		if strings.has_prefix(k, "+") {
+			tw := text_width(vg, k, 11.5)
+			label(vg, x - tw, cy, k, TEXT_DIM, 11.5)
+			x -= tw + 6
+			continue
+		}
+		tw := text_width(vg, k, 11)
+		kw := max(tw + 12, 20)
+		fill_rect(vg, {x - kw, cy - 10, kw, 20}, {1, 1, 1, 0.08}, 5)
+		label(vg, x - kw / 2, cy, k, TEXT_FG, 11, false, .CENTER)
+		x -= kw + 4
+	}
+	return right - x
 }
 
 draw_settings_agents :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {

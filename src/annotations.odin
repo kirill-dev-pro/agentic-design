@@ -9,6 +9,8 @@ import "core:fmt"
 import "core:math"
 import "core:os"
 import "core:strings"
+import "core:time"
+import "core:unicode/utf8"
 import nvg "nanovg"
 
 // Marks for the agent (decision 88, agent-context.pen frames 5-7): a comment pinned to a
@@ -219,34 +221,8 @@ draw_marks :: proc(vg: ^nvg.Context, to: proc(p: [2]f32) -> [2]f32, s: f32) {
 			nvg.StrokeWidth(vg, 2 * s)
 			nvg.Stroke(vg)
 		case .Comment:
-			p := to(m.pts[0])
-			nvg.BeginPath(vg)
-			nvg.Circle(vg, p.x, p.y - 12 * s, 9 * s)
-			nvg.MoveTo(vg, p.x - 6 * s, p.y - 6 * s)
-			nvg.LineTo(vg, p.x, p.y)
-			nvg.LineTo(vg, p.x + 6 * s, p.y - 6 * s)
-			nvg.FillColor(vg, c)
-			nvg.Fill(vg)
-			nvg.BeginPath(vg)
-			nvg.Circle(vg, p.x, p.y - 12 * s, 3.5 * s)
-			nvg.FillColor(vg, {1, 1, 1, 1})
-			nvg.Fill(vg)
-			if m.text != "" && !(mi == annot.editing && s == 1) {
-				nvg.FontFace(vg, "ui")
-				nvg.FontSize(vg, 13 * s)
-				tw := nvg.TextBounds(vg, 0, 0, m.text)
-				r := Rect{p.x + 14 * s, p.y - 26 * s, tw + 20 * s, 26 * s}
-				nvg.BeginPath(vg)
-				nvg.RoundedRect(vg, r.x, r.y, r.w, r.h, 8 * s)
-				nvg.FillColor(vg, {0.13, 0.13, 0.14, 0.96})
-				nvg.Fill(vg)
-				nvg.StrokeColor(vg, c)
-				nvg.StrokeWidth(vg, 1.5 * s)
-				nvg.Stroke(vg)
-				nvg.FillColor(vg, {1, 1, 1, 1})
-				nvg.TextAlign(vg, .LEFT, .MIDDLE)
-				nvg.Text(vg, r.x + 10 * s, r.y + r.h / 2, m.text)
-			}
+			if mi == annot.editing && s == 1 do continue // drawn with its caret by draw_annotations
+			draw_comment(vg, to(m.pts[0]), c, m.text, s, -1)
 		case .Tag:
 			n, _ := engine.doc_find_uid(&app.doc, m.uid)
 			if n == nil do continue
@@ -277,16 +253,22 @@ draw_annotations :: proc(vg: ^nvg.Context) {
 	draw_marks(vg, to_screen, 1)
 	if annot.editing >= 0 && annot.editing < len(annot.marks) {
 		m := &annot.marks[annot.editing]
-		p := to_screen(m.pts[0])
-		r := Rect{p.x + 14, p.y - 28, 240, 28}
-		fill_rect(vg, r, {0.13, 0.13, 0.14, 0.98}, 8)
-		field(vg, 0, "mark.comment", "", r, m.text, placeholder = "What should the agent know here?")
-		if field_is_focused(0, "mark.comment") {
+		focused := field_is_focused(0, "mark.comment")
+		if focused {
+			// the keys go to the field's editing (widgets.odin); the card shows the text
+			index := ui.field_count
+			ui.field_count += 1
+			if !ui.input_claimed {
+				ui.input_claimed = true
+				field_keys(index, false)
+			}
 			s := strings.to_string(ui.buf)
 			if s != m.text {
 				delete(m.text)
 				m.text = strings.clone(s)
 			}
+			card := draw_comment(vg, to_screen(m.pts[0]), m.color, m.text, 1, clamp(ui.caret, 0, len(m.text)))
+			ui.focus_rect = {card.x + ui.origin.x, card.y + ui.origin.y, card.w, card.h} // a click outside ends typing
 		} else {
 			// done typing: an empty comment goes
 			if m.text == "" {
@@ -296,6 +278,102 @@ draw_annotations :: proc(vg: ^nvg.Context) {
 			annot.editing = -1
 		}
 	}
+}
+
+// A comment mark as in app-ui.pen ("5 · Annotate mode"): a pin whose tip is the point, and
+// beside it a card 210 wide (who, then the text wrapped to the card). `caret` >= 0: being
+// typed, with the caret there and a placeholder while empty. `s` scales it (pictures).
+COMMENT_W :: 210
+draw_comment :: proc(vg: ^nvg.Context, p: [2]f32, color: nvg.Color, text: string, s: f32, caret: int) -> (card: Rect) {
+	// the pin: 28 × 28, its tip at the point
+	o := p - {14 * s, 28 * s}
+	nvg.BeginPath(vg)
+	nvg.MoveTo(vg, o.x + 14 * s, o.y + 28 * s)
+	nvg.LineTo(vg, o.x + 5 * s, o.y + 18 * s)
+	nvg.Arc(vg, o.x + 14 * s, o.y + 12 * s, 10.8 * s, math.to_radians(f32(146)), math.to_radians(f32(34)), .CW)
+	nvg.ClosePath(vg)
+	nvg.FillColor(vg, color)
+	nvg.Fill(vg)
+	nvg.StrokeColor(vg, {1, 1, 1, 1})
+	nvg.StrokeWidth(vg, 2 * s)
+	nvg.Stroke(vg)
+	nvg.BeginPath(vg)
+	nvg.Circle(vg, o.x + 14 * s, o.y + 12 * s, 5 * s)
+	nvg.FillColor(vg, {1, 1, 1, 1})
+	nvg.Fill(vg)
+	if text == "" && caret < 0 do return
+
+	// the card
+	pad_x, pad_y := 12 * s, 8 * s
+	inner := (COMMENT_W - 24) * s
+	nvg.FontFace(vg, "ui")
+	nvg.FontSize(vg, 12.5 * s)
+	nvg.TextLineHeight(vg, 1.35)
+	nvg.TextLetterSpacing(vg, 0)
+	shown := text if text != "" else "What should the agent know here?"
+	rows := text_rows(vg, shown, inner)
+	lh := 12.5 * 1.35 * s
+	h := pad_y * 2 + 16 * s + 2 * s + f32(len(rows)) * lh
+	r := Rect{o.x + 34 * s, o.y - 4 * s, COMMENT_W * s, h}
+	card = r
+	shadow := nvg.BoxGradient(r.x, r.y + 6 * s, r.w, r.h, 10 * s, 20 * s, {0, 0, 0, 0.45}, {0, 0, 0, 0})
+	nvg.BeginPath(vg)
+	nvg.Rect(vg, r.x - 30 * s, r.y - 24 * s, r.w + 60 * s, r.h + 60 * s)
+	nvg.FillPaint(vg, shadow)
+	nvg.Fill(vg)
+	nvg.BeginPath(vg)
+	nvg.RoundedRect(vg, r.x, r.y, r.w, r.h, 10 * s)
+	nvg.FillColor(vg, {0x30 / 255.0, 0x30 / 255.0, 0x30 / 255.0, 1})
+	nvg.Fill(vg)
+	nvg.BeginPath(vg)
+	nvg.RoundedRect(vg, r.x + 0.75 * s, r.y + 0.75 * s, r.w - 1.5 * s, r.h - 1.5 * s, 9.25 * s)
+	nvg.StrokeColor(vg, color)
+	nvg.StrokeWidth(vg, 1.5 * s)
+	nvg.Stroke(vg)
+	// who
+	ax, ay := r.x + pad_x + 8 * s, r.y + pad_y + 8 * s
+	nvg.BeginPath(vg)
+	nvg.Circle(vg, ax, ay, 8 * s)
+	nvg.FillColor(vg, {0x7C / 255.0, 0x5C / 255.0, 1, 1})
+	nvg.Fill(vg)
+	nvg.FontSize(vg, 9 * s)
+	nvg.TextAlign(vg, .CENTER, .MIDDLE)
+	nvg.FillColor(vg, {1, 1, 1, 1})
+	nvg.Text(vg, ax, ay + 0.5 * s, comment_initial())
+	nvg.FontSize(vg, 11 * s)
+	nvg.TextAlign(vg, .LEFT, .MIDDLE)
+	nvg.FillColor(vg, {0x8F / 255.0, 0x8F / 255.0, 0x8F / 255.0, 1})
+	nvg.Text(vg, ax + 14 * s, ay, "Comment")
+	// the text, wrapped
+	nvg.FontSize(vg, 12.5 * s)
+	nvg.TextAlign(vg, .LEFT, .TOP)
+	ty := r.y + pad_y + 18 * s
+	nvg.FillColor(vg, {0xE8 / 255.0, 0xE8 / 255.0, 0xE8 / 255.0, 1} if text != "" else {0x8F / 255.0, 0x8F / 255.0, 0x8F / 255.0, 1})
+	for row, i in rows {
+		nvg.Text(vg, r.x + pad_x, ty + f32(i) * lh + (lh - 12.5 * s) / 2, shown[row[0]:row[1]])
+	}
+	if caret >= 0 && (int(time.now()._nsec / 500_000_000) % 2 == 0) {
+		at := caret if text != "" else 0
+		ri := 0
+		for row, i in rows do if row[0] <= at do ri = i
+		cx := r.x + pad_x
+		if text != "" do cx += nvg.TextBounds(vg, 0, 0, shown[rows[ri][0]:clamp(at, rows[ri][0], rows[ri][1])])
+		nvg.BeginPath(vg)
+		nvg.Rect(vg, cx, ty + f32(ri) * lh + 1 * s, 1.5 * s, lh - 2 * s)
+		nvg.FillColor(vg, {1, 1, 1, 1})
+		nvg.Fill(vg)
+	}
+	return
+}
+
+// The letter in the comment's avatar: the cloud account's name, else this Mac's user.
+@(private = "file")
+comment_initial :: proc() -> string {
+	name := cloud_text(&cloud.name)
+	if name == "" do name = os.get_env("USER", context.temp_allocator)
+	if name == "" do return "?"
+	_, size := utf8.decode_rune_in_string(name)
+	return strings.to_upper(name[:size], context.temp_allocator)
 }
 
 // ---------------------------------------------------------------- what the agent gets

@@ -1451,3 +1451,18 @@ draw_dialog :: proc(vg: ^nvg.Context) {
 		dialog_close()
 	}
 }
+
+// Lines of `text` wrapped at `w` in the current font, as byte ranges.
+text_rows :: proc(vg: ^nvg.Context, text: string, w: f32) -> [][2]int {
+	rows := make([dynamic][2]int, context.temp_allocator)
+	buf: [8]nvg.Text_Row
+	buf_slice := buf[:]
+	input := text
+	for nrows, last in nvg.TextBreakLines(vg, &input, max(w, 1), &buf_slice) {
+		base := len(text) - len(last)
+		for row in buf[:nrows] do append(&rows, [2]int{base + row.start, base + row.end})
+	}
+	if len(rows) == 0 do append(&rows, [2]int{0, 0})
+	return rows[:]
+}
+

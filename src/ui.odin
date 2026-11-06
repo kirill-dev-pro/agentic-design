@@ -351,11 +351,11 @@ draw_layers :: proc(vg: ^nvg.Context, y: ^f32) {
 	for i := len(app.doc.nodes) - 1; i >= 0; i -= 1 {
 		if app.doc.nodes[i].parent == 0 && !app.page_hidden[app.doc.nodes[i].uid] do row(vg, &app.doc.nodes[i], 0, y, &rows)
 	}
-	layers_drag(vg, rows[:])
-	if len(app.doc.nodes) == 0 {
-		label(vg, 24, y^ + ROW_H / 2, "Empty page — press F to draw a frame", TEXT_DIM)
+	if len(rows) == 0 {
+		label(vg, 24, y^ + ROW_H / 2, "No layers yet", TEXT_DIM, 12)
 		y^ += ROW_H
 	}
+	layers_drag(vg, rows[:])
 }
 
 // Layers on the current page whose name, text or type contains `needle`, with the frame
@@ -705,21 +705,6 @@ draw_page_section :: proc(vg: ^nvg.Context, x, right: f32, y: ^f32) {
 	y^ += 46
 
 	section(vg, x, y, "Document", fmt.tprintf("%d layers · %d variables", len(app.doc.nodes), len(app.doc.vars)))
-	lines := [?]string {
-		"V  H  F  R  E  T   tools",
-		"Space + drag / Scroll   pan",
-		"Cmd + scroll   zoom",
-		"Shift 1 / Cmd 0   fit / 100%",
-		"Hold Z / Option   zoom / measure",
-		"Cmd D   duplicate",
-		"Cmd Z / Shift Cmd Z   undo / redo",
-		"Double click text   edit",
-		"Shift + drag   keep proportions",
-	}
-	for l in lines {
-		label(vg, x, y^ + 8, l, TEXT_DIM)
-		y^ += 20
-	}
 }
 
 draw_node_properties :: proc(vg: ^nvg.Context, n: ^engine.Node, x, right: f32, y: ^f32) {

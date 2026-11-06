@@ -22,7 +22,9 @@ handle_input :: proc() {
 	if ui_modal() do return // an open menu, picker or dialog owns the pointer and keys
 	if ui_scale_keys() do return
 	if app.tab < 0 {
+		// the Dashboard's shortcuts (the editor's are in handle_shortcuts)
 		if mod_cmd() && key_pressed(KEY_N) do new_document()
+		if mod_cmd() && key_pressed(KEY_COMMA) && ui.focus == "" do settings_open = true
 		update_cursor(false)
 		return
 	}

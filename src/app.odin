@@ -627,6 +627,45 @@ draw_document_layer :: proc(vg: ^nvg.Context) {
 	nvg.Restore(vg)
 }
 
+// A file without layers (app-ui.pen "Editor · empty file"): what to do, and the main
+// shortcuts in the middle of the canvas. Off in Settings › Canvas › Shortcuts.
+draw_empty_file :: proc(vg: ^nvg.Context) {
+	if !settings.shortcuts_on_empty || len(app.doc.nodes) > 0 || app.tab < 0 do return
+	v := canvas_visible()
+	W :: f32(332)
+	h := f32(64 + 48 + 40 + len(EMPTY_FILE_SHORTCUTS) * 33 + 44)
+	x := v.x + (v.w - W) / 2
+	y := v.y + max((v.h - h) / 2 - 20, 20)
+	cx := x + W / 2
+	draw_lucide(vg, "square-dashed-mouse-pointer", cx, y + 16, 26, TEXT_DIM, 1.6)
+	label(vg, cx, y + 54, "This file is empty", TEXT_FG, 15, true, .CENTER)
+	hint := "Draw with the tools below, or switch to Agent and describe what to make."
+	nvg.FontFace(vg, "ui")
+	nvg.FontSize(vg, 13)
+	for row, i in text_rows(vg, hint, W) do label(vg, cx, y + 88 + f32(i) * 19, hint[row[0]:row[1]], TEXT_DIM, 13, false, .CENTER)
+	ry := y + 152
+	for row in EMPTY_FILE_SHORTCUTS {
+		label(vg, x, ry, row.name, TEXT_DIM, 12.5)
+		keycaps(vg, x + W, ry, row.keys)
+		ry += 33
+	}
+	// "All shortcuts in Settings › Canvas ⌘,", the middle part a link
+	a, link, b := "All shortcuts in ", "Settings › Canvas", "  ⌘,"
+	wa, wl, wb := text_width(vg, a, 12), text_width(vg, link, 12), text_width(vg, b, 12)
+	lx := cx - (wa + wl + wb) / 2
+	ly := ry + 22
+	label(vg, lx, ly, a, TEXT_DIM, 12)
+	lr := Rect{lx + wa, ly - 9, wl, 18}
+	label(vg, lr.x, ly, link, ACCENT, 12)
+	label(vg, lr.x + wl, ly, b, TEXT_DIM, 12)
+	if hovered(lr) do ui.cursor_hint = .Hand
+	if clicked(lr) {
+		settings_section = .Canvas
+		settings_scroll = 0
+		settings_open = true
+	}
+}
+
 // ---------------------------------------------------------------- canvas cache
 
 // The document is drawn into a texture of the window's size and the frame shows that texture,
@@ -711,6 +750,7 @@ canvas_cache_render :: proc(fb: [2]i32) {
 
 draw_canvas_overlays :: proc(vg: ^nvg.Context) {
 	c := app.canvas
+	draw_empty_file(vg)
 	// titles of top-level frames
 	nvg.FontFace(vg, "ui")
 	nvg.FontSize(vg, 12)
