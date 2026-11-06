@@ -527,7 +527,8 @@ diagram_issues :: proc() -> []Diagram_Issue {
 			if boxes_overlap(lb, engine.node_page_box(o)) do append(&out, Diagram_Issue{l.uid, "label-overlap", fmt.tprintf("sits on label %s: move one along its line (metadata.at)", box_name(o))})
 		}
 		if own != nil {
-			for ob in label_obstacles[own.uid] {
+			own_obstacles := label_obstacles[own.uid] // (a copy: see connector_obstacles)
+			for ob in own_obstacles {
 				if boxes_overlap(lb, ob.box) {
 					if bn, _ := engine.doc_find_uid(doc, ob.uid); bn != nil do append(&out, Diagram_Issue{l.uid, "label-overlap", fmt.tprintf("sits on %s", box_name(bn))})
 					break
@@ -556,7 +557,8 @@ diagram_issues :: proc() -> []Diagram_Issue {
 			return p.x >= box.x - 3 && p.x <= box.x + box[2] + 3 && p.y >= box.y - 3 && p.y <= box.y + box[3] + 3
 		}
 		near_a, near_b := false, false
-		for o in m[engine.top_level_of(doc, &n)] {
+		top_obstacles := m[engine.top_level_of(doc, &n)] // (a copy: see connector_obstacles)
+		for o in top_obstacles {
 			if touches(first, o.box) do near_a = true
 			if touches(last, o.box) do near_b = true
 		}

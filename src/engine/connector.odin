@@ -742,7 +742,10 @@ connector_obstacles :: proc(doc: ^Document, conn, a, b: ^Node) -> []Obstacle {
 	for ra != nil && ra.ghost do ra, _ = doc_find_uid(doc, ra.ghost_inst)
 	for rb != nil && rb.ghost do rb, _ = doc_find_uid(doc, rb.ghost_inst)
 	if ra == nil || rb == nil do return nil
-	for o in m[top_level_of(doc, conn)] {
+	// (a copy of the map's value: `for o in m[k]` goes through a pointer to the slot, nil when
+	// the key is missing, which crashed the release build)
+	list := m[top_level_of(doc, conn)]
+	for o in list {
 		if o.uid == ra.uid || o.uid == rb.uid do continue
 		if is_descendant(doc, ra.uid, o.uid) || is_descendant(doc, rb.uid, o.uid) || is_descendant(doc, o.uid, ra.uid) || is_descendant(doc, o.uid, rb.uid) do continue
 		append(&out, o)

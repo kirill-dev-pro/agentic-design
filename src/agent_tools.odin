@@ -412,7 +412,8 @@ api_lint :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	// "light" for a variable whose value is `c` only under some themes
 	themes_with :: proc(doc: ^engine.Document, name: string, c: engine.Color) -> string {
 		parts := make([dynamic]string, context.temp_allocator)
-		for e in doc.var_defs[name] {
+		defs := doc.var_defs[name] // (a copy: see engine.connector_obstacles)
+		for e in defs {
 			if e.ref != "" || e.var.kind != .Color || e.var.color != c do continue
 			if len(e.theme) == 0 do append(&parts, "by default")
 			for t in e.theme do append(&parts, fmt.tprintf("in %s %s", t[0], t[1]))

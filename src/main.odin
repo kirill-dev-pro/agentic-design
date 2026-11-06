@@ -130,7 +130,8 @@ cloud_vectors_main :: proc(path: string) {
 		for bid in v["server_order"].(json.Array) or_else nil {
 			id := string(bid.(json.String) or_else "")
 			ops := make([dynamic]engine.Op)
-			for o in batches[id] {
+			batch := batches[id] // (a copy: see engine.connector_obstacles)
+			for o in batch {
 				op, ok := engine.op_parse(o)
 				if !ok do append(&problems, fmt.aprintf("%s: an op does not parse", id))
 				append(&ops, op)
