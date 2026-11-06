@@ -37,6 +37,7 @@ panel_ui: struct {
 	pick_open: bool, // the agent picker
 	ses_open:  bool, // the sessions list
 	ses_query: string,
+	resizing:  bool, // the right edge is being dragged
 }
 
 // ---------------------------------------------------------------- the mode switch
@@ -211,6 +212,15 @@ chat_input :: proc(vg: ^nvg.Context, area: Rect) {
 			}
 		} else do chat.dragging = false
 	}
+	if hovered(area) && mouse_pressed(MOUSE_BUTTON_RIGHT) && len(chat.prev) > 0 {
+		// without a selection: the message under the pointer
+		if !chat.has {
+			if pos, ok := chat_hit(vg, app.mouse); ok && pos.block < len(chat.prev) {
+				chat.a, chat.b, chat.has = {pos.block, 0}, {pos.block, len(chat.prev[pos.block].text)}, true
+			}
+		}
+		if chat.has do menu_open("chat.menu", {app.mouse.x, app.mouse.y, 0, 0}, {"Copy\t⌘C", "Quote in reply", "-", "Select All"})
+	}
 	if chat.has && ui.focus == "" && mod_cmd() && key_pressed(KEY_C) {
 		platform_clipboard_set(chat_selected_text())
 		set_status("Copied")
@@ -254,7 +264,30 @@ slice_clone :: proc(s: [][2]int) -> [][2]int {
 // ---------------------------------------------------------------- the panel
 
 agent_panel_rect :: proc() -> Rect {
-	return {0, TAB_H, AGENT_SIDE_W, app.screen.y - TAB_H}
+	return {0, TAB_H, agent_side_w(), app.screen.y - TAB_H}
+}
+
+// The panel's right edge drags its width; the canvas keeps what it shows where it was.
+@(private = "file")
+panel_resize :: proc(r: Rect) {
+	grip := Rect{r.x + r.w - 4, r.y, 8, r.h}
+	if hovered(grip) || panel_ui.resizing do ui.cursor_hint = .Resize_H
+	if !panel_ui.resizing && hovered(grip) && mouse_pressed(MOUSE_BUTTON_LEFT) {
+		panel_ui.resizing = true
+		ui.click_taken = true
+	}
+	if !panel_ui.resizing do return
+	if !mouse_down(MOUSE_BUTTON_LEFT) {
+		panel_ui.resizing = false
+		settings_save()
+		return
+	}
+	old := agent_side_w()
+	settings.agent_panel_w = app.mouse.x
+	if d := agent_side_w() - old; d != 0 {
+		app.cam.x += d / app.zoom // the design stays where it is on screen
+		app.canvas = canvas_rect()
+	}
 }
 
 HEAD_H :: f32(48)
@@ -266,7 +299,8 @@ draw_agent_panel :: proc(vg: ^nvg.Context) {
 	t := agent_current()
 	panel_ui.popover = {}
 	fill_rect(vg, r, C_PANEL)
-	fill_rect(vg, {r.x + r.w - 1, r.y, 1, r.h}, C_LINE)
+	fill_rect(vg, {r.x + r.w - 1, r.y, 1, r.h}, ACCENT if panel_ui.resizing else C_LINE)
+	panel_resize(r)
 
 	// the input first: its height sets where the thread ends
 	ch := composer_height(vg, t)
@@ -281,6 +315,7 @@ draw_agent_panel :: proc(vg: ^nvg.Context) {
 	if panel_ui.ses_open do draw_sessions_list(vg, t, {r.x + 12, r.y + HEAD_H - 4, r.w - 24, 0})
 	chat_input(vg, body)
 	chat_frame_end()
+	text_menus()
 
 	// ⌘L: the field; ⌘.: stop
 	if !ui_modal() && mod_cmd() {
@@ -291,7 +326,7 @@ draw_agent_panel :: proc(vg: ^nvg.Context) {
 // The pointer is on the agent's panel or the marks bar (not the canvas).
 agent_panel_hit :: proc(p: [2]f32) -> bool {
 	if !agent_mode() do return false
-	return in_rect(agent_panel_rect(), p) || in_rect(panel_ui.marks_bar, p) || (panel_ui.popover.w > 0 && in_rect(panel_ui.popover, p))
+	return in_rect(agent_panel_rect(), p) || in_rect({agent_side_w() - 4, TAB_H, 8, app.screen.y}, p) || in_rect(panel_ui.marks_bar, p) || (panel_ui.popover.w > 0 && in_rect(panel_ui.popover, p))
 }
 
 @(private = "file")
@@ -367,7 +402,6 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 	w := area.w - 2 * PAD
 	if len(t.items) == 0 {
 		cx, cy := area.x + area.w / 2, area.y + area.h / 2 - 40
-		draw_lucide(vg, "sparkles", cx, cy, 22, C_DIM, 1.6)
 		label(vg, cx, cy + 28, "New session", C_TEXT, 14, true, .CENTER)
 		hint := "Describe the change below. Comment on the canvas with the bar at the bottom: the agent sees your marks."
 		nvg.FontFace(vg, "ui")
@@ -384,7 +418,7 @@ draw_thread_body :: proc(vg: ^nvg.Context, t: ^Agent_Thread, area: Rect) {
 	status_h: f32 = 34
 	content += status_h + PAD
 	max_scroll := max(content - area.h, 0)
-	t.scroll = clamp(t.scroll - wheel_over(area), 0, max_scroll)
+	t.scroll = clamp(t.scroll + wheel_over(area), 0, max_scroll) // (distance from the newest: the wheel's sign flips)
 	nvg.Save(vg)
 	nvg.IntersectScissor(vg, area.x, area.y, area.w, area.h)
 	defer nvg.Restore(vg)
@@ -584,16 +618,33 @@ PROMPT_LH :: f32(20)
 
 @(private = "file")
 prompt_text_w :: proc(comp: Rect) -> f32 {
-	return comp.w - 12 - 10 - 26
+	return comp.w - 12 - 10
+}
+
+// The prompt's lines (byte ranges), with the empty line a final newline opens.
+@(private = "file")
+prompt_rows :: proc(vg: ^nvg.Context, text: string, w: f32) -> [][2]int {
+	nvg.FontFace(vg, "ui")
+	nvg.FontSize(vg, PROMPT_SIZE)
+	out := make([dynamic][2]int, context.temp_allocator)
+	if text != "" do append(&out, ..text_rows(vg, text, w))
+	if text == "" || strings.has_suffix(text, "\n") do append(&out, [2]int{len(text), len(text)})
+	return out[:]
+}
+
+// The line the caret is on: the last one starting at or before it.
+@(private = "file")
+row_of :: proc(rows: [][2]int, at: int) -> int {
+	ri := 0
+	for row, i in rows do if row[0] <= at do ri = i
+	return ri
 }
 
 @(private = "file")
 composer_height :: proc(vg: ^nvg.Context, t: ^Agent_Thread) -> f32 {
-	w := prompt_text_w({0, 0, AGENT_SIDE_W - 24, 0})
+	w := prompt_text_w({0, 0, agent_side_w() - 24, 0})
 	text := strings.to_string(ui.buf) if field_is_focused(0, "agent.prompt") else agent_state.draft
-	nvg.FontFace(vg, "ui")
-	nvg.FontSize(vg, PROMPT_SIZE)
-	lines := len(text_rows(vg, text, w)) if text != "" else 1
+	lines := len(prompt_rows(vg, text, w))
 	h := 10 + f32(clamp(lines, 1, 8)) * PROMPT_LH + 10 + 36 + 10
 	if len(t.attached) > 0 || annotations_count() > 0 do h += 26 + 10
 	return h
@@ -647,7 +698,6 @@ draw_composer :: proc(vg: ^nvg.Context, t: ^Agent_Thread, comp: Rect) {
 	}
 	// the prompt, wrapped
 	agent := agent_state.choice
-	draw_lucide(vg, "sparkles", comp.x + 12 + 9, y + PROMPT_LH / 2, 18, AGENT_DOTS[agent], 1.6)
 	name := AGENT_KIND_NAMES[agent]
 	placeholder: string
 	switch {
@@ -656,7 +706,7 @@ draw_composer :: proc(vg: ^nvg.Context, t: ^Agent_Thread, comp: Rect) {
 	case annotations_count() > 0: placeholder = fmt.tprintf("Tell %s about your marks…", name)
 	case: placeholder = fmt.tprintf("Ask %s to change this design…", name)
 	}
-	tx := comp.x + 12 + 26
+	tx := comp.x + 14
 	tw := prompt_text_w(comp)
 	area := Rect{tx - 2, y - 2, tw + 4, comp.y + comp.h - 10 - 36 - 10 - y + 4}
 	prompt_area(vg, area, tx, y, tw, placeholder)
@@ -710,6 +760,73 @@ draw_composer :: proc(vg: ^nvg.Context, t: ^Agent_Thread, comp: Rect) {
 	}
 }
 
+// The prompt's and the thread's right-button menus.
+@(private = "file")
+text_menus :: proc() {
+	if pick, ok := menu_take("prompt.menu"); ok {
+		if !field_is_focused(0, "agent.prompt") do field_focus(0, "agent.prompt", agent_state.draft)
+		text := strings.to_string(ui.buf)
+		a, b := min(ui.sel, ui.caret), max(ui.sel, ui.caret)
+		if ui.sel < 0 do a, b = ui.caret, ui.caret
+		a, b = clamp(a, 0, len(text)), clamp(b, 0, len(text))
+		replace :: proc(a, b: int, with: string) {
+			text := strings.to_string(ui.buf)
+			out := strings.concatenate({text[:a], with, text[b:]}, context.temp_allocator)
+			strings.builder_reset(&ui.buf)
+			strings.write_string(&ui.buf, out)
+			ui.caret, ui.sel = a + len(with), -1
+		}
+		switch pick {
+		case 0:
+			if b > a {
+				platform_clipboard_set(text[a:b])
+				replace(a, b, "")
+			}
+		case 1: if b > a do platform_clipboard_set(text[a:b])
+		case 2: replace(a, b, platform_clipboard_get())
+		case 4: ui.sel, ui.caret = 0, len(text)
+		}
+		s := strings.to_string(ui.buf)
+		if s != agent_state.draft {
+			delete(agent_state.draft)
+			agent_state.draft = strings.clone(s)
+		}
+	}
+	if pick, ok := menu_take("chat.menu"); ok {
+		switch pick {
+		case 0:
+			platform_clipboard_set(chat_selected_text())
+			set_status("Copied")
+		case 1: quote_in_reply(chat_selected_text())
+		case 3:
+			if len(chat.prev) > 0 {
+				chat.a, chat.b, chat.has = {0, 0}, {len(chat.prev) - 1, len(chat.prev[len(chat.prev) - 1].text)}, true
+			}
+		}
+	}
+}
+
+// The selected text as a quote at the start of the reply ("> " before each line).
+quote_in_reply :: proc(text: string) {
+	q := strings.trim_space(text)
+	if q == "" do return
+	b := strings.builder_make(context.temp_allocator)
+	for line in strings.split_lines(q, context.temp_allocator) {
+		strings.write_string(&b, "> ")
+		strings.write_string(&b, line)
+		strings.write_byte(&b, '\n')
+	}
+	strings.write_byte(&b, '\n')
+	cur := strings.to_string(ui.buf) if field_is_focused(0, "agent.prompt") else agent_state.draft
+	strings.write_string(&b, cur)
+	out := strings.to_string(b)
+	delete(agent_state.draft)
+	agent_state.draft = strings.clone(out)
+	field_focus(0, "agent.prompt", out)
+	ui.sel = -1 // the caret at the end
+	chat.has = false
+}
+
 @(private = "file")
 prompt_send :: proc() {
 	text := strings.to_string(ui.buf) if field_is_focused(0, "agent.prompt") else agent_state.draft
@@ -730,14 +847,11 @@ prompt_send :: proc() {
 prompt_area :: proc(vg: ^nvg.Context, area: Rect, x, y, w: f32, placeholder: string) {
 	focused := field_is_focused(0, "agent.prompt")
 	text := strings.to_string(ui.buf) if focused else agent_state.draft
-	nvg.FontFace(vg, "ui")
-	nvg.FontSize(vg, PROMPT_SIZE)
-	rows := text_rows(vg, text, w)
+	rows := prompt_rows(vg, text, w)
 	visible := clamp(len(rows), 1, 8)
 	first := max(0, len(rows) - visible) // the end stays in view
 	if focused {
-		ri := 0
-		for row, i in rows do if row[0] <= ui.caret do ri = i
+		ri := row_of(rows, ui.caret)
 		if ri < first do first = ri
 	}
 	if hovered(area) do ui.cursor_hint = .IBeam
@@ -745,6 +859,9 @@ prompt_area :: proc(vg: ^nvg.Context, area: Rect, x, y, w: f32, placeholder: str
 		if len(rows) == 0 do return 0
 		ri := clamp(first + int((p.y - y) / PROMPT_LH), 0, len(rows) - 1)
 		row := rows[ri]
+		// the spaces a line ends with belong to it
+		if ri + 1 < len(rows) do row[1] = max(row[1], rows[ri + 1][0] - (1 if rows[ri + 1][0] > 0 && text[rows[ri + 1][0] - 1] == '\n' else 0))
+		else do row[1] = len(text) - (1 if strings.has_suffix(text, "\n") && row[0] < len(text) else 0)
 		nvg.FontFace(vg, "ui")
 		nvg.FontSize(vg, PROMPT_SIZE)
 		at, best := row[0], abs(p.x - x)
@@ -796,7 +913,12 @@ prompt_area :: proc(vg: ^nvg.Context, area: Rect, x, y, w: f32, placeholder: str
 			agent_state.draft = strings.clone(s)
 		}
 		text = s
-		rows = text_rows(vg, text, w)
+		rows = prompt_rows(vg, text, w)
+	}
+	// the right button: Cut, Copy, Paste, Select All
+	if hovered(area) && mouse_pressed(MOUSE_BUTTON_RIGHT) {
+		if !focused do field_focus(0, "agent.prompt", agent_state.draft)
+		menu_open("prompt.menu", {app.mouse.x, app.mouse.y, 0, 0}, {"Cut\t⌘X", "Copy\t⌘C", "Paste\t⌘V", "-", "Select All\t⌘A"})
 	}
 	nvg.Save(vg)
 	nvg.IntersectScissor(vg, area.x, area.y, area.w, area.h)
@@ -810,11 +932,12 @@ prompt_area :: proc(vg: ^nvg.Context, area: Rect, x, y, w: f32, placeholder: str
 			nvg.FontSize(vg, PROMPT_SIZE)
 			nvg.BeginPath(vg)
 			for row, i in rows {
-				s, e := max(a, row[0]), min(b, row[1])
-				if s >= e do continue
+				end := rows[i + 1][0] if i + 1 < len(rows) else len(text)
+				s, e := max(a, row[0]), min(b, end)
+				if s >= e || i < first do continue
 				x0 := x + nvg.TextBounds(vg, 0, 0, text[row[0]:s])
-				x1 := x + nvg.TextBounds(vg, 0, 0, text[row[0]:e])
-				nvg.Rect(vg, x0, y + f32(i - first) * PROMPT_LH, x1 - x0, PROMPT_LH)
+				x1 := x + nvg.TextBounds(vg, 0, 0, strings.trim_right(text[row[0]:e], "\n"))
+				nvg.Rect(vg, x0, y + f32(i - first) * PROMPT_LH, max(x1 - x0, 3), PROMPT_LH)
 			}
 			nvg.FillColor(vg, {ACCENT.r, ACCENT.g, ACCENT.b, 0.35})
 			nvg.Fill(vg)
@@ -822,13 +945,13 @@ prompt_area :: proc(vg: ^nvg.Context, area: Rect, x, y, w: f32, placeholder: str
 		for row, i in rows do if i >= first do label(vg, x, y + f32(i - first) * PROMPT_LH + PROMPT_LH / 2, text[row[0]:row[1]], C_TEXT, PROMPT_SIZE)
 	}
 	if focused && (ui.sel < 0 || ui.sel == ui.caret) && (int(time.now()._nsec / 500_000_000) % 2 == 0 || ui.drag_select) {
-		ri := 0
-		for row, i in rows do if row[0] <= ui.caret do ri = i
+		ri := row_of(rows, ui.caret)
 		cx := x
 		if len(rows) > 0 {
 			nvg.FontFace(vg, "ui")
 			nvg.FontSize(vg, PROMPT_SIZE)
-			cx += nvg.TextBounds(vg, 0, 0, text[rows[ri][0]:clamp(ui.caret, rows[ri][0], rows[ri][1])])
+			// up to the caret, the spaces before it too (a row's own range leaves them out)
+			cx += nvg.TextBounds(vg, 0, 0, text[rows[ri][0]:clamp(ui.caret, rows[ri][0], len(text))])
 		}
 		fill_rect(vg, {cx, y + f32(ri - first) * PROMPT_LH + 2, 1.5, PROMPT_LH - 4}, C_TEXT)
 	}
@@ -986,6 +1109,13 @@ draw_marks_bar :: proc(vg: ^nvg.Context) {
 		draw_lucide(vg, "pencil", nr.x + 18, nr.y + 14, 12, {1, 1, 1, 1}, 1.8)
 		label(vg, nr.x + 32, nr.y + 14, note, {1, 1, 1, 1}, 12.5, true)
 	}
+}
+
+// The Dashboard's thread: the same selection, copy and menus.
+chat_dashboard_end :: proc(vg: ^nvg.Context, area: Rect) {
+	if area.w > 0 do chat_input(vg, area)
+	chat_frame_end()
+	text_menus()
 }
 
 // Leaving Agent mode: the marks stay for when it comes back, the popovers close.

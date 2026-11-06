@@ -7,6 +7,7 @@ import "core:math"
 import "core:strconv"
 import "core:strings"
 import "core:time"
+import "core:unicode"
 import "core:unicode/utf8"
 import nvg "nanovg"
 
@@ -670,8 +671,52 @@ field_keys :: proc(index: int, numeric: bool) {
 		return at + size
 	}
 
+	alt := key_down(KEY_LEFT_ALT) || key_down(KEY_RIGHT_ALT)
+	line_start :: proc(text: string, at: int) -> int {
+		i := strings.last_index_byte(text[:at], '\n')
+		return i + 1
+	}
+	line_end :: proc(text: string, at: int) -> int {
+		i := strings.index_byte(text[at:], '\n')
+		return len(text) if i < 0 else at + i
+	}
+	word_left :: proc(text: string, at: int) -> int {
+		i := at
+		for i > 0 {
+			r, size := utf8.decode_last_rune_in_string(text[:i])
+			if unicode.is_letter(r) || unicode.is_digit(r) do break
+			i -= size
+		}
+		for i > 0 {
+			r, size := utf8.decode_last_rune_in_string(text[:i])
+			if !(unicode.is_letter(r) || unicode.is_digit(r)) do break
+			i -= size
+		}
+		return i
+	}
+	word_right :: proc(text: string, at: int) -> int {
+		i := at
+		for i < len(text) {
+			r, size := utf8.decode_rune_in_string(text[i:])
+			if unicode.is_letter(r) || unicode.is_digit(r) do break
+			i += size
+		}
+		for i < len(text) {
+			r, size := utf8.decode_rune_in_string(text[i:])
+			if !(unicode.is_letter(r) || unicode.is_digit(r)) do break
+			i += size
+		}
+		return i
+	}
 	if cmd {
 		switch {
+		case key_hit(KEY_BACKSPACE):
+			// ⌘⌫: to the start of the line
+			if !has_sel do ui.sel = line_start(text, ui.caret)
+			replace_selection("")
+		case key_hit(KEY_DELETE):
+			if !has_sel do ui.sel = line_end(text, ui.caret)
+			replace_selection("")
 		case key_pressed(KEY_A):
 			ui.sel, ui.caret = 0, len(text)
 		case key_pressed(KEY_C), key_pressed(KEY_X):
@@ -686,13 +731,35 @@ field_keys :: proc(index: int, numeric: bool) {
 		case key_hit(KEY_LEFT):
 			if !shift do ui.sel = -1
 			else if ui.sel < 0 do ui.sel = ui.caret
-			ui.caret = 0
+			ui.caret = line_start(text, ui.caret)
 		case key_hit(KEY_RIGHT):
 			if !shift do ui.sel = -1
 			else if ui.sel < 0 do ui.sel = ui.caret
-			ui.caret = len(text)
+			ui.caret = line_end(text, ui.caret)
+		case key_hit(KEY_UP), key_hit(KEY_DOWN):
+			if !shift do ui.sel = -1
+			else if ui.sel < 0 do ui.sel = ui.caret
+			ui.caret = 0 if key_hit(KEY_UP) else len(text)
 		}
 		return
+	}
+	if alt {
+		// ⌥: by words
+		switch {
+		case key_hit(KEY_BACKSPACE):
+			if !has_sel do ui.sel = word_left(text, ui.caret)
+			replace_selection("")
+			return
+		case key_hit(KEY_DELETE):
+			if !has_sel do ui.sel = word_right(text, ui.caret)
+			replace_selection("")
+			return
+		case key_hit(KEY_LEFT), key_hit(KEY_RIGHT):
+			if !shift do ui.sel = -1
+			else if ui.sel < 0 do ui.sel = ui.caret
+			ui.caret = word_left(text, ui.caret) if key_hit(KEY_LEFT) else word_right(text, ui.caret)
+			return
+		}
 	}
 	for ch in pf.chars {
 		enc, n := utf8.encode_rune(ch)

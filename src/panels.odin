@@ -27,7 +27,12 @@ Editor_Mode :: enum {
 }
 
 editor_mode: Editor_Mode
-AGENT_SIDE_W :: f32(400)
+
+// The Agent panel's width: 400 by default, dragged between 320 and half the window.
+agent_side_w :: proc() -> f32 {
+	w := settings.agent_panel_w if settings.agent_panel_w > 0 else 400
+	return clamp(w, 320, max(320, min(760, app.screen.x * 0.5)))
+}
 
 agent_mode :: proc() -> bool {
 	return editor_mode == .Agent && app.tab >= 0
@@ -35,7 +40,7 @@ agent_mode :: proc() -> bool {
 
 // Where the canvas is: under the tab bar, right of the agent's panel in Agent mode.
 canvas_rect :: proc() -> Rect {
-	left := AGENT_SIDE_W if agent_mode() else 0
+	left := agent_side_w() if agent_mode() else 0
 	return {left, TAB_H, app.screen.x - left, app.screen.y - TAB_H}
 }
 

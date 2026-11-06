@@ -32,6 +32,7 @@ Settings :: struct {
 	agent_model:  [3]string, // per agent (Claude Code, Codex, Gemini CLI): "" = the CLI's own
 	agent_effort: [3]string, // reasoning effort per agent, "" = the CLI's own
 	agent_choice: int, // the agent last picked
+	agent_panel_w: f32, // the Agent mode panel's width, 0 = 400
 }
 
 Dash_Sort :: enum i32 {
@@ -96,6 +97,7 @@ settings_load :: proc() {
 		if m, ok := obj["agentEffort"].(json.Object); ok do if v, vok := m[key].(json.String); vok do settings.agent_effort[i] = strings.clone(string(v))
 	}
 	if f, ok := obj["agent"].(json.Float); ok do settings.agent_choice = clamp(int(f), 0, 2)
+	if f, ok := obj["agentPanelWidth"].(json.Float); ok do settings.agent_panel_w = f32(f)
 	if arr, ok := obj["dashboardHidden"].(json.Array); ok {
 		for v in arr do if s, sok := v.(json.String); sok do append(&settings.dash_hidden, strings.clone(string(s)))
 	}
@@ -108,8 +110,8 @@ settings_save :: proc(in_test_window := false) {
 	_ = fs_mkdir_all(support_dir())
 	s := settings
 	text := fmt.tprintf(
-		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v,\n  \"interfaceScale\": %s,\n  \"shortcutsOnEmpty\": %v,\n  \"agent\": %d,\n  \"agentModels\": {{\"claude\": %s, \"codex\": %s, \"gemini\": %s}},\n  \"agentEffort\": {{\"claude\": %s, \"codex\": %s, \"gemini\": %s}}\n}}\n",
-		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector, engine.num_text(ui_scale()), s.shortcuts_on_empty, s.agent_choice,
+		"{{\n  \"onboarded\": %v,\n  \"nudge\": %s,\n  \"nudgeBig\": %s,\n  \"pixelGrid\": %v,\n  \"snapToPixels\": %v,\n  \"smartGuides\": %v,\n  \"agentCursors\": %v,\n  \"autoUpdate\": %v,\n  \"exportFolder\": %s,\n  \"lastSeenVersion\": %s,\n  \"dashboardSort\": \"%s\",\n  \"dashboardHidden\": %s,\n  \"hideLayers\": %v,\n  \"hideInspector\": %v,\n  \"interfaceScale\": %s,\n  \"shortcutsOnEmpty\": %v,\n  \"agent\": %d,\n  \"agentPanelWidth\": %s,\n  \"agentModels\": {{\"claude\": %s, \"codex\": %s, \"gemini\": %s}},\n  \"agentEffort\": {{\"claude\": %s, \"codex\": %s, \"gemini\": %s}}\n}}\n",
+		s.onboarded, engine.num_text(s.nudge), engine.num_text(s.nudge_big), s.pixel_grid, s.snap_pixels, s.smart_guides, s.agent_cursors, s.auto_update, json_quote(s.export_dir), json_quote(s.last_seen_version), DASH_SORT_KEYS[s.dash_sort], json_string_array(s.dash_hidden[:]), s.hide_layers, s.hide_inspector, engine.num_text(ui_scale()), s.shortcuts_on_empty, s.agent_choice, engine.num_text(s.agent_panel_w),
 		json_quote(s.agent_model[0]), json_quote(s.agent_model[1]), json_quote(s.agent_model[2]), json_quote(s.agent_effort[0]), json_quote(s.agent_effort[1]), json_quote(s.agent_effort[2]),
 	)
 	_ = fs_write(settings_path(), text)

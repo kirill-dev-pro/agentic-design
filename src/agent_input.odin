@@ -180,7 +180,7 @@ draw_thread :: proc(vg: ^nvg.Context, t: ^Agent_Thread, bottom: f32) {
 		label(vg, r.x + 16, area.y + 16, "A new session: ask something below.", TEXT_DIM, 12)
 	}
 	max_scroll := max(content - area.h, 0)
-	t.scroll = clamp(t.scroll - wheel_over(area), 0, max_scroll)
+	t.scroll = clamp(t.scroll + wheel_over(area), 0, max_scroll) // (distance from the newest)
 	nvg.Save(vg)
 	nvg.IntersectScissor(vg, area.x, area.y, area.w, area.h)
 	y := area.y + area.h - content + t.scroll
@@ -517,7 +517,6 @@ draw_agent_input :: proc(vg: ^nvg.Context) {
 	fill_rect(vg, r, {0.16, 0.16, 0.17, 1}, r.h / 2)
 	focused := field_is_focused(0, "agent.prompt")
 	stroke_rect(vg, r, ACCENT if focused else {1, 1, 1, 0.12}, r.h / 2)
-	draw_lucide(vg, "sparkles", r.x + 26, r.y + r.h / 2, 16, {0.85, 0.47, 0.34, 1}, 1.6)
 
 	// right side: context, marks, the agent, then Send or Stop
 	send := Rect{r.x + r.w - 8 - 36, r.y + 8, 36, 36}
@@ -591,7 +590,7 @@ draw_agent_input :: proc(vg: ^nvg.Context) {
 		placeholder = fmt.tprintf("Ask %s to change this design…", name)
 	}
 	if !agent_available(agent_state.choice) do placeholder = fmt.tprintf("Install %s to ask it here, or connect another agent (Settings → Agents)", name)
-	fr := Rect{r.x + 46, r.y + 8, clip.x - 8 - (r.x + 46), r.h - 16}
+	fr := Rect{r.x + 18, r.y + 8, clip.x - 8 - (r.x + 18), r.h - 16}
 	if focused && (key_pressed(KEY_ENTER) || key_pressed(KEY_KP_ENTER)) && !mod_shift() {
 		text := strings.clone(strings.to_string(ui.buf), context.temp_allocator)
 		ui.focus = ""
@@ -608,6 +607,7 @@ draw_agent_input :: proc(vg: ^nvg.Context) {
 		}
 	}
 	draw_context_popover(vg, t, clip)
+	chat_dashboard_end(vg, agent_ui.panel)
 	// ⌘L focuses the field, ⌘. stops the run
 	if !ui_modal() && mod_cmd() {
 		if key_pressed(KEY_PERIOD) && running do agent_stop(t)
