@@ -143,6 +143,34 @@ if (fs.existsSync(path.join(viewer, "viewer.wasm"))) {
 	console.log("viewer: not built (", viewer, "), /view is left out");
 }
 
+// ---------------------------------------------------------------- Bunderhost's scripts
+
+// Bunderhost hands a production build the addresses of its analytics (Umami) and browser
+// telemetry loaders and puts them in through a Vite plugin, in the HTML Vite builds. Vite
+// builds only the Worker here, so the pages get them from this step: every HTML file, the
+// share and embed templates included, loads both before </head>. Without the variables
+// (a local build, a preview) the pages are left as they are.
+{
+	const analytics = process.env.BUNDERHOST_ANALYTICS_LOADER_URL;
+	const telemetry = process.env.BUNDERHOST_TELEMETRY_LOADER_URL;
+	const release = process.env.BUNDERHOST_RELEASE || null;
+	const attr = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+	const tags = [
+		...(telemetry ? [`<script>window.__bunderhost=Object.assign(window.__bunderhost||{},${JSON.stringify({ release, telemetry }).replace(/</g, "\\u003c")})</script>`] : []),
+		...(analytics ? [`<script id="bh-analytics-loader" defer src="${attr(analytics)}"></script>`] : []),
+		...(telemetry ? [`<script id="bh-telemetry-loader" defer src="${attr(telemetry)}"></script>`] : []),
+	].join("");
+	if (tags) {
+		const pages = fs.readdirSync(out, { recursive: true }).map(String).filter((f) => f.endsWith(".html"));
+		for (const rel of pages) {
+			const file = path.join(out, rel);
+			const html = fs.readFileSync(file, "utf8");
+			if (html.includes("</head>")) fs.writeFileSync(file, html.replace("</head>", tags + "</head>"));
+		}
+		console.log(`bunderhost: ${analytics ? "analytics" : ""}${analytics && telemetry ? " and " : ""}${telemetry ? "telemetry" : ""} on ${pages.length} pages`);
+	}
+}
+
 // ---------------------------------------------------------------- headers
 
 const all = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
