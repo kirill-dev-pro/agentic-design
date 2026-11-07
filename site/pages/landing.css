@@ -116,6 +116,7 @@ h1 {
 	font-size: var(--size-h1); font-weight: 700; line-height: 1.04; letter-spacing: -3px;
 	background: linear-gradient(180deg, #FFFFFF, #9EA2AC); -webkit-background-clip: text; background-clip: text; color: transparent;
 	text-wrap: balance;
+	padding-bottom: .14em; margin-bottom: -.14em;
 }
 .lede { max-width: 680px; color: #C4C7CF; font-size: var(--size-body); }
 .ctas { display: flex; align-items: center; gap: 12px; }
