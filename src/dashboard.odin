@@ -17,6 +17,7 @@ import nvg "nanovg"
 
 dash: struct {
 	recents:     bool, // the Recents view instead of All files
+	cloud:       bool, // the Cloud view (dashboard_cloud.odin)
 	search:      string,
 	scroll:      f32,
 	selected:    string, // path of the selected card
@@ -59,22 +60,27 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	M :: f32(32)
 	ty := TAB_H + 18
 	seg := Rect{M, ty, 0, 30}
-	names := [2]string{"All files", "Recents"}
-	icons := [2]Icon{.Grid, .Clock}
-	widths: [2]f32
+	names := [3]string{"All files", "Recents", "Cloud"}
+	widths: [3]f32
 	for name, i in names do widths[i] = text_width(vg, name, 12) + 40
-	seg.w = widths[0] + widths[1] + 6
+	seg.w = widths[0] + widths[1] + widths[2] + 6
 	fill_rect(vg, seg, FIELD_BG, 8)
 	sx := seg.x + 3
 	for name, i in names {
 		t := Rect{sx, seg.y + 3, widths[i], seg.h - 6}
-		active := dash.recents == (i == 1)
+		active := dash.cloud if i == 2 else !dash.cloud && dash.recents == (i == 1)
 		if active do fill_rect(vg, t, ACTIVE_BG, 6)
 		else if hovered(t) do fill_rect(vg, t, HOVER_BG, 6)
-		draw_icon(vg, icons[i], t.x + 15, t.y + t.h / 2, TEXT_FG if active else TEXT_DIM, 13)
-		label(vg, t.x + 28, t.y + t.h / 2, name, TEXT_FG if active else TEXT_DIM, 12)
-		if clicked(t) && dash.recents != (i == 1) {
-			dash.recents = i == 1
+		color := TEXT_FG if active else TEXT_DIM
+		switch i {
+		case 0: draw_icon(vg, .Grid, t.x + 15, t.y + t.h / 2, color, 13)
+		case 1: draw_icon(vg, .Clock, t.x + 15, t.y + t.h / 2, color, 13)
+		case 2: draw_lucide(vg, "cloud", t.x + 15, t.y + t.h / 2, 13, color, 1.6)
+		}
+		label(vg, t.x + 28, t.y + t.h / 2, name, color, 12)
+		if clicked(t) && !active {
+			dash.cloud = i == 2
+			if i < 2 do dash.recents = i == 1
 			dash.scroll = 0
 		}
 		sx += widths[i]
@@ -86,7 +92,7 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 		set_string(&dash.search, strings.to_string(ui.buf))
 	}
 	x += 252
-	if !dash.recents {
+	if !dash.recents && !dash.cloud {
 		if pick, ok := dropdown_menu(vg, "dash.sort", {x, ty + 1, 150, 28}, DASH_SORT_NAMES[:], int(settings.dash_sort)); ok && Dash_Sort(pick) != settings.dash_sort {
 			settings.dash_sort = Dash_Sort(pick)
 			settings_save()
@@ -117,6 +123,11 @@ draw_dashboard :: proc(vg: ^nvg.Context) {
 	if button(vg, conn, "Connect agents") do onboarding_start(1)
 	x0 := M
 	ty += 4
+
+	if dash.cloud {
+		draw_dashboard_cloud(vg, {0, ty + 40, app.screen.x, app.screen.y - ty - 40 - 36}, x0, dash.search)
+		return
+	}
 
 	// what the list is made of, at the bottom left
 	status: string

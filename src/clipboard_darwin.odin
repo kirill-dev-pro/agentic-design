@@ -11,10 +11,10 @@ clipboard_set :: proc(data: []u8, uti: string, text := "") {
 	if pb == nil do return
 	_ = intrinsics.objc_send(NS.Integer, pb, "clearContents")
 	d := NS.Data.alloc()->initWithBytes(data)
-	t := NS.String.alloc()->initWithOdinString(uti)
+	t := ns_string(uti) // (copies: the pasteboard may read it later)
 	_ = intrinsics.objc_send(NS.BOOL, pb, "setData:forType:", d, t)
 	if text != "" {
-		s := NS.String.alloc()->initWithOdinString(text)
+		s := ns_string(text)
 		_ = intrinsics.objc_send(NS.BOOL, pb, "setString:forType:", s, NS.AT("public.utf8-plain-text"))
 	}
 }

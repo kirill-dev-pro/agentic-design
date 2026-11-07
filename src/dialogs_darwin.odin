@@ -6,9 +6,11 @@ import NS "core:sys/darwin/Foundation"
 
 // The macOS open and save panels behind dialogs.odin, and Reveal in Finder.
 
-// Autoreleased: valid until the enclosing pool drains.
+// Autoreleased: valid until the enclosing pool drains. The bytes are copied: Foundation's
+// initWithOdinString does not copy them, and what keeps the string (a request's headers, read
+// later on CFNetwork's own thread) then reads memory the temporary allocator has reused.
 ns_string :: proc(s: string) -> ^NS.String {
-	o := NS.String.alloc()->initWithOdinString(s)
+	o := intrinsics.objc_send(^NS.String, NS.String.alloc(), "initWithBytes:length:encoding:", raw_data(s), NS.UInteger(len(s)), NS.StringEncoding.UTF8)
 	o->autorelease()
 	return o
 }

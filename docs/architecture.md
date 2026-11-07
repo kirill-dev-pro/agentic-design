@@ -375,7 +375,7 @@ App (`src/`):
 | `input.odin`, `edit.odin`, `pen_tool.odin`, `gradient_edit.odin` | canvas interaction, shortcuts, editing commands |
 | `widgets.odin`, `ui.odin`, `inspector.odin` | widget library; panels built from it |
 | `components_panel.odin`, `variables_table.odin` | the Components tab; the variables table |
-| `tabs.odin`, `dashboard.odin`, `onboarding.odin` | tabs, recents, thumbnails, dashboard, onboarding |
+| `tabs.odin`, `dashboard.odin`, `dashboard_cloud.odin`, `onboarding.odin` | tabs, recents, thumbnails, dashboard (its Cloud view: the account's cloud files), onboarding |
 | `pages_ui.odin`, `libraries_ui.odin`, `fonts_ui.odin`, `files_ui.odin`, `export_ui.odin`, `dialogs.odin` | the app's side of pages, libraries, font import, file dialogs and drops, export to a folder |
 | `sys_unix.odin`, `sys_windows.odin`, `desktop_*.odin`, `dialogs_*.odin` | what differs between macOS, Linux and Windows (see Desktop systems) |
 | `server.odin`, `api.odin`, `mcp.odin`, `agent_tools.odin` | control socket, its methods, stdio MCP server, the guide |
