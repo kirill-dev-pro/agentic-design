@@ -9,6 +9,7 @@ answers `/api/*`.
 | Path | |
 | --- | --- |
 | `pages/index.html`, `pages/landing.css`, `pages/landing.js`, `pages/img/landing/` | the landing page, written by hand after `designs/agentic-design-site.pen` (dark only): the screenshots are of the real app (0.6.4) at work, the "Watch them work" scene is live HTML |
+| `pages/download/index.html`, `pages/download.js` | the download page (`/download`, with the landing's look): a tab per system, the visitor's first (or `#mac`, `#windows`, `#linux`); each button gets its file from the newest GitHub release that has one, by the names the release workflow gives them |
 | `pages/styles.css`, `pages/main.js` | shared by the other pages (sign-in, My files, account, 404): tokens, light and dark, the theme button, the download link |
 | `pages/fonts/` | Inter and JetBrains Mono, Latin subsets as woff2 (`tools/fonts.py` writes them from `designs/sample/fonts`; OFL) |
 | `pages/favicon.*`, `pages/img/apple-touch-icon.png`, `pages/img/icon-*.png`, `pages/img/logo-*.png` | the app icon's web set (from the Dogfooder's final icon set): the favicons from the small-size master (the SVG switches light and dark with the system), the touch and manifest icons, and the logo in the nav and footer (32 px from the small master, 64 and 96 px from the 1024 one, light and dark) |
@@ -46,5 +47,5 @@ After changing `src/`, run `bun run db:generate` and `bun run blueprint` and com
 ## Copy
 
 Keep the page true to what the app does today: the README is the reference. Links:
-"Download for macOS" goes to the latest release (the page swaps in the dmg's own URL from
+"Download" in the nav goes to `/download`; "Download for macOS" goes to the latest release (the page swaps in the dmg's own URL from
 the GitHub API when it loads), "Source" to the repository, "Docs" to `docs/`.

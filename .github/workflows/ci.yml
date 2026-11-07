@@ -103,29 +103,13 @@ jobs:
           (cd "$RUNNER_TEMP/odin/vendor/stb/src" && sh build_stb.sh unix)
           sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libglfw3-dev zlib1g-dev
 
-      - name: Build
-        run: |
-          odin version
-          tools/fetch_wgpu.sh
-          mkdir -p build
-          odin build src -out:build/agentic-design -o:speed
-          ls -l build/agentic-design
-
-      - name: The MCP server answers (no window needed)
-        run: |
-          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | AGENTIC_PORT=1 ./build/agentic-design mcp |
-            python3 -I -c 'import sys, json; t = json.loads(sys.stdin.readline())["result"]["tools"]; print(len(t), "tools")'
-
-      - name: Package
-        run: |
-          mkdir -p "dist/agentic-design-linux-x86_64"
-          cp build/agentic-design LICENSE THIRD_PARTY_NOTICES.md "dist/agentic-design-linux-x86_64/"
-          tar czf dist/agentic-design-linux-x86_64.tar.gz -C dist agentic-design-linux-x86_64
+      - name: Build, check and pack
+        run: tools/release/desktop.sh
 
       - uses: actions/upload-artifact@v5
         with:
           name: agentic-design-linux-x86_64
-          path: dist/agentic-design-linux-x86_64.tar.gz
+          path: dist/Agentic-Design-*-linux-x86_64.tar.gz
           retention-days: 14
 
   # The desktop app on Windows (x86-64): WebGPU through Direct3D 12, linked with MSVC.
@@ -147,27 +131,11 @@ jobs:
           unzip -q "$RUNNER_TEMP/odin.zip" -d "$RUNNER_TEMP/odin"
           echo "$RUNNER_TEMP/odin/dist" >> "$GITHUB_PATH"
 
-      - name: Build
-        run: |
-          odin version
-          tools/fetch_wgpu.sh windows_amd64
-          mkdir -p build
-          odin build src -out:build/agentic-design.exe -o:speed -subsystem:windows
-          ls -l build/agentic-design.exe
-
-      - name: The MCP server answers (no window needed)
-        run: |
-          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | AGENTIC_PORT=1 ./build/agentic-design.exe mcp |
-            python -I -c 'import sys, json; t = json.loads(sys.stdin.readline())["result"]["tools"]; print(len(t), "tools")'
-
-      - name: Package
-        run: |
-          mkdir -p dist/agentic-design-windows-x86_64
-          cp build/agentic-design.exe LICENSE THIRD_PARTY_NOTICES.md dist/agentic-design-windows-x86_64/
-          cd dist && 7z a -bso0 agentic-design-windows-x86_64.zip agentic-design-windows-x86_64
+      - name: Build, check and pack
+        run: tools/release/desktop.sh
 
       - uses: actions/upload-artifact@v5
         with:
           name: agentic-design-windows-x86_64
-          path: dist/agentic-design-windows-x86_64.zip
+          path: dist/Agentic-Design-*-windows-x86_64.zip
           retention-days: 14

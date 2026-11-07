@@ -11,9 +11,15 @@ A GitHub Release `v<version>` with:
 | --- | --- |
 | `Agentic-Design-<version>-arm64.dmg` | a first install: drag the app into Applications |
 | `Agentic-Design-<version>-arm64.zip` | the updater (the same signed `.app`, zipped with `ditto`) |
+| `Agentic-Design-<version>-windows-x86_64.zip` | Windows (preview): `agentic-design.exe` with the licences, unsigned (`tools/release/desktop.sh`) |
+| `Agentic-Design-<version>-linux-x86_64.tar.gz` | Linux (preview): the binary with the licences; needs `libglfw3` and a Vulkan driver |
 | `latest.json` | the update manifest: version, zip URL, SHA-256, size, notes |
 | `latest.json.sig` | Ed25519 signature (base64) of `latest.json`'s exact bytes |
-| `SHA256SUMS` | checksums of the dmg and zip, for people |
+| `SHA256SUMS` | checksums of the dmg and the archives, for people |
+
+The Linux and Windows jobs of `release.yml` build first; the macOS job waits for them and
+publishes everything as one release. The website's `/download` page finds each system's file
+by these names (`site/pages/download.js`), in the newest release that has it.
 
 Installed apps read `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`
 (GitHub redirects `latest` to the newest non-draft, non-prerelease release). The repository

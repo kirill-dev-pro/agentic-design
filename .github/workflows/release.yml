@@ -1,4 +1,7 @@
-# Builds, signs and publishes a release when a tag v<version> is pushed (docs/releasing.md).
+# Builds, signs and publishes a release when a tag v<version> is pushed (docs/releasing.md):
+# the macOS app (signed, notarized, with the update manifest) and the Linux and Windows
+# builds (tools/release/desktop.sh), all on one GitHub release. The website's download page
+# (site/pages/download) links the assets by their names.
 #
 # Secrets:
 #   UPDATE_SIGNING_KEY          required. Base64 Ed25519 seed that signs latest.json; its
@@ -18,7 +21,57 @@ permissions:
   contents: write
 
 jobs:
+  # Linux and Windows first, in parallel; the macOS job collects them into the release.
+  linux:
+    runs-on: ubuntu-24.04
+    env:
+      ODIN_VERSION: dev-2026-10
+      ODIN_SHA256: c3c8b095621fd0c75f7f73e3a0829f1b4d45324225f20ba11ed8dc4da310a8ab
+    steps:
+      - uses: actions/checkout@v5
+      - name: Odin (pinned release), its stb libraries, GLFW and zlib
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/odin.tar.gz" "https://github.com/odin-lang/Odin/releases/download/$ODIN_VERSION/odin-linux-amd64-$ODIN_VERSION.tar.gz"
+          echo "$ODIN_SHA256  $RUNNER_TEMP/odin.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/odin"
+          tar xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
+          echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
+          (cd "$RUNNER_TEMP/odin/vendor/stb/src" && sh build_stb.sh unix)
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libglfw3-dev zlib1g-dev
+      - name: Build, check and pack
+        run: tools/release/desktop.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: linux
+          path: dist/Agentic-Design-*-linux-x86_64.tar.gz
+          retention-days: 3
+
+  windows:
+    runs-on: windows-2025
+    env:
+      ODIN_VERSION: dev-2026-10
+      ODIN_SHA256: b6b2e426a8b6f147b74ec7e18bef8df27cf40fe16193159df7ca09a0cc0c2011
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - name: Odin (pinned release; the stb and GLFW libraries come with it)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/odin.zip" "https://github.com/odin-lang/Odin/releases/download/$ODIN_VERSION/odin-windows-amd64-$ODIN_VERSION.zip"
+          echo "$ODIN_SHA256  $RUNNER_TEMP/odin.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/odin.zip" -d "$RUNNER_TEMP/odin"
+          echo "$RUNNER_TEMP/odin/dist" >> "$GITHUB_PATH"
+      - name: Build, check and pack
+        run: tools/release/desktop.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: windows
+          path: dist/Agentic-Design-*-windows-x86_64.zip
+          retention-days: 3
+
   release:
+    needs: [linux, windows]
     runs-on: macos-15 # Apple Silicon
     env:
       ODIN_VERSION: dev-2026-10
@@ -92,6 +145,12 @@ jobs:
           xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
           staple "$DMG"
 
+      - name: The Linux and Windows builds
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Update manifest (signed)
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
@@ -105,7 +164,7 @@ jobs:
           # the app's own public key must accept it
           PUB=$(sed -n 's/^UPDATE_PUBLIC_KEY :: "\(.*\)"$/\1/p' src/update.odin)
           build/updatesign verify "$PUB" dist/latest.json
-          (cd dist && shasum -a 256 *.zip *.dmg > SHA256SUMS)
+          (cd dist && shasum -a 256 *.zip *.dmg *.tar.gz > SHA256SUMS)
 
       - name: GitHub release
         env:
@@ -119,5 +178,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "dist/Agentic-Design-$VERSION-arm64.dmg" \
             "dist/Agentic-Design-$VERSION-arm64.zip" \
+            "dist/Agentic-Design-$VERSION-windows-x86_64.zip" \
+            "dist/Agentic-Design-$VERSION-linux-x86_64.tar.gz" \
             dist/latest.json dist/latest.json.sig dist/SHA256SUMS \
             --title "Agentic Design $VERSION" --notes-file "$NOTES" $MARK
