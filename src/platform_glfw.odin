@@ -108,10 +108,12 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key < 0 || int(key) >= MAX_KEYS do return
 	switch action {
 	case glfw.PRESS:
+		pf.key_mods |= mods
 		pf.key_down[key] = true
 		pf.key_pressed[key] = true
 		pf.key_repeated[key] = true
 	case glfw.REPEAT:
+		pf.key_mods |= mods
 		pf.key_repeated[key] = true
 	case glfw.RELEASE:
 		pf.key_down[key] = false
@@ -141,6 +143,7 @@ scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64) {
 // until an event arrives or `wait` seconds pass (the app idling, see idle_wait).
 platform_poll :: proc(wait: f64 = 0) {
 	pf.key_pressed = {}
+	pf.key_mods = 0
 	pf.key_repeated = {}
 	pf.button_pressed = {}
 	pf.wheel = {}

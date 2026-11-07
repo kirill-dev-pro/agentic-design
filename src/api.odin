@@ -1057,6 +1057,17 @@ inject_input :: proc(params: json.Object) {
 			}
 		}
 	}
+	// modifiers carried only by the key event's flags, as dictation apps post ⌘V: no ⌘ press
+	if flags, ok := params["flags"].(json.Array); ok {
+		for f in flags {
+			switch string(f.(json.String) or_else "") {
+			case "cmd": pf.key_mods |= MOD_SUPER
+			case "ctrl": pf.key_mods |= MOD_CONTROL
+			case "shift": pf.key_mods |= MOD_SHIFT
+			case "alt": pf.key_mods |= MOD_ALT
+			}
+		}
+	}
 	// keys held across frames until "unhold" (for ⌥ measuring, the Z zoom tool)
 	if keys, ok := params["hold"].(json.Array); ok {
 		for kv in keys do if k := key_code(string(kv.(json.String) or_else "")); k >= 0 do pf.key_down[k] = true

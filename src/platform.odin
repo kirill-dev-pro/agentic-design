@@ -31,6 +31,7 @@ Platform :: struct {
 	key_pressed:    [MAX_KEYS]bool, // went down this frame
 	key_repeated:   [MAX_KEYS]bool, // went down or auto-repeated this frame
 	chars:          [dynamic]rune,
+	key_mods:       c.int, // the modifier flags (MOD_*) of this frame's key presses
 	dropped:        [dynamic]string, // files dropped on the window since last frame
 	open_requests:  [dynamic]string, // documents the system asked to open (open_events_darwin.odin)
 	button_down:    [MAX_BUTTONS]bool,
@@ -88,10 +89,13 @@ mouse_delta :: proc() -> [2]f32 {
 	return (pf.mouse - pf.mouse_prev) / ui_scale() // in the window's interface units
 }
 
+// A key press counts its own modifier flags too: a program that types for the user
+// (dictation, text expanders) posts ⌘V as one V with the Command flag, with no press of ⌘.
+
 mod_cmd :: proc() -> bool {
-	return key_down(KEY_LEFT_SUPER) || key_down(KEY_RIGHT_SUPER) || key_down(KEY_LEFT_CONTROL) || key_down(KEY_RIGHT_CONTROL)
+	return key_down(KEY_LEFT_SUPER) || key_down(KEY_RIGHT_SUPER) || key_down(KEY_LEFT_CONTROL) || key_down(KEY_RIGHT_CONTROL) || pf.key_mods & (MOD_SUPER | MOD_CONTROL) != 0
 }
 
 mod_shift :: proc() -> bool {
-	return key_down(KEY_LEFT_SHIFT) || key_down(KEY_RIGHT_SHIFT)
+	return key_down(KEY_LEFT_SHIFT) || key_down(KEY_RIGHT_SHIFT) || pf.key_mods & MOD_SHIFT != 0
 }

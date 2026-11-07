@@ -63,6 +63,18 @@ annot: struct {
 	editing: int, // the comment whose text is being typed, -1 none
 }
 
+// Where last frame drew each comment on the canvas (its pin and card, on screen), so a click
+// opens one to change its text, and the Delete button of the one being typed.
+@(private = "file")
+Comment_Hit :: struct {
+	mark: int,
+	r:    Rect,
+}
+@(private = "file")
+comment_hits: [dynamic]Comment_Hit
+@(private = "file")
+comment_trash: Rect
+
 @(init)
 annot_init :: proc "contextless" () {
 	annot.drawing, annot.editing = -1, -1
@@ -84,6 +96,34 @@ annotations_clear :: proc() {
 	clear(&annot.marks)
 	annot.drawing, annot.editing = -1, -1
 	if ui.focus == "mark.comment" do ui.focus = ""
+}
+
+@(private = "file")
+mark_remove :: proc(i: int) {
+	if i < 0 || i >= len(annot.marks) do return
+	delete(annot.marks[i].pts)
+	delete(annot.marks[i].text)
+	ordered_remove(&annot.marks, i)
+	if annot.editing == i do annot.editing = -1
+	else if annot.editing > i do annot.editing -= 1
+}
+
+// Ends typing a comment; an empty one goes. Returns the index of the mark removed, or -1.
+@(private = "file")
+comment_end :: proc() -> int {
+	i := annot.editing
+	annot.editing = -1
+	if ui.focus == "mark.comment" do field_commit()
+	if i < 0 || i >= len(annot.marks) || annot.marks[i].text != "" do return -1
+	mark_remove(i)
+	return i
+}
+
+// The comment under the pointer (the one drawn last on top), or -1.
+@(private = "file")
+comment_at :: proc(p: [2]f32) -> int {
+	#reverse for h in comment_hits do if in_rect(h.r, p) do return h.mark
+	return -1
 }
 
 @(private = "file")
@@ -128,8 +168,24 @@ annotate_input :: proc(over_canvas: bool, page: [2]f32) -> bool {
 		}
 		return true
 	}
+	if over_canvas && comment_at(app.mouse) >= 0 do ui.cursor_hint = .Hand
 	if !over_canvas || !mouse_pressed(MOUSE_BUTTON_LEFT) do return over_canvas
-	if ui.focus == "mark.comment" do field_commit()
+	// the comment being typed: its Delete button
+	if annot.editing >= 0 && in_rect(comment_trash, app.mouse) {
+		mark_remove(annot.editing)
+		if ui.focus == "mark.comment" do ui.focus = ""
+		return true
+	}
+	// a comment already there: type in it again
+	if hit := comment_at(app.mouse); hit >= 0 {
+		if hit == annot.editing && ui.focus == "mark.comment" do return true
+		if removed := comment_end(); removed >= 0 && removed < hit do hit -= 1
+		annot.editing = hit
+		field_focus(0, "mark.comment", annot.marks[hit].text)
+		ui.sel = -1 // the caret at the end, nothing selected
+		return true
+	}
+	comment_end()
 	switch annot.tool {
 	case .Comment:
 		m := Mark{tool = .Comment, color = color}
@@ -167,7 +223,7 @@ linalg_len :: proc(v: [2]f32) -> f32 {
 // Draws the marks with `to` mapping page to drawing coordinates and `s` the drawing units of
 // one screen point (1 on the canvas, the render's scale for the agent's picture).
 @(private = "file")
-draw_marks :: proc(vg: ^nvg.Context, to: proc(p: [2]f32) -> [2]f32, s: f32) {
+draw_marks :: proc(vg: ^nvg.Context, to: proc(p: [2]f32) -> [2]f32, s: f32, canvas := false) {
 	for m, mi in annot.marks {
 		c := m.color
 		switch m.tool {
@@ -221,8 +277,10 @@ draw_marks :: proc(vg: ^nvg.Context, to: proc(p: [2]f32) -> [2]f32, s: f32) {
 			nvg.StrokeWidth(vg, 2 * s)
 			nvg.Stroke(vg)
 		case .Comment:
-			if mi == annot.editing && s == 1 do continue // drawn with its caret by draw_annotations
-			draw_comment(vg, to(m.pts[0]), c, m.text, s, -1)
+			if mi == annot.editing && canvas do continue // drawn with its caret by draw_annotations
+			p := to(m.pts[0])
+			card := draw_comment(vg, p, c, m.text, s, -1)
+			if canvas do comment_hit(mi, p, card)
 		case .Tag:
 			n, _ := engine.doc_find_uid(&app.doc, m.uid)
 			if n == nil do continue
@@ -249,8 +307,10 @@ draw_marks :: proc(vg: ^nvg.Context, to: proc(p: [2]f32) -> [2]f32, s: f32) {
 
 // On the canvas (draw_canvas), with the comment being typed.
 draw_annotations :: proc(vg: ^nvg.Context) {
+	clear(&comment_hits)
+	comment_trash = {}
 	if !agent_mode() || len(annot.marks) == 0 do return
-	draw_marks(vg, to_screen, 1)
+	draw_marks(vg, to_screen, 1, canvas = true)
 	if annot.editing >= 0 && annot.editing < len(annot.marks) {
 		m := &annot.marks[annot.editing]
 		focused := field_is_focused(0, "mark.comment")
@@ -267,7 +327,19 @@ draw_annotations :: proc(vg: ^nvg.Context) {
 				delete(m.text)
 				m.text = strings.clone(s)
 			}
-			card := draw_comment(vg, to_screen(m.pts[0]), m.color, m.text, 1, clamp(ui.caret, 0, len(m.text)))
+			p := to_screen(m.pts[0])
+			card := draw_comment(vg, p, m.color, m.text, 1, clamp(ui.caret, 0, len(m.text)))
+			comment_hit(annot.editing, p, card)
+			// Delete, at the right of the card's head
+			trash := Rect{card.x + card.w - 28, card.y + 4, 20, 20}
+			over := in_rect({trash.x + ui.origin.x, trash.y + ui.origin.y, trash.w, trash.h}, app.mouse)
+			if over {
+				fill_rect(vg, trash, {1, 1, 1, 0.1}, 6)
+				tooltip_request("Delete comment", trash)
+				ui.cursor_hint = .Hand
+			}
+			draw_lucide(vg, "trash-2", trash.x + trash.w / 2, trash.y + trash.h / 2, 13, {1, 1, 1, 0.9} if over else {0x8F / 255.0, 0x8F / 255.0, 0x8F / 255.0, 1}, 1.6)
+			comment_trash = {trash.x + ui.origin.x, trash.y + ui.origin.y, trash.w, trash.h}
 			ui.focus_rect = {card.x + ui.origin.x, card.y + ui.origin.y, card.w, card.h} // a click outside ends typing
 		} else {
 			// done typing: an empty comment goes
@@ -278,6 +350,14 @@ draw_annotations :: proc(vg: ^nvg.Context) {
 			annot.editing = -1
 		}
 	}
+}
+
+// Records a comment's pin and card (drawn at `p`) for comment_at, in window coordinates.
+@(private = "file")
+comment_hit :: proc(mark: int, p: [2]f32, card: Rect) {
+	o := ui.origin
+	append(&comment_hits, Comment_Hit{mark, {p.x - 14 + o.x, p.y - 28 + o.y, 28, 28}})
+	if card.w > 0 do append(&comment_hits, Comment_Hit{mark, {card.x + o.x, card.y + o.y, card.w, card.h}})
 }
 
 // A comment mark as in app-ui.pen ("5 · Annotate mode"): a pin whose tip is the point, and
