@@ -608,6 +608,7 @@ draw_canvas :: proc() {
 		nvg.Fill(vg)
 	} else do draw_document_layer(vg)
 	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
+	draw_live_selections(vg) // what the others in a live document have selected
 	draw_annotations(vg) // the user's marks for the agent
 	draw_canvas_overlays(vg)
 	draw_comments(vg) // a live document's comment pins and the open thread

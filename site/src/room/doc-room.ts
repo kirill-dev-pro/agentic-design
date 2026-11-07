@@ -4,7 +4,9 @@
 //
 // Hibernation only (acceptWebSocket): the object may sleep between messages; what a socket needs
 // after a wake-up is in its attachment, and the document is rebuilt from the snapshot plus the
-// op log after it. The Worker (src/server.ts) has checked the session and the role and passes
+// op log after it. Each socket is one participant (a person in two windows is two, with a cid
+// and a colour each); presence carries the pointer and the selection to the others. The Worker
+// (src/server.ts) has checked the session and the role and passes
 // them in x-doc-* headers it sets itself; the room never reads a role from a message.
 //
 // `DurableObject` comes from `workerstack/durable` (Cloudflare's in the Worker, a stand-in when
@@ -12,7 +14,7 @@
 import { DurableObject, type HibernatableWebSocket } from 'workerstack/durable'
 
 import { loadPencore } from './pencore'
-import { canEdit, Room, type Batch, type Op, type Principal } from './room'
+import { Room, type Batch, type Op, type Principal } from './room'
 
 const WIRE = 1
 const MAX_MESSAGE = 1024 * 1024
@@ -23,7 +25,8 @@ const RETRY_MAX_MS = 3600_000
 const LOG_DAYS = 7
 const PRESENCE_PER_SECOND = 20
 
-type Who = Principal & { color: string }
+/** Who a socket is: the person, and the connection (`cid`): one person in two windows is two participants. */
+type Who = Principal & { color: string; cid: string }
 type Attachment = { who: Who; joined: boolean; presence?: Record<string, unknown> | null }
 
 const COLORS = ['#C96442', '#2E7D32', '#1565C0', '#6A1B9A', '#AD1457', '#00838F', '#EF6C00', '#4E342E']
@@ -180,7 +183,9 @@ export class DocRoom extends DurableObject {
 		const pair = new WebSocketPair()
 		const [client, server] = [pair[0], pair[1] as unknown as HibernatableWebSocket]
 		this.ctx.acceptWebSocket(server, [userId])
-		server.serializeAttachment({ who: { userId, name, role, color: colorOf(userId) }, joined: false } satisfies Attachment)
+		// each connection its own colour, so that two windows of one person can be told apart
+		const cid = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+		server.serializeAttachment({ who: { userId, name, role, color: colorOf(userId + cid), cid }, joined: false } satisfies Attachment)
 		return new Response(null, { status: 101, webSocket: client } as ResponseInit)
 	}
 
@@ -279,7 +284,6 @@ export class DocRoom extends DurableObject {
 			if (msg.t === 'presence') {
 				const { t: _t, ...rest } = msg
 				socket.serializeAttachment({ ...att, presence: rest } satisfies Attachment)
-				if (!canEdit(att.who.role)) delete (out as Record<string, unknown>).selection
 			}
 			this.broadcast(socket, out)
 			return

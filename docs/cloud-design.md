@@ -143,7 +143,10 @@ parallel with the site; execution plan with Dev and Web):
     room, or in the app (agentic-design://open?doc=<id>), which downloads its latest version
     into its cache and joins the same room. Both run the same client (src/cloud_live.odin):
     their edits as operations every 100 ms, others' applied as they arrive, undo of one's
-    own steps only, pointers as people's cursors. Live editing in the app is macOS only for
+    own steps only, pointers as people's cursors. Each connection is a participant (the room
+    gives it a `cid` and a colour): one person in two windows shows twice. Everyone's
+    selection travels with their pointer and is outlined in their colour on the others'
+    canvases, for every role. Live editing in the app is macOS only for
     now (NSURLSessionWebSocketTask); Windows and Linux open cloud files in the browser.
 
 ---

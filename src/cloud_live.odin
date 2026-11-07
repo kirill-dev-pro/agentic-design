@@ -40,11 +40,16 @@ Live_Phase :: enum {
 	Closed, // the room said no (removed, deleted); not retrying
 }
 
+// One participant: a connection to the room. The same person in two windows or apps is two,
+// each with its own colour, pointer and selection.
 Live_Person :: struct {
-	user:  string,
-	name:  string,
-	color: nvg.Color,
-	role:  string,
+	conn:      string, // the room's id of the connection (the person's id from a room without one)
+	user:      string,
+	name:      string,
+	color:     nvg.Color,
+	role:      string,
+	selection: [dynamic]string, // node ids
+	page:      int,
 }
 
 Live_Event :: enum {
@@ -133,7 +138,7 @@ live_close :: proc() {
 	live.doc_id, live.path, live.name = "", "", ""
 	live.phase = .Off
 	live.role = ""
-	clear(&live.people)
+	people_clear()
 }
 
 @(private = "file")
@@ -246,7 +251,7 @@ live_report :: proc() {
 	fmt.sbprintf(&b, `{{"phase":"%v","role":%s,"error":%s,"people":[`, live.phase, json_quote(live.role), json_quote(live.error))
 	for p, i in live.people {
 		if i > 0 do strings.write_byte(&b, ',')
-		fmt.sbprintf(&b, `{{"id":%s,"name":%s,"role":%s,"color":"#%02X%02X%02X"}}`, json_quote(p.user), json_quote(p.name), json_quote(p.role), u8(p.color.r * 255), u8(p.color.g * 255), u8(p.color.b * 255))
+		fmt.sbprintf(&b, `{{"id":%s,"name":%s,"role":%s,"color":"#%02X%02X%02X"}}`, json_quote(p.conn), json_quote(p.name), json_quote(p.role), u8(p.color.r * 255), u8(p.color.g * 255), u8(p.color.b * 255))
 	}
 	strings.write_string(&b, "]}")
 	s := strings.to_string(b)
@@ -290,7 +295,7 @@ live_closed :: proc(code: int, reason: string) {
 	}
 	live.phase = .Offline
 	presence_people_clear()
-	clear(&live.people)
+	people_clear()
 }
 
 Flush_Kind :: enum {
@@ -413,7 +418,10 @@ live_message :: proc(doc: ^engine.Document, text: string) -> (changed: bool) {
 	switch str(o, "t") {
 	case "welcome":
 		live.role = strings.clone(str(o, "role"))
-		if you, has := o["you"].(json.Object); has do live.me = person_of(you)
+		if you, has := o["you"].(json.Object); has {
+			person_free(&live.me)
+			live.me = person_of(you)
+		}
 		if snap, has := o["snapshot"].(json.Object); has {
 			// the whole document: from it, with whatever we have not had acknowledged lost
 			sorts := make(map[string]string, 64, context.temp_allocator)
@@ -436,7 +444,7 @@ live_message :: proc(doc: ^engine.Document, text: string) -> (changed: bool) {
 			}
 			live_resend()
 		}
-		clear(&live.people)
+		people_clear()
 		if pres, has := o["presence"].(json.Array); has do for p in pres do if po, pok := p.(json.Object); pok do live_presence_in(po)
 	case "ops":
 		if live_remote(o) do changed = true
@@ -454,12 +462,13 @@ live_message :: proc(doc: ^engine.Document, text: string) -> (changed: bool) {
 	case "presence":
 		live_presence_in(o)
 	case "join":
-		if a, has := o["author"].(json.Object); has do live_person_add(person_of(a))
+		if a, has := o["author"].(json.Object); has do _ = live_person(a)
 	case "leave":
 		if a, has := o["author"].(json.Object); has {
-			id := str(a, "userId")
-			presence_person_leave(id)
-			for p, i in live.people do if p.user == id {
+			key := conn_of(a)
+			presence_person_leave(key)
+			for &p, i in live.people do if p.conn == key {
+				person_free(&p)
 				ordered_remove(&live.people, i)
 				break
 			}
@@ -485,9 +494,17 @@ live_remote :: proc(o: json.Object) -> bool {
 	return true
 }
 
+// The participant's key: its connection (cid), or its person on a room without connection ids.
+@(private = "file")
+conn_of :: proc(a: json.Object) -> string {
+	if cid, ok := a["cid"].(json.String); ok && cid != "" do return string(cid)
+	return string(a["userId"].(json.String) or_else "")
+}
+
 @(private = "file")
 person_of :: proc(a: json.Object) -> Live_Person {
 	p := Live_Person {
+		conn = strings.clone(conn_of(a)),
 		user = strings.clone(string(a["userId"].(json.String) or_else "")),
 		name = strings.clone(string(a["name"].(json.String) or_else "Someone")),
 		role = strings.clone(string(a["role"].(json.String) or_else "")),
@@ -500,25 +517,80 @@ person_of :: proc(a: json.Object) -> Live_Person {
 }
 
 @(private = "file")
-live_person_add :: proc(p: Live_Person) {
-	for q in live.people do if q.user == p.user do return // a second tab or device of the same person
-	if p.user == live.me.user do return
-	append(&live.people, p)
+person_free :: proc(p: ^Live_Person) {
+	delete(p.conn)
+	delete(p.user)
+	delete(p.name)
+	delete(p.role)
+	for id in p.selection do delete(id)
+	delete(p.selection)
+	p^ = {}
+}
+
+@(private = "file")
+people_clear :: proc() {
+	for &p in live.people do person_free(&p)
+	clear(&live.people)
+}
+
+// The participant of `a` in live.people (added when new), or nil for this connection itself.
+@(private = "file")
+live_person :: proc(a: json.Object) -> ^Live_Person {
+	key := conn_of(a)
+	if key == "" || key == live.me.conn do return nil
+	for &q in live.people do if q.conn == key do return &q
+	append(&live.people, person_of(a))
+	return &live.people[len(live.people) - 1]
 }
 
 @(private = "file")
 live_presence_in :: proc(o: json.Object) {
 	a, ok := o["author"].(json.Object)
 	if !ok do return
-	who := person_of(a)
-	if who.user == live.me.user do return
-	live_person_add(who)
+	who := live_person(a)
+	if who == nil do return
+	if sel, has := o["selection"].(json.Array); has {
+		for id in who.selection do delete(id)
+		clear(&who.selection)
+		for v in sel do if id, sok := v.(json.String); sok do append(&who.selection, strings.clone(string(id)))
+	}
+	if pg, has := o["page"].(json.Float); has do who.page = int(pg)
 	cur, has := o["cursor"].(json.Object)
 	if !has do return
 	x, xok := cur["x"].(json.Float)
 	y, yok := cur["y"].(json.Float)
 	if !xok || !yok do return
-	presence_person_at(who.user, who.name, who.color, live.path, {f32(x), f32(y)})
+	presence_person_at(who.conn, who.name, who.color, live.path, {f32(x), f32(y)})
+}
+
+// What the others have selected, on the canvas (draw_canvas): each one's layers outlined in
+// their colour, with their name at the first one's corner.
+draw_live_selections :: proc(vg: ^nvg.Context) {
+	if !live_is_current() || !live.opened do return
+	for &p in live.people {
+		if p.page != app.page || len(p.selection) == 0 do continue
+		first := true
+		for id in p.selection {
+			n, _ := engine.doc_find(&app.doc, id)
+			if n == nil || !n.enabled do continue
+			box := engine.node_page_box(n)
+			a := to_screen({box[0], box[1]})
+			b := to_screen({box[0] + box[2], box[1] + box[3]})
+			nvg.BeginPath(vg)
+			nvg.Rect(vg, a.x, a.y, b.x - a.x, b.y - a.y)
+			nvg.StrokeColor(vg, p.color)
+			nvg.StrokeWidth(vg, 1.5)
+			nvg.Stroke(vg)
+			if first {
+				first = false
+				name := presence_person_label(p.conn, p.name)
+				w := text_width(vg, name, 11) + 12
+				tag := Rect{a.x, a.y - 18, w, 18}
+				fill_rect(vg, tag, p.color, 4)
+				label(vg, tag.x + 6, tag.y + 9, name, {1, 1, 1, 1}, 11)
+			}
+		}
+	}
 }
 
 // Our pointer and selection, when they changed.

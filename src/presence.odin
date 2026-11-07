@@ -718,3 +718,11 @@ presence_people_clear :: proc() {
 		ordered_remove(&cursors, i)
 	}
 }
+
+// The name a person's cursor shows ("Kirill 2" for a second window of Kirill), for what else
+// is drawn for them (their selection's tag).
+presence_person_label :: proc(conn, name: string) -> string {
+	key := fmt.tprintf("person:%s", conn)
+	for c in cursors do if c.key == key do return c.name
+	return name
+}
