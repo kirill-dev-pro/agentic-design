@@ -40,6 +40,7 @@ platform_init :: proc(width, height: int, title: cstring) -> bool {
 	}
 	glfw.WindowHint_bool(glfw.RESIZABLE, true)
 	glfw.WindowHint_bool(glfw.COCOA_RETINA_FRAMEBUFFER, true)
+	glfw.WindowHint_bool(glfw.SCALE_TO_MONITOR, true) // Windows, X11: the size is in points
 	// AGENTIC_QUIET: open behind other windows without taking focus (tests);
 	// AGENTIC_NO_FOCUS: open in front but leave the keyboard focus where it is (agents).
 	quiet := os.get_env("AGENTIC_QUIET", context.temp_allocator) != ""
@@ -157,7 +158,7 @@ platform_poll :: proc(wait: f64 = 0) {
 	pf.polling = false
 	gestures_collect()
 	x, y := glfw.GetCursorPos(pf.window)
-	pf.mouse = {f32(x), f32(y)}
+	pf.mouse = {f32(x), f32(y)} / window_units_per_point()
 	if pf.synthetic do pf.mouse = pf.synthetic_pos
 	if pf.first_frame {
 		pf.mouse_prev = pf.mouse
@@ -181,7 +182,23 @@ platform_swap :: proc() {
 
 platform_window_size :: proc() -> [2]f32 {
 	w, h := glfw.GetWindowSize(pf.window)
-	return {f32(w), f32(h)}
+	return {f32(w), f32(h)} / window_units_per_point()
+}
+
+// Window coordinates per point of the interface. 1 on a Mac and on Wayland, where GLFW
+// measures the window in points and the framebuffer is larger; on Windows and X11 the
+// window is measured in pixels and the display's scale (125 %, 150 %, 200 %) is its
+// content scale.
+window_units_per_point :: proc() -> f32 {
+	when ODIN_OS == .Darwin {
+		return 1
+	} else {
+		cs, _ := glfw.GetWindowContentScale(pf.window)
+		w, _ := glfw.GetWindowSize(pf.window)
+		fw, _ := glfw.GetFramebufferSize(pf.window)
+		if cs <= 0 || w <= 0 || fw <= 0 do return 1
+		return max(cs * f32(w) / f32(fw), 0.25)
+	}
 }
 
 platform_framebuffer_size :: proc() -> [2]i32 {
@@ -213,18 +230,43 @@ platform_load_fonts :: proc(vg: ^nvg.Context) {
 		if !ok do return -1
 		return nvg.CreateFontMem(vg, name, data, false)
 	}
-	font(vg, "sans", "/System/Library/Fonts/Supplemental/Arial.ttf")
-	font(vg, "sans-bold", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
-	// The interface uses the system font; fall back to Arial when it cannot be read.
-	if font(vg, "ui", "/System/Library/Fonts/SFNS.ttf") < 0 do font(vg, "ui", "/System/Library/Fonts/Supplemental/Arial.ttf")
-	ui_mono_loaded = font(vg, "ui-mono", "/System/Library/Fonts/SFNSMono.ttf") >= 0 || font(vg, "ui-mono", "/System/Library/Fonts/Menlo.ttc") >= 0
+	// the first of each list that can be read
+	first :: proc(vg: ^nvg.Context, name: string, paths: []string) -> bool {
+		for p in paths do if font(vg, name, p) >= 0 do return true
+		return false
+	}
+	when ODIN_OS == .Darwin {
+		first(vg, "sans", {"/System/Library/Fonts/Supplemental/Arial.ttf"})
+		first(vg, "sans-bold", {"/System/Library/Fonts/Supplemental/Arial Bold.ttf"})
+		// The interface uses the system font; fall back to Arial when it cannot be read.
+		first(vg, "ui", {"/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"})
+		ui_mono_loaded = first(vg, "ui-mono", {"/System/Library/Fonts/SFNSMono.ttf", "/System/Library/Fonts/Menlo.ttc"})
+	} else when ODIN_OS == .Windows {
+		F :: "C:/Windows/Fonts/"
+		first(vg, "sans", {F + "arial.ttf"})
+		first(vg, "sans-bold", {F + "arialbd.ttf"})
+		first(vg, "ui", {F + "segoeui.ttf", F + "arial.ttf"})
+		ui_mono_loaded = first(vg, "ui-mono", {F + "consola.ttf", F + "cour.ttf"})
+	} else {
+		// the common distributions' places for the usual free families
+		first(vg, "sans", {"/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf", "/usr/share/fonts/TTF/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf"})
+		first(vg, "sans-bold", {"/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", "/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf", "/usr/share/fonts/TTF/LiberationSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf"})
+		first(vg, "ui", {"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/google-noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf"})
+		ui_mono_loaded = first(vg, "ui-mono", {"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", "/usr/share/fonts/TTF/DejaVuSansMono.ttf", "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf", "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf"})
+	}
+	// Without any of them, the bundled Noto Sans draws the interface.
+	for name in ([]string{"sans", "sans-bold", "ui"}) {
+		if nvg.FindFont(vg, name) < 0 do nvg.CreateFontMem(vg, name, engine.NOTO_SANS, false)
+	}
 }
 
 // What the renderer needs from the window: the GL context is current (GL), or the
-// window's content view has a CAMetalLayer to draw into (WebGPU).
+// window's content view has a CAMetalLayer to draw into (WebGPU on macOS), or its native
+// handle (desktop_linux.odin, desktop_windows.odin).
 platform_gpu_surface :: proc() -> engine.Gpu_Surface {
 	when engine.RENDERER == "gl" do return {set_proc_address = glfw.gl_set_proc_address}
-	else do return {metal_layer = platform_metal_layer(pf.window)}
+	else when ODIN_OS == .Darwin do return {metal_layer = platform_metal_layer(pf.window)}
+	else do return platform_native_surface(pf.window)
 }
 
 // Seconds on GLFW's clock (the frame pacing and the agents' cursors read it).

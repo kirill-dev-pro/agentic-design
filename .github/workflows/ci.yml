@@ -1,5 +1,6 @@
 # Builds what a change could break without anyone noticing: the browser viewer (the engine
-# for js_wasm32). The macOS app is built and checked by release.yml on tags.
+# for js_wasm32), and the desktop app for Linux and Windows (each uploaded as an artifact of
+# the run). The macOS app is built and checked by release.yml on tags.
 #
 # On a push it also uploads the compiled viewer, editor and server engine (viewer.wasm, odin.js,
 # edit/editor.wasm, pencore/pencore.wasm) to the web-viewer-builds prerelease, named by a hash of its sources (site/scripts/viewer-key.mjs) with a .sha256 next
@@ -81,3 +82,92 @@ jobs:
           # keep the newest 30 builds (two files each, about 3 MB a build)
           gh release view "$TAG" --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[60:] | .[].name' \
             | xargs -r -n 1 gh release delete-asset "$TAG" -y
+
+  # The desktop app on Linux (x86-64): WebGPU through Vulkan, GLFW from the system (X11, or
+  # XWayland). The artifact needs libglfw3 installed where it runs.
+  linux:
+    runs-on: ubuntu-24.04
+    env:
+      ODIN_VERSION: dev-2026-10
+      ODIN_SHA256: c3c8b095621fd0c75f7f73e3a0829f1b4d45324225f20ba11ed8dc4da310a8ab
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Odin (pinned release), its stb libraries, GLFW and zlib
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/odin.tar.gz" "https://github.com/odin-lang/Odin/releases/download/$ODIN_VERSION/odin-linux-amd64-$ODIN_VERSION.tar.gz"
+          echo "$ODIN_SHA256  $RUNNER_TEMP/odin.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/odin"
+          tar xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
+          echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
+          (cd "$RUNNER_TEMP/odin/vendor/stb/src" && sh build_stb.sh unix)
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libglfw3-dev zlib1g-dev
+
+      - name: Build
+        run: |
+          odin version
+          tools/fetch_wgpu.sh
+          mkdir -p build
+          odin build src -out:build/agentic-design -o:speed
+          ls -l build/agentic-design
+
+      - name: The MCP server answers (no window needed)
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | AGENTIC_PORT=1 ./build/agentic-design mcp |
+            python3 -I -c 'import sys, json; t = json.loads(sys.stdin.readline())["result"]["tools"]; print(len(t), "tools")'
+
+      - name: Package
+        run: |
+          mkdir -p "dist/agentic-design-linux-x86_64"
+          cp build/agentic-design LICENSE THIRD_PARTY_NOTICES.md "dist/agentic-design-linux-x86_64/"
+          tar czf dist/agentic-design-linux-x86_64.tar.gz -C dist agentic-design-linux-x86_64
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: agentic-design-linux-x86_64
+          path: dist/agentic-design-linux-x86_64.tar.gz
+          retention-days: 14
+
+  # The desktop app on Windows (x86-64): WebGPU through Direct3D 12, linked with MSVC.
+  windows:
+    runs-on: windows-2025
+    env:
+      ODIN_VERSION: dev-2026-10
+      ODIN_SHA256: b6b2e426a8b6f147b74ec7e18bef8df27cf40fe16193159df7ca09a0cc0c2011
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Odin (pinned release; the stb and GLFW libraries come with it)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/odin.zip" "https://github.com/odin-lang/Odin/releases/download/$ODIN_VERSION/odin-windows-amd64-$ODIN_VERSION.zip"
+          echo "$ODIN_SHA256  $RUNNER_TEMP/odin.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/odin.zip" -d "$RUNNER_TEMP/odin"
+          echo "$RUNNER_TEMP/odin/dist" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: |
+          odin version
+          tools/fetch_wgpu.sh windows_amd64
+          mkdir -p build
+          odin build src -out:build/agentic-design.exe -o:speed -subsystem:windows
+          ls -l build/agentic-design.exe
+
+      - name: The MCP server answers (no window needed)
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | AGENTIC_PORT=1 ./build/agentic-design.exe mcp |
+            python -I -c 'import sys, json; t = json.loads(sys.stdin.readline())["result"]["tools"]; print(len(t), "tools")'
+
+      - name: Package
+        run: |
+          mkdir -p dist/agentic-design-windows-x86_64
+          cp build/agentic-design.exe LICENSE THIRD_PARTY_NOTICES.md dist/agentic-design-windows-x86_64/
+          cd dist && 7z a -bso0 agentic-design-windows-x86_64.zip agentic-design-windows-x86_64
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: agentic-design-windows-x86_64
+          path: dist/agentic-design-windows-x86_64.zip
+          retention-days: 14

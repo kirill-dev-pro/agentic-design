@@ -13,8 +13,6 @@ import "core:strings"
 import "core:sync"
 import "core:thread"
 import "core:time"
-import NS "core:sys/darwin/Foundation"
-import "base:intrinsics"
 
 import "engine"
 
@@ -139,6 +137,9 @@ cloud_signed_in :: proc() -> bool {
 
 // ---------------------------------------------------------------- HTTP (curl)
 
+// The system's curl (Windows 10 and later ship one in System32).
+CURL :: "curl.exe" when ODIN_OS == .Windows else "/usr/bin/curl"
+
 Http_Result :: struct {
 	status: int, // 0 when the request did not complete
 	body:   string,
@@ -194,7 +195,7 @@ cloud_http :: proc(method, url: string, body := "", bearer := "", upload := "", 
 	text := strings.to_string(cfg)
 	_, _ = os.write(wr, transmute([]u8)text)
 	os.close(wr)
-	state, out, errout, xerr := os.process_exec({command = {"/usr/bin/curl", "--config", "-"}, stdin = rd}, context.temp_allocator)
+	state, out, errout, xerr := os.process_exec({command = {CURL, "--config", "-"}, stdin = rd}, context.temp_allocator)
 	os.close(rd)
 	if xerr != nil {
 		r.err = "could not start curl"
@@ -282,22 +283,6 @@ url_encode :: proc(s: string) -> string {
 		}
 	}
 	return strings.to_string(b)
-}
-
-// The Mac's name as the user set it ("Kirill's MacBook Pro"), for the site's device list.
-@(private = "file")
-device_name :: proc() -> string {
-	pool := NS.AutoreleasePool.alloc()->init()
-	defer pool->drain()
-	host := intrinsics.objc_send(^NS.Object, Host, "currentHost")
-	name := intrinsics.objc_send(^NS.String, host, "localizedName") if host != nil else nil
-	s := strings.clone(name->odinString(), context.temp_allocator) if name != nil else "Mac"
-	return s[:min(len(s), 80)]
-}
-
-@(objc_class = "NSHost")
-Host :: struct {
-	using _: NS.Object,
 }
 
 @(private = "file")

@@ -1,4 +1,4 @@
-#+build !js
+#+build darwin, linux
 package engine
 
 import "base:runtime"
@@ -6,7 +6,7 @@ import "core:c"
 import "core:os"
 import "core:thread"
 
-// PNG encoding with the system's zlib. stb_image_write used to do it, in C with C's malloc:
+// PNG encoding with the system's zlib (macOS, Linux; png_stb.odin where there is none). stb_image_write used to do it, in C with C's malloc:
 // each window-sized screenshot left 20-30 MB of freed blocks that macOS's malloc kept, and
 // a session of agent screenshots grew to hundreds of megabytes. Here every buffer comes
 // from the app's allocator (memory.odin), so it goes back when freed. Screenshots are

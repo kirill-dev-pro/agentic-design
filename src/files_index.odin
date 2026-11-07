@@ -101,7 +101,7 @@ files_scan :: proc(root: string) {
 	}
 	// what Spotlight knows, at once (the walk below finds the rest)
 	spot := 0
-	if os.get_env("AGENTIC_FILES_NO_SPOTLIGHT", context.temp_allocator) == "" {
+	if ODIN_OS == .Darwin && os.get_env("AGENTIC_FILES_NO_SPOTLIGHT", context.temp_allocator) == "" {
 		state, out, _, err := os.process_exec({command = {"/usr/bin/mdfind", "-0", "-onlyin", root, "kMDItemFSName == '*.pen'c"}}, context.allocator)
 		if err == nil && state.exited && state.exit_code == 0 {
 			for p in strings.split(string(out), "\x00", context.temp_allocator) {

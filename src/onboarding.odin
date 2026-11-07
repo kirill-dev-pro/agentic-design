@@ -6,7 +6,6 @@ import "engine"
 import "core:fmt"
 import "core:os"
 import "core:strings"
-import "core:sys/posix"
 import nvg "nanovg"
 
 // The onboarding: a modal sheet with four steps (welcome, agents, features, start). It
@@ -351,7 +350,7 @@ SAMPLE_FILE :: "agentic-design.pen"
 // The sample folder copied, so it can be edited and autosaved without touching the
 // original: once into a throwaway folder for quiet (test) windows.
 sample_copy :: proc(path: string) -> string {
-	dir := fmt.tprintf("%s/agentic-design-sample-%d", os.temp_directory(context.temp_allocator) or_else "/tmp", posix.getpid())
+	dir := fmt.tprintf("%s/agentic-design-sample-%d", os.temp_directory(context.temp_allocator) or_else "/tmp", os.get_pid())
 	sample_copy_folder(os.dir(path), dir)
 	return fmt.tprintf("%s/%s", dir, SAMPLE_FILE)
 }

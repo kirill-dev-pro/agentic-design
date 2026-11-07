@@ -11,7 +11,6 @@ import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
-import "core:sys/posix"
 import nvg "nanovg"
 
 // Request: {"method": "...", "params": {...}}
@@ -350,11 +349,8 @@ document_free :: proc(method: string) -> bool {
 // The same file, also through symlinks (/tmp and /private/tmp).
 same_file :: proc(a, b: string) -> bool {
 	if a == b do return true
-	ra := posix.realpath(strings.clone_to_cstring(a, context.temp_allocator))
-	rb := posix.realpath(strings.clone_to_cstring(b, context.temp_allocator))
-	defer if ra != nil do posix.free(ra)
-	defer if rb != nil do posix.free(rb)
-	return ra != nil && rb != nil && string(ra) == string(rb)
+	ra, rb := resolved_path(a), resolved_path(b)
+	return ra != "" && ra == rb
 }
 
 api_error :: proc(msg: string) -> string {

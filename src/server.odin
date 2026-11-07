@@ -9,7 +9,6 @@ import "core:strconv"
 import "core:net"
 import "core:strings"
 import "core:sync"
-import "core:sys/posix"
 import "core:thread"
 
 // Local control server: newline-delimited JSON requests on 127.0.0.1.
@@ -37,10 +36,6 @@ req_mutex: sync.Mutex
 req_queue: [dynamic]^Request
 server_listening: bool
 
-posix_ignore_sigpipe :: proc() {
-	posix.signal(.SIGPIPE, transmute(proc "c" (posix.Signal))posix.SIG_IGN)
-}
-
 server_start :: proc() {
 	thread.create_and_start(server_thread)
 }
@@ -52,12 +47,12 @@ server_thread :: proc() {
 	if err != nil do return
 	// not inherited by processes this one starts: the updater's relaunch helper held the
 	// port open, and the new window found it taken and ran without a control server
-	close_on_exec(posix.FD(sock))
+	close_on_exec(sock)
 	server_listening = true
 	for {
 		client, _, aerr := net.accept_tcp(sock)
 		if aerr != nil do continue
-		close_on_exec(posix.FD(client))
+		close_on_exec(client)
 		thread.create_and_start_with_poly_data(client, handle_client, self_cleanup = true)
 	}
 }
@@ -132,7 +127,3 @@ finish_request :: proc(req: ^Request, response: string) {
 	sync.sema_post(&req.done)
 }
 
-close_on_exec :: proc(fd: posix.FD) {
-	flags := posix.fcntl(fd, .GETFD)
-	if flags >= 0 do posix.fcntl(fd, .SETFD, flags | posix.FD_CLOEXEC)
-}

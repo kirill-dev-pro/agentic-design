@@ -7,16 +7,8 @@ import "base:runtime"
 import "core:fmt"
 import "core:strings"
 import "core:sync"
-import "core:sys/posix"
 
-foreign import libc "system:System.framework"
-
-@(default_calling_convention = "c")
-foreign libc {
-	malloc_zone_pressure_relief :: proc(zone: rawptr, goal: uint) -> uint ---
-}
-
-// The app's allocator. Blocks of 256 KB and more come straight from the system (mmap)
+// The app's allocator. Blocks of 256 KB and more come straight from the system (mmap, VirtualAlloc)
 // and go straight back when freed (munmap); smaller ones from the usual heap. macOS's
 // malloc keeps freed large blocks for reuse ("Malloc Large (empty)"), and they counted
 // against the app: 20 screenshots left 77 MB that no pressure relief returned. The
@@ -51,8 +43,8 @@ big_allocator_proc :: proc(data: rawptr, mode: runtime.Allocator_Mode, size, ali
 		return n, ok
 	}
 	big_alloc :: proc(size: int, loc: runtime.Source_Code_Location) -> ([]byte, runtime.Allocator_Error) {
-		p := posix.mmap(nil, uint(size), {.READ, .WRITE}, {.PRIVATE, .ANONYMOUS})
-		if p == posix.MAP_FAILED do return nil, .Out_Of_Memory
+		p := pages_alloc(size)
+		if p == nil do return nil, .Out_Of_Memory
 		sync.mutex_lock(&big_mutex)
 		// The maps live on the heap, always: a map takes its allocator from the context of
 		// its first insert, which could be the per-frame arena (cleared every frame) or an
@@ -70,7 +62,7 @@ big_allocator_proc :: proc(data: rawptr, mode: runtime.Allocator_Mode, size, ali
 		delete_key(&big_blocks, uintptr(p))
 		delete_key(&big_sites, uintptr(p))
 		sync.mutex_unlock(&big_mutex)
-		posix.munmap(p, uint(size))
+		pages_free(p, size)
 	}
 	switch mode {
 	case .Alloc, .Alloc_Non_Zeroed:
@@ -120,7 +112,7 @@ use_big_allocator_for_temp :: proc() {
 // for reuse, and they count against the app until it does. Once per quiet spell.
 memory_trim :: proc() -> uint {
 	engine.gpu_trim()
-	return malloc_zone_pressure_relief(nil, 0)
+	return heap_trim()
 }
 
 // What the app holds, for the `memory` request: where the bytes go, so that performance

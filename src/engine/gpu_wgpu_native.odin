@@ -13,8 +13,28 @@ import wgpu "../wgpu"
 
 when RENDERER == "wgpu" {
 
+	// The window to draw into, one kind per system.
 	Gpu_Surface :: struct {
-		metal_layer: rawptr, // macOS: the CAMetalLayer of the window's content view
+		metal_layer:     rawptr, // macOS: the CAMetalLayer of the window's content view
+		hwnd, hinstance: rawptr, // Windows
+		x11_display:     rawptr, // Linux on X11 (or XWayland)
+		x11_window:      u64,
+		wayland_display: rawptr, // Linux on Wayland
+		wayland_surface: rawptr,
+	}
+
+	@(private = "file")
+	create_surface :: proc(s: Gpu_Surface) -> wgpu.Surface {
+		if s.metal_layer != nil {
+			return wgpu.InstanceCreateSurface(G.instance, &{nextInChain = &wgpu.SurfaceSourceMetalLayer{chain = {sType = .SurfaceSourceMetalLayer}, layer = s.metal_layer}})
+		}
+		if s.hwnd != nil {
+			return wgpu.InstanceCreateSurface(G.instance, &{nextInChain = &wgpu.SurfaceSourceWindowsHWND{chain = {sType = .SurfaceSourceWindowsHWND}, hinstance = s.hinstance, hwnd = s.hwnd}})
+		}
+		if s.wayland_surface != nil {
+			return wgpu.InstanceCreateSurface(G.instance, &{nextInChain = &wgpu.SurfaceSourceWaylandSurface{chain = {sType = .SurfaceSourceWaylandSurface}, display = s.wayland_display, surface = s.wayland_surface}})
+		}
+		return wgpu.InstanceCreateSurface(G.instance, &{nextInChain = &wgpu.SurfaceSourceXlibWindow{chain = {sType = .SurfaceSourceXlibWindow}, display = s.x11_display, window = s.x11_window}})
 	}
 
 	@(private = "file")
@@ -31,9 +51,7 @@ when RENDERER == "wgpu" {
 			fmt.eprintln("WebGPU: no instance")
 			return nil
 		}
-		G.surface = wgpu.InstanceCreateSurface(G.instance, &{
-			nextInChain = &wgpu.SurfaceSourceMetalLayer{chain = {sType = .SurfaceSourceMetalLayer}, layer = surface.metal_layer},
-		})
+		G.surface = create_surface(surface)
 		done := false
 		wgpu.InstanceRequestAdapter(G.instance, &{compatibleSurface = G.surface, powerPreference = .LowPower}, {
 			mode = .AllowProcessEvents,

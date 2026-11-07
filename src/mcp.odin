@@ -10,7 +10,6 @@ import "core:fmt"
 import "core:net"
 import "core:os"
 import "core:strings"
-import "core:sys/posix"
 import "core:time"
 
 // `agentic-design mcp`: an MCP server over stdio. It forwards tool calls to the running
@@ -166,7 +165,7 @@ mcp_call_tool :: proc(b: ^strings.Builder, name, args_json: string) {
 		strings.write_string(b, "}]}")
 	}
 	agent := strings.builder_make(context.temp_allocator)
-	fmt.sbprintf(&agent, `{{"id":"%d","client":`, posix.getpid())
+	fmt.sbprintf(&agent, `{{"id":"%d","client":`, os.get_pid())
 	engine.json_write_string(&agent, mcp_client)
 	strings.write_string(&agent, `,"title":`)
 	engine.json_write_string(&agent, mcp_client_title)
@@ -297,6 +296,17 @@ launch_app :: proc() {
 	exe, err := os.get_executable_path(context.temp_allocator)
 	if err != nil {
 		fmt.eprintln("agentic-design: executable path:", err)
+		return
+	}
+	when ODIN_OS == .Windows {
+		// no shell: the window starts with the variable added and its output in the log
+		env := make([dynamic]string, context.temp_allocator)
+		if e, eerr := os.environ(context.temp_allocator); eerr == nil do append(&env, ..e)
+		append(&env, "AGENTIC_NO_FOCUS=1")
+		log_path := fmt.tprintf("%s/agentic-design.log", os.temp_directory(context.temp_allocator) or_else ".")
+		logf, _ := os.open(log_path, {.Write, .Append, .Create})
+		defer if logf != nil do os.close(logf)
+		if _, serr := os.process_start({command = {exe}, env = env[:], stdout = logf, stderr = logf}); serr != nil do fmt.eprintln("agentic-design: launch failed:", serr, exe)
 		return
 	}
 	// the window's stderr goes to a log so crashes leave a trace

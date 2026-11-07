@@ -14,3 +14,6 @@ odin build src -out:build/agentic-design "${@:--debug}"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | AGENTIC_PORT=1 ./build/agentic-design mcp |
 	python3 -I -c 'import sys, json; json.loads(sys.stdin.readline())["result"]["tools"]' ||
 	{ echo "build.sh: tools/list is not valid JSON (src/mcp.odin TOOLS_JSON)" >&2; exit 1; }
+# The same sources must still build for Linux and Windows (checked from here in a second;
+# CI links them). AGENTIC_SKIP_TARGETS=1 skips it.
+[ -n "$AGENTIC_SKIP_TARGETS" ] || ./tools/check_targets.sh

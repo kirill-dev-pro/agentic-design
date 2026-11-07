@@ -1,4 +1,4 @@
-#+build !js
+#+build darwin
 package agentic_design
 
 import "base:runtime"
@@ -18,7 +18,7 @@ import "core:sys/posix"
 import "core:thread"
 import "core:time"
 
-// Updates (decision #57, docs/releasing.md). The window checks a manifest on GitHub
+// Updates on macOS (decision #57, docs/releasing.md; update_other.odin elsewhere). The window checks a manifest on GitHub
 // Releases at launch and once a day, and from Settings:
 //
 //   latest.json      {"version", "url" of the zip, "sha256", "size", "notes", ...}
@@ -216,11 +216,6 @@ update_signature_ok :: proc(data: []byte, sig_path: string) -> bool {
 	return ed25519.verify(&pub, data, sig)
 }
 
-update_cache_dir :: proc() -> string {
-	home, _ := os.user_home_dir(context.temp_allocator)
-	return fmt.aprintf("%s/Library/Caches/%s/updates", home, BUNDLE_ID)
-}
-
 // <key>K</key><string>V</string> in an XML property list.
 plist_string :: proc(plist, key: string) -> string {
 	i := strings.index(plist, fmt.tprintf("<key>%s</key>", key))
@@ -308,7 +303,7 @@ update_install :: proc() {
 	// itself, so it keeps its quiet mode and port (`open` does not pass the environment on).
 	script := `(while kill -0 "$1" 2>/dev/null && [ "$(ps -o stat= -p "$1" | cut -c1)" != Z ]; do sleep 0.2; done; if [ -n "$4" ]; then exec "$2/Contents/MacOS/agentic-design" "$3"; else exec /usr/bin/open -n "$2" --args "$3"; fi) >/dev/null 2>&1 &`
 	test := "1" if os.get_env("AGENTIC_UPDATE_TEST", context.temp_allocator) != "" else ""
-	if p, err := os.process_start({command = {"/bin/sh", "-c", script, "sh", fmt.tprintf("%d", posix.getpid()), target, app.file_path, test}}); err == nil {
+	if p, err := os.process_start({command = {"/bin/sh", "-c", script, "sh", fmt.tprintf("%d", os.get_pid()), target, app.file_path, test}}); err == nil {
 		_, _ = os.process_wait(p)
 	}
 	platform_request_close()

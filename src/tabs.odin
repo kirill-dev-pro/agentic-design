@@ -183,9 +183,21 @@ Recent :: struct {
 
 recents: [dynamic]Recent
 
+// Where the app keeps its settings, recents, logs and samples: Application Support on a
+// Mac, %APPDATA% on Windows, ~/.local/share on Linux.
 support_dir :: proc() -> string {
 	home, _ := fs_home(context.temp_allocator)
-	return fmt.tprintf("%s/Library/Application Support/Agentic Design", home)
+	when ODIN_OS == .Windows do return fmt.tprintf("%s/AppData/Roaming/Agentic Design", home)
+	else when ODIN_OS == .Linux do return fmt.tprintf("%s/.local/share/agentic-design", home)
+	else do return fmt.tprintf("%s/Library/Application Support/Agentic Design", home)
+}
+
+// Downloads that can be thrown away (updates, the cloud's files); allocated.
+update_cache_dir :: proc() -> string {
+	home, _ := fs_home(context.temp_allocator)
+	when ODIN_OS == .Windows do return fmt.aprintf("%s/AppData/Local/Agentic Design/Cache/updates", home)
+	else when ODIN_OS == .Linux do return fmt.aprintf("%s/.cache/agentic-design/updates", home)
+	else do return fmt.aprintf("%s/Library/Caches/%s/updates", home, BUNDLE_ID)
 }
 
 recents_load :: proc() {

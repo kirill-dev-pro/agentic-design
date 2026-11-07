@@ -48,6 +48,11 @@ var_instances: map[string]struct {
 // in a browser, the fonts the page serves under /fonts
 when ODIN_OS == .JS {
 	FONT_DIRS := [?]string{"/fonts"}
+} else when ODIN_OS == .Windows {
+	FONT_DIRS := [?]string{"~/AppData/Roaming/Agentic Design/fonts", "~/AppData/Local/Microsoft/Windows/Fonts", "C:/Windows/Fonts"}
+} else when ODIN_OS == .Linux {
+	// (folders within folders: fonts_scan walks them)
+	FONT_DIRS := [?]string{"~/.local/share/agentic-design/fonts", "~/.local/share/fonts", "~/.fonts", "/usr/local/share/fonts", "/usr/share/fonts"}
 } else {
 	FONT_DIRS := [?]string{"~/Library/Application Support/Agentic Design/fonts", "~/Library/Fonts", "/Library/Fonts", "/System/Library/Fonts/Supplemental", "/System/Library/Fonts"}
 }
@@ -60,8 +65,28 @@ fonts_scan :: proc() {
 		d := dir
 		if strings.has_prefix(d, "~") do d = fmt.tprintf("%s%s", home, d[1:])
 		fonts_scan_dir(d)
+		when ODIN_OS == .Linux do fonts_scan_subdirs(d, 4)
 	}
 	fonts_sort_names()
+}
+
+// Linux keeps fonts a few folders down (/usr/share/fonts/truetype/dejavu).
+fonts_scan_subdirs :: proc(d: string, depth: int) {
+	if depth <= 0 do return
+	names, ok := dir_names(d)
+	if !ok do return
+	for name in names {
+		if strings.has_prefix(name, ".") || strings.contains_rune(name, '.') && font_extension(name) do continue
+		sub := fmt.tprintf("%s/%s", d, name)
+		if _, is_dir := dir_names(sub); !is_dir do continue
+		fonts_scan_dir(sub)
+		fonts_scan_subdirs(sub, depth - 1)
+	}
+}
+
+font_extension :: proc(name: string) -> bool {
+	lower := strings.to_lower(name, context.temp_allocator)
+	return strings.has_suffix(lower, ".ttf") || strings.has_suffix(lower, ".otf") || strings.has_suffix(lower, ".ttc") || strings.has_suffix(lower, ".woff")
 }
 
 // Fonts that travel with a document: the `fonts` folder next to it.
@@ -398,6 +423,10 @@ add_noto_fallback :: proc(font, weight: int, italic: bool) {
 
 when ODIN_OS == .JS {
 	SYMBOL_FONTS := [0]string{} // (a page has no system fonts)
+} else when ODIN_OS == .Windows {
+	SYMBOL_FONTS := [?]string{"C:/Windows/Fonts/seguisym.ttf", "C:/Windows/Fonts/arialuni.ttf"}
+} else when ODIN_OS == .Linux {
+	SYMBOL_FONTS := [?]string{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf"}
 } else {
 	SYMBOL_FONTS := [?]string{"/System/Library/Fonts/Apple Symbols.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"}
 }
@@ -562,7 +591,7 @@ font_file_infos :: proc(path: string) -> []Font_Info {
 	// name ending in a weight word that matches the file's weight loses the word: one
 	// family with several weights, as CSS and pen.dev expect. (Installed fonts keep their
 	// names: "Arial Black" stays a family of its own.)
-	system := strings.has_prefix(path, "/System/") || strings.has_prefix(path, "/Library/") || strings.contains(path, "/Library/Fonts/")
+	system := strings.has_prefix(path, "/System/") || strings.has_prefix(path, "/Library/") || strings.contains(path, "/Library/Fonts/") || strings.has_prefix(path, "/usr/share/fonts/") || strings.has_prefix(strings.to_lower(path, context.temp_allocator), "c:/windows/fonts/")
 	if !system do for &fi in out {
 		if fi.typo do continue
 		fam, w, it := parse_font_name(fi.family)

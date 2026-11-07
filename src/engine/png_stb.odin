@@ -1,10 +1,10 @@
-#+build js
+#+build js, windows
 package engine
 
 import "core:c"
 import stbiw "vendor:stb/image"
 
-// PNG encoding in a browser, where there is no system zlib (png.odin): stb_image_write's
+// PNG encoding in a browser and on Windows, where there is no system zlib (png.odin): stb_image_write's
 // encoder, on one thread. The same image as png.odin's (RGB, alpha ignored), compressed a
 // little less.
 

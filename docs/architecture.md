@@ -210,6 +210,31 @@ target of the window's size, so view screenshots keep working.
 Patched copies of NanoVG and fontstash live in `src/nanovg` and `src/fontstash`. The
 patches are listed in `src/nanovg/README.md`.
 
+## Desktop systems (macOS, Linux, Windows)
+
+The app is one set of sources for the three systems. What differs is behind a few names
+the shared code calls, each defined once per system:
+
+- system calls (signals, process ids, page allocation, `realpath`): `sys_unix.odin`
+  (macOS, Linux) and `sys_windows.odin`;
+- the desktop (open a URL, reveal a file, the trash, the locale, the cloud token's
+  keychain, the WebGPU surface): `*_darwin.odin`, `desktop_linux.odin`,
+  `desktop_windows.odin`; `desktop_other.odin` holds what Linux and Windows share (mostly
+  "nothing to do": no App Nap, no app menu, text-only clipboard, no trackpad gestures);
+- file panels: the logic in `dialogs.odin`, the system's panel in `system_open_panel` and
+  `system_save_panel` (`dialogs_darwin.odin`, `dialogs_linux.odin` with zenity or kdialog,
+  `dialogs_windows.odin` with the shell's item dialogs);
+- updates: `update.odin` (macOS, a signed .app) and `update_other.odin` (none yet).
+
+Odin picks files by their suffix (`_darwin`, `_linux`, `_windows`, `_js`) or by a
+`#+build` line, so a name a new feature needs on one system needs an answer on the others,
+or the other builds stop compiling. `tools/check_targets.sh` type-checks the Linux and
+Windows builds from a Mac in about a second, and `build.sh` runs it; CI (`ci.yml`) builds,
+links and smoke-tests both and keeps the binaries as artifacts of the run. WebGPU draws with
+Metal on macOS, Direct3D 12 or Vulkan on Windows and Vulkan on Linux (X11, or Wayland when
+GLFW runs on it); on Windows and X11 the window is measured in pixels, and
+`window_units_per_point` turns that into the interface's points.
+
 ## Browser viewer (`src/web`, `web/`)
 
 `tools/build_web.sh` compiles `src/web` for `js_wasm32` into `build/web/viewer.wasm` and
@@ -335,7 +360,7 @@ Engine (`src/engine/`):
 | `fonts.odin`, `varfont.odin`, `text_outline.odin` | fonts by family and weight; variable font instances; text drawn as outlines |
 | `draw.odin` | transforms and drawing a node tree: boxes, paths, text, placeholders, culling, level of detail |
 | `paint.odin`, `blur.odin` | fills, gradients and shadows; blur effects |
-| `images.odin`, `image_formats.odin`, `png.odin`, `png_js.odin` | image fills and decoding; PNG encoding (system zlib on a desktop, stb in a browser) |
+| `images.odin`, `image_formats.odin`, `png.odin`, `png_stb.odin` | image fills and decoding; PNG encoding (system zlib on macOS and Linux, stb in a browser and on Windows) |
 | `svgpath.odin`, `icons.odin` | SVG path parser; the embedded Lucide icon set (`assets/lucide.txt`) |
 | `codegen.odin` | HTML/CSS and React export |
 | `files.odin`, `files_native.odin`, `files_js.odin` | what the engine asks of the system (files, folders, paths): `core:os` on a desktop, a table of the page's files in a browser |
@@ -351,7 +376,8 @@ App (`src/`):
 | `widgets.odin`, `ui.odin`, `inspector.odin` | widget library; panels built from it |
 | `components_panel.odin`, `variables_table.odin` | the Components tab; the variables table |
 | `tabs.odin`, `dashboard.odin`, `onboarding.odin` | tabs, recents, thumbnails, dashboard, onboarding |
-| `pages_ui.odin`, `libraries_ui.odin`, `fonts_ui.odin`, `files_ui.odin`, `export_ui.odin` | the app's side of pages, libraries, font import, file dialogs and drops, export to a folder |
+| `pages_ui.odin`, `libraries_ui.odin`, `fonts_ui.odin`, `files_ui.odin`, `export_ui.odin`, `dialogs.odin` | the app's side of pages, libraries, font import, file dialogs and drops, export to a folder |
+| `sys_unix.odin`, `sys_windows.odin`, `desktop_*.odin`, `dialogs_*.odin` | what differs between macOS, Linux and Windows (see Desktop systems) |
 | `server.odin`, `api.odin`, `mcp.odin`, `agent_tools.odin` | control socket, its methods, stdio MCP server, the guide |
 | `presence.odin`, `agents.odin` | agent cursors and flashes; agent client detection and MCP registration |
 | `memory.odin` | the big allocator, memory trim and the `memory` report |

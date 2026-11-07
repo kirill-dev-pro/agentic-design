@@ -214,7 +214,15 @@ pdf_color :: proc(b: ^strings.Builder, c: nvg.Color, stroke: bool) {
 	strings.write_string(b, "SC\n" if stroke else "sc\n")
 }
 
-SRGB_PROFILE :: "/System/Library/ColorSync/Profiles/sRGB Profile.icc"
+// The system's sRGB profile, embedded so viewers show the colours as drawn (without one the
+// pages are plain DeviceRGB).
+when ODIN_OS == .Windows {
+	SRGB_PROFILE :: "C:/Windows/System32/spool/drivers/color/sRGB Color Space Profile.icm"
+} else when ODIN_OS == .Linux {
+	SRGB_PROFILE :: "/usr/share/color/icc/colord/sRGB.icc"
+} else {
+	SRGB_PROFILE :: "/System/Library/ColorSync/Profiles/sRGB Profile.icc"
+}
 
 paint_is_solid :: proc(p: ^nvg.Paint) -> bool {
 	return p.image == 0 && p.innerColor == p.outerColor

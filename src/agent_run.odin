@@ -11,7 +11,6 @@ import "core:hash"
 import "core:os"
 import "core:strings"
 import "core:sync"
-import "core:sys/posix"
 import "core:thread"
 import "core:time"
 
@@ -465,7 +464,7 @@ agent_fail :: proc(t: ^Agent_Thread, msg: string) {
 
 agent_stop :: proc(t: ^Agent_Thread) {
 	if !t.running || t.stopping do return
-	posix.kill(posix.pid_t(t.process.pid), .SIGINT)
+	process_interrupt(t.process.pid)
 	t.stopping = true
 	t.stop_at = time.time_add(time.now(), 3 * time.Second)
 	// its token stops working at once: requests already sent finish, later ones are refused

@@ -17,19 +17,26 @@ read_file :: proc(path: string, allocator := context.allocator) -> ([]u8, bool) 
 // drops and rereads them as it likes; they do not count against the app as a copy read
 // into memory does. Fonts are used this way (the system UI font alone is 9 MB).
 map_file :: proc(path: string) -> ([]u8, bool) {
-	cpath := strings.clone_to_cstring(path, context.temp_allocator)
-	fd := posix.open(cpath, {})
-	if fd < 0 do return nil, false
-	defer posix.close(fd)
-	st: posix.stat_t
-	if posix.fstat(fd, &st) != .OK || st.st_size <= 0 do return nil, false
-	p := posix.mmap(nil, uint(st.st_size), {.READ}, {.PRIVATE}, fd, 0)
-	if p == posix.MAP_FAILED do return nil, false
-	return ([^]u8)(p)[:int(st.st_size)], true
+	when ODIN_OS == .Windows {
+		// (a mapping would hold the file open: read it; unmap_file frees it)
+		data, err := os.read_entire_file(path, context.allocator)
+		return data, err == nil && len(data) > 0
+	} else {
+		cpath := strings.clone_to_cstring(path, context.temp_allocator)
+		fd := posix.open(cpath, {})
+		if fd < 0 do return nil, false
+		defer posix.close(fd)
+		st: posix.stat_t
+		if posix.fstat(fd, &st) != .OK || st.st_size <= 0 do return nil, false
+		p := posix.mmap(nil, uint(st.st_size), {.READ}, {.PRIVATE}, fd, 0)
+		if p == posix.MAP_FAILED do return nil, false
+		return ([^]u8)(p)[:int(st.st_size)], true
+	}
 }
 
 unmap_file :: proc(data: []u8) {
-	if len(data) > 0 do posix.munmap(raw_data(data), uint(len(data)))
+	when ODIN_OS == .Windows do delete(data)
+	else do if len(data) > 0 do posix.munmap(raw_data(data), uint(len(data)))
 }
 
 file_exists :: proc(path: string) -> bool {
