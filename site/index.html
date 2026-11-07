@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Design: everything your agent needs to design</title>
+<meta name="description" content="A native macOS editor for .pen files. Your agent reads the document, draws into it and screenshots the result over MCP, while you watch and edit the same canvas live.">
+<meta name="theme-color" content="#0E0F12">
+<meta property="og:title" content="Agentic Design">
+<meta property="og:description" content="Everything your agent needs to design. A native macOS .pen editor with an MCP server.">
+<meta property="og:image" content="assets/hero.webp">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/Inter-Bold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<defs>
+		<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5"/></symbol>
+		<symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5M15 8V2M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1zM9 8V2"/></symbol>
+		<symbol id="i-code" viewBox="0 0 24 24"><path d="M18 16l4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16"/></symbol>
+		<symbol id="i-app" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4M2 8h20M6 4v4"/></symbol>
+		<symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2"/></symbol>
+		<symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></symbol>
+		<symbol id="i-pen" viewBox="0 0 24 24"><path d="M18 13l-.654-4.736a4 4 0 0 0-2.756-3.266l-9.163-2.9a2 2 0 0 0-2.017.493l-.82.819a2 2 0 0 0-.492 2.017l2.9 9.163a4 4 0 0 0 3.266 2.756L13 18M18.648 12.352a1.205 1.205 0 0 1 1.704 0l1.296 1.296a1.205 1.205 0 0 1 0 1.704l-6.296 6.296a1.205 1.205 0 0 1-1.704 0l-1.296-1.296a1.205 1.205 0 0 1 0-1.704zM3 3l6.586 6.586"/><circle cx="11" cy="11" r="2"/></symbol>
+		<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+	</defs>
+</svg>
+
+<header class="nav">
+	<div class="wrap nav-in">
+		<a class="logo" href="#top" aria-label="Agentic Design home">
+			<img src="assets/icon.png" alt="" width="32" height="32">
+			<span>Agentic Design</span>
+		</a>
+		<nav class="nav-links" aria-label="Sections">
+			<a href="#modes">Modes</a>
+			<a href="#agents">Agents</a>
+			<a href="#connect">MCP tools</a>
+			<a href="#files">Files</a>
+			<a href="#download">Download</a>
+		</nav>
+		<a class="btn btn-ghost btn-sm" href="https://github.com/kirill-dev-pro/agentic-design">
+			<svg class="ic ic-16"><use href="#i-code"/></svg>Source
+		</a>
+	</div>
+</header>
+
+<main id="top">
+
+	<!-- Hero -->
+	<section class="hero">
+		<div class="wrap hero-in">
+			<span class="badge">Prototype · free and open · macOS</span>
+			<h1>Everything your agent needs to design</h1>
+			<p class="lede">Agentic Design is a native macOS editor for .pen files. Your agent reads the document, draws into it and screenshots the result over MCP, while you watch and edit the same canvas live.</p>
+			<div class="ctas">
+				<span class="cta-beam-anchor">
+					<a class="btn btn-glow" href="https://github.com/kirill-dev-pro/agentic-design/releases/latest">
+						<svg class="ic"><use href="#i-download"/></svg>Download for macOS
+					</a>
+					<span class="beam" aria-hidden="true">
+						<i class="beam-spot"></i><i class="beam-cone"></i><i class="beam-halo"></i><i class="beam-core"></i><i class="beam-impact"></i>
+						<i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+					</span>
+				</span>
+				<a class="btn btn-secondary" href="#connect">
+					<svg class="ic"><use href="#i-plug"/></svg>Connect an agent
+				</a>
+			</div>
+			<div class="hero-art">
+				<div class="window">
+					<i class="window-edge" aria-hidden="true"></i>
+					<img src="assets/hero.webp" width="2400" height="1500" alt="Agent mode: the user's request with three marks in the chat, Claude Code at work, and its cursor editing a trip card while a new Trip details screen appears">
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- What it is -->
+	<section class="section" id="what">
+		<div class="wrap">
+			<div class="sec-head narrow">
+				<p class="eyebrow">What it is</p>
+				<h2>A canvas built for agents, and for you</h2>
+				<p class="sec-lede">Agents already write code on your computer. Agentic Design gives them a canvas: the same document you edit, drawn natively, with tools made for how agents work.</p>
+			</div>
+			<div class="cards">
+				<article class="card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-app"/></svg></span>
+					<h3>Native on macOS</h3>
+					<p>Written in Odin and drawn with NanoVG. One small binary: no browser, plugin or server to keep alive.</p>
+				</article>
+				<article class="card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-bot"/></svg></span>
+					<h3>Agents are first-class users</h3>
+					<p>They read the document, create nodes in the JSON the file stores, and check their work with screenshot and lint.</p>
+				</article>
+				<article class="card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-heart"/></svg></span>
+					<h3>Free and open</h3>
+					<p>Your designs are plain .pen files on your disk, readable by people, agents and pencil.design.</p>
+				</article>
+			</div>
+		</div>
+	</section>
+
+	<!-- Modes -->
+	<section class="section modes" id="modes">
+		<div class="wrap">
+			<div class="sec-head center">
+				<p class="eyebrow">Design and agent modes</p>
+				<h2>Draw it yourself, or let the agent drive</h2>
+				<p class="sec-lede">One switch in the toolbar. Design mode is a full editor in your hands. Agent mode clears the stage: the agent works, you watch every step and take over at any moment.</p>
+			</div>
+			<div class="toggle-row">
+				<span class="mbeam mbeam-l" aria-hidden="true"><i></i><i></i><i></i></span>
+				<div class="toggle" role="tablist" aria-label="Mode">
+					<button class="pill pill-design" role="tab" data-mode="design" aria-selected="false"><svg class="ic ic-16"><use href="#i-pen"/></svg>Design</button>
+					<button class="pill pill-agent" role="tab" data-mode="agent" aria-selected="true"><svg class="ic ic-16"><use href="#i-bot"/></svg>Agent</button>
+				</div>
+				<span class="mbeam mbeam-r" aria-hidden="true"><i></i><i></i><i></i></span>
+			</div>
+			<div class="mode-cards" data-active="agent">
+				<article class="mode-card" data-mode="design">
+					<img src="assets/mode-design.webp" width="1600" height="1000" loading="lazy" alt="Design mode: layers, a trip card selected and its auto layout in the inspector">
+					<div class="mode-text">
+						<h3><svg class="ic ic-18 c-person"><use href="#i-pen"/></svg>Design mode</h3>
+						<p>The whole editor is yours: tools, layers, the inspector, components and themes. Agents can still help, but you hold the pen.</p>
+					</div>
+				</article>
+				<article class="mode-card" data-mode="agent">
+					<img src="assets/mode-agent.webp" width="1600" height="1000" loading="lazy" alt="Agent mode: a comment, an arrow and a circled price marked on the canvas for the agent">
+					<div class="mode-text">
+						<h3><svg class="ic ic-18 c-accent"><use href="#i-bot"/></svg>Agent mode</h3>
+						<p>Chat with your agent right next to the canvas. Point at what you mean with comments, arrows and areas: the agent sees your marks and edits the design live.</p>
+					</div>
+				</article>
+			</div>
+		</div>
+	</section>
+
+	<!-- Agents on the canvas -->
+	<section class="section alt" id="agents">
+		<div class="wrap split">
+			<div class="split-text">
+				<div class="sec-head">
+					<p class="eyebrow">Agents on the canvas</p>
+					<h2>Watch them work</h2>
+					<p class="sec-lede">Every agent connected over MCP gets a cursor with its name. It glides to each layer a request creates, changes or deletes, and the layer flashes in the agent's colour.</p>
+				</div>
+				<ul class="checks">
+					<li>Claude in clay, Codex in green, named from the MCP client</li>
+					<li>Frames marked placeholder glow while an agent works on them</li>
+					<li>A cursor outside the view waits at the edge, pointing the way</li>
+				</ul>
+			</div>
+			<div class="agents-art" role="img" aria-label="Two agent cursors, Claude and Codex, moving to the layers of a login screen and editing them">
+				<div class="stage" aria-hidden="true">
+					<div class="tabbar"><span class="tab"><svg class="ic ic-12" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM14 2v4a2 2 0 0 0 2 2h4"/></svg>login<i>×</i></span><span class="tab-plus">+</span></div>
+					<div class="lcard">
+						<p class="l-title" data-t="title"><span>Welcome back</span></p>
+						<p class="l-sub">Sign in to continue</p>
+						<p class="l-label">Email</p>
+						<div class="l-input" data-t="email"><span class="ph">you@example.com</span><span class="val"></span><i class="caret"></i></div>
+						<p class="l-label">Password</p>
+						<div class="l-input" data-t="password"><span class="dots">••••••••</span></div>
+						<div class="l-btn" data-t="button"><span>Sign in</span></div>
+						<div class="l-btn l-google" data-t="google"><b>G</b><span>Continue with Google</span></div>
+					</div>
+					<div class="acur" data-agent="claude" style="--c:#E8876A"><svg viewBox="0 0 17 18"><path d="M2 1 L17 8.5 L10.2 10.6 L7.4 17.5 Z"/></svg><span>Claude</span></div>
+					<div class="acur" data-agent="codex" style="--c:#2BC79B"><svg viewBox="0 0 17 18"><path d="M2 1 L17 8.5 L10.2 10.6 L7.4 17.5 Z"/></svg><span>Codex</span></div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Connect -->
+	<section class="section" id="connect">
+		<div class="wrap split">
+			<div class="split-text">
+				<div class="sec-head">
+					<p class="eyebrow">Connect</p>
+					<h2>One button to connect</h2>
+					<p class="sec-lede">The app is its own MCP server. On first launch the onboarding finds Claude Code, Codex, Cursor and six more clients on your Mac, and each one connects with a single click.</p>
+				</div>
+			</div>
+			<img class="shot" src="assets/connect.webp" width="1440" height="900" loading="lazy" alt="Onboarding: set up your agents, with Claude Code and Codex found on the Mac">
+		</div>
+	</section>
+
+	<!-- Files -->
+	<section class="section alt" id="files">
+		<div class="wrap split">
+			<div class="split-text">
+				<div class="sec-head">
+					<p class="eyebrow">Your files</p>
+					<h2>Opens Pencil and Paper files</h2>
+					<p class="sec-lede">Bring the designs you already have. Files from Pencil (.pen) and Paper open as they are, your agent edits them, and nothing it does not understand is lost on save.</p>
+				</div>
+				<ul class="checks">
+					<li>Frames, groups, shapes, paths, text and Lucide icons</li>
+					<li>Flex layout: gap, padding, fit and fill</li>
+					<li>Variables, theme axes and per-frame themes</li>
+					<li>Components, instances, overrides and slots</li>
+					<li>Gradients, several fills and shadows, blurs</li>
+					<li>Unknown properties kept as they are</li>
+				</ul>
+			</div>
+			<img class="shot" src="assets/files.webp" width="2880" height="1800" loading="lazy" alt="The dashboard with recent .pen files">
+		</div>
+	</section>
+
+	<!-- Cloud -->
+	<section class="section" id="cloud">
+		<div class="wrap split reverse">
+			<img class="shot shot-blue" src="assets/share.webp" width="1440" height="900" loading="lazy" alt="The share dialog: a link to view, or invite people as editors">
+			<div class="split-text">
+				<div class="sec-head">
+					<p class="eyebrow">Cloud</p>
+					<h2>Share a link, design together</h2>
+					<p class="sec-lede">Upload a file to your cloud in one click. Send a link to view it, or invite people as editors and work on the same canvas live.</p>
+				</div>
+				<ul class="checks">
+					<li>Private by default, a link or public when you choose</li>
+					<li>Allow download and embedding per link</li>
+					<li>Viewers and editors, changes appear live for everyone</li>
+					<li>Cloud files sit next to local ones on the dashboard</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- Download -->
+	<section class="section" id="download">
+		<div class="wrap">
+			<div class="band">
+				<div class="band-text">
+					<div class="sec-head">
+						<p class="eyebrow">Download</p>
+						<h2>Download and open</h2>
+						<p class="sec-lede">Get the app from this site and open it. The onboarding connects your agents in one click. Nothing to build or install.</p>
+					</div>
+					<div class="ctas left">
+						<a class="btn btn-glow" href="https://github.com/kirill-dev-pro/agentic-design/releases/latest">
+							<svg class="ic"><use href="#i-download"/></svg>Download for macOS
+						</a>
+					</div>
+				</div>
+				<div class="band-app">
+					<img src="assets/icon.png" width="168" height="168" alt="">
+					<span>Agentic Design for macOS</span>
+				</div>
+			</div>
+		</div>
+	</section>
+</main>
+
+<footer class="footer">
+	<div class="wrap footer-in">
+		<div class="footer-brand">
+			<a class="logo" href="#top">
+				<img src="assets/icon.png" alt="" width="32" height="32">
+				<span>Agentic Design</span>
+			</a>
+			<p>Free and open. Written in Odin, drawn with NanoVG.</p>
+		</div>
+		<nav class="footer-links" aria-label="Links">
+			<a href="https://github.com/kirill-dev-pro/agentic-design/tree/main/docs">Docs</a>
+			<a href="https://github.com/kirill-dev-pro/agentic-design/releases">Releases</a>
+			<a href="https://pencil.design">pencil.design</a>
+			<a href="https://odin-lang.org">Odin</a>
+		</nav>
+	</div>
+</footer>
+
+<script>
+	// Mode switch: the chosen pill lights its card.
+	const cards = document.querySelector('.mode-cards');
+	const pills = document.querySelectorAll('.pill');
+	const pick = mode => {
+		cards.dataset.active = mode;
+		pills.forEach(p => p.setAttribute('aria-selected', String(p.dataset.mode === mode)));
+	};
+	pills.forEach(p => p.addEventListener('click', () => pick(p.dataset.mode)));
+	document.querySelectorAll('.mode-card').forEach(c => c.addEventListener('mouseenter', () => pick(c.dataset.mode)));
+	// Agents on the canvas: two cursors move to layers and edit them, in a loop.
+	(() => {
+		const art = document.querySelector('.agents-art');
+		const stage = art.querySelector('.stage');
+		const fit = () => stage.style.transform = `scale(${art.clientWidth / 560})`;
+		new ResizeObserver(fit).observe(art); fit();
+
+		const $ = s => stage.querySelector(s);
+		const el = t => $(`[data-t="${t}"]`);
+		const cur = { claude: $('[data-agent="claude"]'), codex: $('[data-agent="codex"]') };
+		const home = { claude: [470, 360], codex: [60, 60] };
+		const wait = ms => new Promise(r => setTimeout(r, ms));
+		const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+		const place = (a, x, y) => cur[a].style.transform = `translate(${x}px, ${y}px)`;
+		// Point the cursor at a spot of a layer: fx, fy are fractions of its box.
+		const go = async (a, t, fx = .92, fy = .8) => {
+			const n = el(t), r = n.getBoundingClientRect(), sr = stage.getBoundingClientRect(), k = sr.width / 560;
+			place(a, (r.left - sr.left + r.width * fx) / k, (r.top - sr.top + r.height * fy) / k);
+			await wait(900);
+		};
+		const mark = (a, t, on = true) => el(t).classList.toggle('by-' + a, on);
+		const flash = (a, t) => { const n = el(t); n.classList.remove('flash-' + a); void n.offsetWidth; n.classList.add('flash-' + a); };
+		const type = async (node, text) => { for (const ch of text) { node.textContent += ch; await wait(55); } };
+		const retitle = async text => {
+			const s = el('title').firstElementChild;
+			while (s.textContent) { s.textContent = s.textContent.slice(0, -1); await wait(28); }
+			await type(s, text);
+		};
+		const reset = () => {
+			el('title').firstElementChild.textContent = 'Welcome back';
+			el('email').classList.remove('filled'); el('email').querySelector('.val').textContent = '';
+			el('button').classList.remove('styled'); el('google').classList.remove('shown', 'placeholder');
+		};
+
+		place('claude', ...home.claude); place('codex', ...home.codex);
+		if (still) return;
+
+		const claude = async () => {
+			await wait(400);
+			await go('claude', 'button', .9, .75); mark('claude', 'button');
+			await wait(250); el('button').classList.add('styled'); flash('claude', 'button');
+			await wait(900); mark('claude', 'button', false);
+			// Create a new layer below the button: it glows as a placeholder first.
+			el('google').classList.add('shown', 'placeholder');
+			await go('claude', 'google', .9, .75); mark('claude', 'google');
+			await wait(1100); el('google').classList.remove('placeholder'); flash('claude', 'google');
+			await wait(900); mark('claude', 'google', false);
+			place('claude', ...home.claude); await wait(1200);
+		};
+		const codex = async () => {
+			await wait(1100);
+			await go('codex', 'title', .95, .7); mark('codex', 'title');
+			await retitle('Sign in to Studio'); flash('codex', 'title');
+			await wait(600); mark('codex', 'title', false);
+			await go('codex', 'email', .85, .75); mark('codex', 'email');
+			el('email').classList.add('filled'); await type(el('email').querySelector('.val'), 'ada@studio.dev'); flash('codex', 'email');
+			await wait(700); mark('codex', 'email', false);
+			place('codex', ...home.codex); await wait(1600);
+		};
+		(async function loop() {
+			for (;;) { await Promise.all([claude(), codex()]); await wait(1200); const card = $('.lcard'); card.classList.add('fade'); await wait(400); reset(); card.classList.remove('fade'); await wait(900); }
+		})();
+	})();
+</script>
+</body>
+</html>
