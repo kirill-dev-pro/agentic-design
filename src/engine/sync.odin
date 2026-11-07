@@ -25,10 +25,12 @@ Sync_Client :: struct {
 	counter:      int,
 }
 
-// Starts from a document both sides have (the server's state at `seq`).
-sync_init :: proc(c: ^Sync_Client, pen: string, seq: int, shown: ^Document, shown_state: ^Cloud_State, session: string) -> bool {
+// Starts from a document both sides have (the server's state at `seq`), with the server's
+// sibling sort keys when it sent them (a room's snapshot; nodes without one get fresh keys).
+sync_init :: proc(c: ^Sync_Client, pen: string, seq: int, shown: ^Document, shown_state: ^Cloud_State, session: string, sorts: map[string]string = nil) -> bool {
 	if !doc_load(&c.server, pen) do return false
 	if !doc_load(shown, pen) do return false
+	for k, v in sorts do c.server_state.sorts[strings.clone(k)] = strings.clone(v)
 	sorts_assign(&c.server, &c.server_state)
 	for k, v in c.server_state.sorts do shown_state.sorts[strings.clone(k)] = strings.clone(v)
 	c.seq = seq

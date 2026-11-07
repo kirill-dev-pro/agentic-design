@@ -3,6 +3,8 @@
 //
 // - /s/<token> and /embed/<token>: a share link's page, the site's template with the link's
 //   data (src/share.ts);
+// - /d/<docId>: a cloud document in the browser editor, live (the editor's page, its files
+//   from /edit/; the page checks access through the API);
 // - /c/<token>/<versionId>/…: the files of a shared version;
 // - /api/docs/<id>/v/<versionId>/…: the owner's own files, with the session;
 // - /api/blobs/<ticket>: uploads through the Worker when storage has no presigned PUTs;
@@ -47,6 +49,22 @@ async function limited(env: Env, request: Request, kind: keyof typeof LIMITS): P
 	return new Response('Too many requests', { status: 429, headers: { 'retry-after': String(retry), 'content-type': 'text/plain' } })
 }
 
+/** The editor's page for /d/<docId>: its relative files resolve under /edit/. */
+async function editorPage(env: Env, url: URL): Promise<Response> {
+	const page = await env.ASSETS.fetch(new URL('/edit/index.html', url))
+	if (!page.ok) return page
+	const html = (await page.text()).replace('<head>', '<head>\n<base href="/edit/">')
+	return new Response(html, {
+		headers: {
+			'content-type': 'text/html; charset=utf-8',
+			'cache-control': 'no-store',
+			'x-robots-tag': 'noindex',
+			'referrer-policy': 'same-origin',
+			'x-content-type-options': 'nosniff',
+		},
+	})
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContextLike): Promise<Response> {
 		const url = new URL(request.url)
@@ -55,6 +73,7 @@ export default {
 			worker.withContext(ctx, async () => (await limited(env, request, kind)) ?? run((await worker.app(env as never)) as never))
 		if (/^\/(s|embed)\/[^/]+\/?$/.test(path))
 			return own('page', (app) => handlePage(app, request, env.ASSETS, path.startsWith('/s/') ? 's' : 'embed'))
+		if (/^\/d\/[^/]+\/?$/.test(path)) return editorPage(env, url)
 		if (path === '/api/account/export') return own('content', (app) => handleExport(app as never, request))
 		if (/^\/i\/[^/]+\/?$/.test(path)) return own('page', (app) => handleInvitePage(app as never, request))
 		if (path === '/auth/app') return own('page', (app) => handleAppAuth(app as never, request))

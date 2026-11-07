@@ -272,7 +272,6 @@ random_b64url :: proc(n: int) -> string {
 	return b64url(buf)
 }
 
-@(private = "file")
 url_encode :: proc(s: string) -> string {
 	b := strings.builder_make(context.temp_allocator)
 	for i in 0 ..< len(s) {
@@ -436,7 +435,6 @@ respond :: proc(conn: net.TCP_Socket, status: int, title, text: string) {
 	_, _ = net.send_tcp(conn, transmute([]u8)html)
 }
 
-@(private = "file")
 url_decode :: proc(s: string) -> string {
 	b := strings.builder_make(context.temp_allocator)
 	for i := 0; i < len(s); i += 1 {
@@ -1009,6 +1007,18 @@ api_cloud :: proc(b: ^strings.Builder, params: json.Object) -> string {
 	case "revoke":
 		if app.tab < 0 do return "no document is open"
 		cloud_share_revoke(app.file_path)
+	case "token":
+		// test windows only: sign in with a session token from the site's API, in memory
+		if !pf.quiet do return "token: only test windows (AGENTIC_QUIET) take a token this way"
+		sync.mutex_lock(&cloud.mutex)
+		delete(cloud.token)
+		cloud.token = strings.clone(string(params["token"].(json.String) or_else ""))
+		sync.mutex_unlock(&cloud.mutex)
+	case "open":
+		// a cloud document, live (what agentic-design://open?doc=<id> does)
+		id := string(params["doc"].(json.String) or_else "")
+		if id == "" do return "open: pass doc, the cloud document's id"
+		cloud_open_doc(id)
 	case "keychain-test":
 		// stores, reads, replaces and deletes an item of a test service (not the token's)
 		S :: "dev.kcrz.agentic-design.keychain-test"
@@ -1031,7 +1041,7 @@ api_cloud :: proc(b: ^strings.Builder, params: json.Object) -> string {
 		strings.write_string(b, "]}")
 		return ""
 	case:
-		return "action: status, signin, cancel, signout, share, settings, revoke or files"
+		return "action: status, signin, cancel, signout, share, settings, revoke, files, open or token"
 	}
 	phases := [Cloud_Phase]string{.Idle = "idle", .Signing_In = "signing in", .Working = "working", .Failed = "failed"}
 	fmt.sbprintf(b, `{{"phase":"%s","running":%v,"signedIn":%v,"email":%s,"progress":%s,"error":%s,"signinUrl":%s,"cloud":%s`, phases[cloud_phase()], cloud.running, cloud_signed_in(), json_quote(cloud_text(&cloud.email)), json_quote(cloud_text(&cloud.progress)), json_quote(cloud_text(&cloud.error)), json_quote(cloud_text(&cloud.signin_url)), json_quote(cloud_url()))

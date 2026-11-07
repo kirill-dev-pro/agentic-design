@@ -51,15 +51,18 @@
 			<a href="/#agents">Agents</a>
 			<a href="/#connect">MCP tools</a>
 			<a href="/#files">Files</a>
+			<a href="/cloud/">Cloud</a>
 			<a href="/download/" aria-current="page">Download</a>
 		</nav>
 		<div class="nav-end">
 		<a class="btn btn-ghost btn-sm nav-viewer" href="/view/">
 			<svg class="ic ic-16"><use href="#i-eye"/></svg>Viewer
 		</a>
-		<a class="btn btn-ghost btn-sm" href="https://github.com/kirill-dev-pro/agentic-design">
+		<a class="btn btn-ghost btn-sm nav-viewer" href="https://github.com/kirill-dev-pro/agentic-design">
 			<svg class="ic ic-16"><use href="#i-code"/></svg>Source
 		</a>
+		<a class="btn btn-ghost btn-sm" href="/signin?next=/dashboard" data-signed-out>Sign in</a>
+		<a class="btn btn-glow btn-sm" href="/dashboard" data-signed-in hidden>Dashboard</a>
 		</div>
 	</div>
 </header>
@@ -195,7 +198,8 @@ sudo dnf install glfw mesa-vulkan-drivers       # Fedora</code></pre>
 		<nav class="footer-links" aria-label="Links">
 			<a href="/view/">Viewer</a>
 			<a href="/edit/">Editor (beta)</a>
-			<a href="/files">My files</a>
+			<a href="/cloud/">Cloud</a>
+			<a href="/dashboard">Dashboard</a>
 			<a href="https://github.com/kirill-dev-pro/agentic-design/tree/main/docs">Docs</a>
 			<a href="https://github.com/kirill-dev-pro/agentic-design/releases">Releases</a>
 			<a href="https://pencil.design">pencil.design</a>
@@ -205,5 +209,6 @@ sudo dnf install glfw mesa-vulkan-drivers       # Fedora</code></pre>
 </footer>
 
 <script src="/download.js" defer></script>
+<script src="/nav.js" defer></script>
 </body>
 </html>

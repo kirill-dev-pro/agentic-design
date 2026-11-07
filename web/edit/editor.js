@@ -184,6 +184,103 @@
 		return out;
 	}
 
+	// ---------------------------------------------------------------- cloud documents (/d/<id>)
+
+	// A cloud document opens from its latest version (the .pen, then its images and fonts as the
+	// engine asks for them), and goes live through its room: the room's document replaces the
+	// version's at once, edits and pointers travel through the WebSocket (src/cloud_live.odin).
+	const cloudId = decodeURIComponent((location.pathname.match(/^\/d\/([^/]+)\/?$/) || [])[1] || "");
+	let cloud = null; // { id, file, dir, base, ws }
+	const ROLE = { owner: "Owner", editor: "Can edit", commenter: "Can comment", viewer: "Can view" };
+
+	async function openCloud(id) {
+		$("welcome").hidden = true;
+		$("loading").hidden = false;
+		document.body.classList.add("cloud");
+		let r;
+		try { r = await fetch(`/api/docs/${encodeURIComponent(id)}`, { credentials: "same-origin", headers: { accept: "application/json" } }); }
+		catch (e) { return showMessage("No connection", "The file could not be fetched. Check the connection and reload.", { error: true, actions: [["Reload", () => location.reload(), true]] }); }
+		if (r.status === 401) return location.replace("/signin?next=" + encodeURIComponent(location.pathname));
+		if (!r.ok) return showMessage("This file is not here", "It was deleted, or it is not shared with this account.", { error: true, actions: [["Dashboard", "/dashboard", true]] });
+		const f = await r.json();
+		if (!f.docUrl) return showMessage("This file is still uploading", "Try again in a moment.", { actions: [["Reload", () => location.reload(), true]] });
+		const base = f.docUrl.slice(0, f.docUrl.indexOf("/", `/api/docs/${id}/v/`.length) + 1); // /api/docs/<id>/v/<ver>/
+		const rel = f.docUrl.slice(base.length);
+		const relDir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+		const dir = `/cloud/${id}/`;
+		const safe = f.name.replace(/[\/\\:*?"<>|]+/g, " ").trim() || "Untitled";
+		const penPath = dir + relDir + safe + ".pen";
+		cloud = { id, file: f, dir, base, penPath, relPen: rel };
+		const pen = await fetch(f.docUrl, { credentials: "same-origin" });
+		if (!pen.ok) return showMessage("The file could not be read", `HTTP ${pen.status}`, { error: true, actions: [["Reload", () => location.reload(), true]] });
+		addFile(penPath, new Uint8Array(await pen.arrayBuffer()));
+		const [pp, pl] = putString(penPath);
+		ex.editor_open(pp, pl);
+		const [ip, il] = putString(id), [qp, ql] = putString(penPath), [np, nl] = putString(f.name);
+		ex.editor_live_open(ip, il, qp, ql, np, nl);
+		$("role").textContent = ROLE[f.role] || "";
+		$("role").hidden = !f.role;
+		document.title = `${f.name} — Agentic Design`;
+		$("open-app").href = `agentic-design://open?doc=${encodeURIComponent(id)}`;
+	}
+
+	// The engine asks for a file of the cloud document it does not have: from the version.
+	const fetching = new Set();
+	async function want(paths) {
+		if (!cloud) return;
+		for (const p of paths.split("\n")) {
+			if (!p.startsWith(cloud.dir) || fetching.has(p)) continue;
+			fetching.add(p);
+			const rel = p.slice(cloud.dir.length);
+			try {
+				const r = await fetch(cloud.base + rel.split("/").map(encodeURIComponent).join("/"), { credentials: "same-origin" });
+				if (r.ok) addFile(p, new Uint8Array(await r.arrayBuffer()));
+			} catch (e) {}
+		}
+	}
+
+	// The room's WebSocket, for the engine (page_live_*): events go back as editor_live_event.
+	function liveOpen(path) {
+		liveClose();
+		const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + path;
+		const ws = new WebSocket(url);
+		cloud.ws = ws;
+		const event = (kind, text, code) => {
+			if (cloud.ws !== ws) return;
+			if (text) { const [p, l] = putString(text); ex.editor_live_event(kind, p, l, code); }
+			else ex.editor_live_event(kind, 0, 0, code);
+		};
+		ws.onopen = () => event(0, "", 0);
+		ws.onmessage = (e) => event(1, typeof e.data === "string" ? e.data : "", 0);
+		ws.onclose = (e) => event(2, e.reason || "", e.code);
+	}
+	function liveClose() {
+		if (cloud && cloud.ws) { const ws = cloud.ws; cloud.ws = null; try { ws.close(1000); } catch (e) {} }
+	}
+
+	// Who is here, and whether the room holds us.
+	function liveState(json) {
+		let st;
+		try { st = JSON.parse(json); } catch (e) { return; }
+		const box = $("people");
+		box.textContent = "";
+		for (const p of st.people.slice(0, 6)) {
+			const a = Object.assign(document.createElement("span"), { className: "avatar", textContent: (p.name || "?").trim().charAt(0).toUpperCase(), title: `${p.name} · ${ROLE[p.role] || ""}` });
+			a.style.background = p.color;
+			box.append(a);
+		}
+		if (st.people.length > 6) box.append(Object.assign(document.createElement("span"), { className: "avatar more", textContent: `+${st.people.length - 6}` }));
+		const saved = $("saved");
+		const text = { Connecting: "Connecting…", Live: st.people.length ? "Live" : "Live · only you", Offline: "Offline · reconnecting", Closed: st.error || "Disconnected" }[st.phase] || "";
+		saved.textContent = text;
+		saved.hidden = !text;
+		saved.classList.toggle("error", st.phase === "Closed");
+		if (st.role) { $("role").textContent = ROLE[st.role] || st.role; $("role").hidden = false; }
+		// the owner manages who has access (the dashboard's People)
+		$("people-link").style.display = st.role === "owner" ? "" : "none";
+		$("people-link").href = `/dashboard?people=${encodeURIComponent(cloud.id)}`;
+	}
+
 	// ---------------------------------------------------------------- download
 
 	function download() {
@@ -304,8 +401,10 @@
 
 	async function main() {
 		if (!navigator.gpu) return noGpu();
-		$("welcome").hidden = false;
-		showRecent();
+		if (!cloudId) {
+			$("welcome").hidden = false;
+			showRecent();
+		}
 		mem = new odin.WasmMemoryInterface();
 		const imports = {
 			wgpu: new odin.WebGPUInterface(mem).getInterface(),
@@ -350,6 +449,21 @@
 					$("download").disabled = false;
 					canvas.focus();
 				},
+				page_want: (ptr, len) => want(mem.loadString(ptr, len)),
+				page_live_open: (ptr, len) => liveOpen(mem.loadString(ptr, len)),
+				page_live_send: (ptr, len) => { if (cloud && cloud.ws && cloud.ws.readyState === 1) cloud.ws.send(mem.loadString(ptr, len)); },
+				page_live_close: () => liveClose(),
+				page_live_state: (ptr, len) => liveState(mem.loadString(ptr, len)),
+				page_live_http: (req, mp, ml, pp, pl, bp, bl) => {
+					const method = mem.loadString(mp, ml), path = mem.loadString(pp, pl), body = mem.loadString(bp, bl);
+					const done = (status, text) => {
+						if (text) { const [p, l] = putString(text); ex.editor_live_http(req, status, p, l); }
+						else ex.editor_live_http(req, status, 0, 0);
+					};
+					fetch(path, { method, credentials: "same-origin", headers: body ? { "content-type": "application/json", accept: "application/json" } : { accept: "application/json" }, body: body || undefined })
+						.then(async (r) => done(r.status, await r.text()))
+						.catch(() => done(0, ""));
+				},
 			},
 		};
 		try {
@@ -362,6 +476,7 @@
 		wireInput();
 		// for the console and tests
 		window.editor = { open: openFiles, openKept, openNew, download, files: written, sessions, store: DocStore, exports: ex, memory: () => mem.memory.buffer.byteLength, started: () => started };
+		if (cloudId) return openCloud(cloudId);
 		const file = new URLSearchParams(location.search).get("file");
 		if (file) { // ?file=<url>: a .pen the page can fetch (same origin or CORS), to try the editor on
 			try {

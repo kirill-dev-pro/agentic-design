@@ -12,7 +12,7 @@
 import { DurableObject, type HibernatableWebSocket } from 'workerstack/durable'
 
 import { loadPencore } from './pencore'
-import { Room, type Batch, type Op, type Principal } from './room'
+import { canEdit, Room, type Batch, type Op, type Principal } from './room'
 
 const WIRE = 1
 const MAX_MESSAGE = 1024 * 1024
@@ -139,6 +139,22 @@ export class DocRoom extends DurableObject {
 			}
 			return Response.json({ closed })
 		}
+		if (url.pathname === '/notify' && request.method === 'POST') {
+			// The Worker after a comment changed (src/comments.ts): everyone in the room hears it and
+			// fetches the comments again. Nothing of the comment itself travels here.
+			const msg = (await request.json()) as { t: 'comments'; thread: string; by: string }
+			const text = JSON.stringify({ t: 'comments', thread: msg.thread, by: msg.by })
+			let sent = 0
+			for (const s of this.ctx.getWebSockets() as HibernatableWebSocket[])
+				if ((s.deserializeAttachment() as Attachment | null)?.joined)
+					try {
+						s.send(text)
+						sent++
+					} catch {
+						// closing
+					}
+			return Response.json({ sent })
+		}
 		if (url.pathname === '/init' && request.method === 'POST') {
 			if (this.snapshotRow()) return Response.json({ ok: true, already: true })
 			const { pen, docId, assets = [] } = (await request.json()) as {
@@ -196,7 +212,11 @@ export class DocRoom extends DurableObject {
 			const sql = this.ctx.storage.sql
 			const oldest = sql.exec<{ seq: number | null }>('SELECT min(seq) AS seq FROM ops').toArray()[0]?.seq ?? null
 			const welcome: Record<string, unknown> = { t: 'welcome', v: WIRE, seq: room.seq, role: att.who.role, you: att.who }
-			if (since >= room.seq) welcome.ops = []
+			// full: a client with no copy of the document (it opens it from the room)
+			if (msg.full === true) {
+				const s = room.snapshot()
+				welcome.snapshot = { seq: s.seq, pen: s.pen, sorts: s.sorts }
+			} else if (since >= room.seq) welcome.ops = []
 			else if (oldest !== null && since >= oldest - 1)
 				welcome.ops = sql
 					.exec<{ seq: number; batch: string; author: string; agent: string | null; ops: string }>(
@@ -259,7 +279,7 @@ export class DocRoom extends DurableObject {
 			if (msg.t === 'presence') {
 				const { t: _t, ...rest } = msg
 				socket.serializeAttachment({ ...att, presence: rest } satisfies Attachment)
-				if (att.who.role === 'viewer') delete (out as Record<string, unknown>).selection
+				if (!canEdit(att.who.role)) delete (out as Record<string, unknown>).selection
 			}
 			this.broadcast(socket, out)
 			return

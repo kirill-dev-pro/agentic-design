@@ -120,6 +120,8 @@ reveal_in_finder :: proc(path: string) {}
 draw_dashboard :: proc(vg: ^nvg.Context) {}
 dash_field_apply :: proc(key, text: string) -> bool {return false}
 dash_cloud_tick :: proc() {}
+cloud_open_tick :: proc() {}
+cloud_cache_path :: proc(path: string) -> bool {return false}
 draw_settings_account :: proc(vg: ^nvg.Context, x, w: f32, y: ^f32) {
 	label(vg, x, y^ + 10, "The cloud account is in the Mac app.", TEXT_DIM, 12)
 }

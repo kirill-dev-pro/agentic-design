@@ -379,7 +379,8 @@ App (`src/`):
 | `pages_ui.odin`, `libraries_ui.odin`, `fonts_ui.odin`, `files_ui.odin`, `export_ui.odin`, `dialogs.odin` | the app's side of pages, libraries, font import, file dialogs and drops, export to a folder |
 | `sys_unix.odin`, `sys_windows.odin`, `desktop_*.odin`, `dialogs_*.odin` | what differs between macOS, Linux and Windows (see Desktop systems) |
 | `server.odin`, `api.odin`, `mcp.odin`, `agent_tools.odin` | control socket, its methods, stdio MCP server, the guide |
-| `presence.odin`, `agents.odin` | agent cursors and flashes; agent client detection and MCP registration |
+| `presence.odin`, `agents.odin` | agent and people cursors and flashes; agent client detection and MCP registration |
+| `cloud_live.odin`, `live_darwin.odin`, `live_js.odin`, `live_other.odin`, `comments_ui.odin`, `cloud_open.odin` | a cloud document open live (cloud-design decision 20): the room's client over `engine/sync.odin` (edits as ops, others' applied, own undo, presence), its WebSocket and API transport per platform, comment pins and threads, and opening a cloud file in the app (`agentic-design://open?doc=`) |
 | `memory.odin` | the big allocator, memory trim and the `memory` report |
 | `clipboard_darwin.odin` | putting data on the system clipboard |
 | `activity_darwin.odin`, `applog.odin`, `settings.odin` | no App Nap while agents work; the start/exit log; app settings |

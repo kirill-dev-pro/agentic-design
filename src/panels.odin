@@ -103,6 +103,7 @@ toolbar_rect :: proc() -> Rect {
 // True when p is on the editor's floating chrome rather than the canvas.
 chrome_hit :: proc(p: [2]f32) -> bool {
 	if app.tab < 0 do return false
+	if comments_hit(p) do return true // pins and cards of a live document's comments
 	if agent_mode() do return agent_chrome_hit(p)
 	for side in Panel_Side {
 		if panel_shown(side) {

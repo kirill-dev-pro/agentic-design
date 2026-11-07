@@ -682,3 +682,39 @@ draw_cursor_edge :: proc(vg: ^nvg.Context, c: ^Peer, p: [2]f32, alpha: f32) {
 	}
 	nvg.Restore(vg)
 }
+
+// ---------------------------------------------------------------- people in a live document
+
+// A person's pointer in a live cloud document (cloud_live.odin), in page coordinates.
+presence_person_at :: proc(user, name: string, color: nvg.Color, file: string, at: [2]f32) {
+	c := presence_cursor(fmt.tprintf("person:%s", user), name, color, true)
+	c.color = color
+	if c.file != file {
+		delete(c.file)
+		c.file = strings.clone(file)
+	}
+	cursor_activate(c, at, platform_time())
+}
+
+presence_person_leave :: proc(user: string) {
+	key := fmt.tprintf("person:%s", user)
+	for c, i in cursors do if c.key == key {
+		delete(c.key)
+		delete(c.name)
+		delete(c.file)
+		ordered_remove(&cursors, i)
+		return
+	}
+}
+
+// Everyone of a live document, when it closes or its connection drops.
+presence_people_clear :: proc() {
+	for i := len(cursors) - 1; i >= 0; i -= 1 {
+		c := cursors[i]
+		if !c.person do continue
+		delete(c.key)
+		delete(c.name)
+		delete(c.file)
+		ordered_remove(&cursors, i)
+	}
+}

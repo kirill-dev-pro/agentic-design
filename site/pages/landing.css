@@ -432,3 +432,23 @@ h2 { font-size: var(--size-h2); font-weight: 700; line-height: 1.1; letter-spaci
 	.dl-title h2 { font-size: 22px; }
 	.dl-side { padding-left: 0; border-left: 0; padding-top: 28px; border-top: 1px solid var(--border); }
 }
+.btn[hidden] { display: none; }
+
+/* the cloud page (/cloud) */
+.cl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cl-card { padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+.cl-card h3 { font-size: 18px; }
+.cl-card p { color: var(--text-muted); }
+.cl-table-wrap { overflow-x: auto; }
+.cl-table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 560px; }
+.cl-table th, .cl-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: center; }
+.cl-table th[scope="row"] { text-align: left; font-weight: 500; }
+.cl-table thead th { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.cl-table td.yes { color: #7ee2a8; }
+.cl-table td.no { color: var(--text-muted); }
+.cl-table .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.cl-steps { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; padding-left: 20px; color: var(--text-muted); }
+.cl-steps b { color: var(--text); }
+.cl-steps a, .cl-note a { color: inherit; text-decoration: underline; }
+.cl-note { max-width: 720px; margin: 24px auto 0; text-align: center; }
+@media (max-width: 760px) { .cl-grid { grid-template-columns: minmax(0, 1fr); } }

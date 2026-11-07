@@ -111,7 +111,7 @@ export async function linkJson(app: App, row: typeof shareLink.$inferSelect, req
 	}
 }
 
-async function fileJson(app: App, doc: typeof document.$inferSelect, request?: Request) {
+async function fileJson(app: App, doc: typeof document.$inferSelect, request?: Request, withAssets = false) {
 	const links = await app.db
 		.select()
 		.from(shareLink)
@@ -119,12 +119,15 @@ async function fileJson(app: App, doc: typeof document.$inferSelect, request?: R
 		.orderBy(desc(shareLink.createdAt))
 	let thumbUrl: string | null = null
 	let docUrl: string | null = null
+	let assets: string[] | undefined
 	if (doc.headVersionId) {
 		const [ver] = await app.db.select({ manifest: version.manifest }).from(version).where(eq(version.id, doc.headVersionId))
 		const m = ver ? (JSON.parse(ver.manifest) as Manifest) : null
 		const base = `/api/docs/${doc.id}/v/${doc.headVersionId}`
 		if (m?.previews.og) thumbUrl = `${base}/_ad/og.png`
 		if (m) docUrl = `${base}/${docPath(m)}`
+		// the files beside the .pen, relative to it (an app opening the file fetches them)
+		if (m && withAssets) assets = m.assets.map((a) => a.path)
 	}
 	return {
 		id: doc.id,
@@ -136,6 +139,7 @@ async function fileJson(app: App, doc: typeof document.$inferSelect, request?: R
 		thumbUrl,
 		docUrl,
 		links: await Promise.all(links.map((l: typeof shareLink.$inferSelect) => linkJson(app, l, request))),
+		...(assets ? { assets } : {}),
 	}
 }
 
@@ -334,7 +338,7 @@ export function fileRoutes(o: any) {
 					.from(version)
 					.where(and(eq(version.docId, doc.id), eq(version.status, 'committed')))
 					.orderBy(desc(version.committedAt))
-				const json = await fileJson(app, doc, context.request)
+				const json = await fileJson(app, doc, context.request, true)
 				return {
 					...json,
 					role: access!.role,

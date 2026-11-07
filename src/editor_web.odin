@@ -19,6 +19,8 @@ foreign page {
 	page_error :: proc(message: string) ---
 	// the editor is running: the page hides its loading state
 	page_ready :: proc() ---
+	// files the document needs that the page has not handed over, one path a line
+	page_want :: proc(paths: string) ---
 }
 
 @(private = "file")
@@ -63,6 +65,12 @@ step :: proc(dt: f64) -> bool {
 		page_ready()
 	}
 	engine.font_atlas_trim(app.vg)
+	if len(engine.files_wanted) > 0 {
+		paths := strings.join(engine.files_wanted[:], "\n", context.temp_allocator)
+		for p in engine.files_wanted do delete(p)
+		clear(&engine.files_wanted)
+		page_want(paths)
+	}
 	platform_poll()
 	app_frame()
 	return !platform_should_close()

@@ -247,7 +247,7 @@ export const docMember = sqliteTable(
 	{
 		docId: typeid('doc').notNull().references(() => document.id, { onDelete: 'cascade' }),
 		userId: typeid('user').notNull().references(() => user.id, { onDelete: 'cascade' }),
-		role: text('role', { enum: ['viewer', 'editor'] }).notNull(),
+		role: text('role', { enum: ['viewer', 'commenter', 'editor'] }).notNull(),
 		invitedBy: text('invitedBy'),
 		createdAt: timestamp('createdAt').notNull(),
 	},
@@ -261,7 +261,7 @@ export const docInvite = sqliteTable(
 		id: typeid('dinv').primaryKey().$defaultFn(() => generateTypeId('dinv')),
 		docId: typeid('doc').notNull().references(() => document.id, { onDelete: 'cascade' }),
 		email: text('email').notNull(),
-		role: text('role', { enum: ['viewer', 'editor'] }).notNull(),
+		role: text('role', { enum: ['viewer', 'commenter', 'editor'] }).notNull(),
 		tokenHash: text('tokenHash').notNull(),
 		tokenSealed: text('tokenSealed').notNull(),
 		invitedBy: typeid('user').notNull().references(() => user.id, { onDelete: 'cascade' }),
@@ -272,4 +272,26 @@ export const docInvite = sqliteTable(
 		revokedAt: timestamp('revokedAt'),
 	},
 	(t) => [uniqueIndex('doc_invite_token_idx').on(t.tokenHash), index('doc_invite_doc_idx').on(t.docId)],
+)
+
+/** A comment on a cloud document: a thread's first comment is pinned to a point of the page (and
+ * the layer under it, when there was one); its replies name it as `threadId`. Deleting the first
+ * comment deletes its thread. */
+export const comment = sqliteTable(
+	'comment',
+	{
+		id: typeid('cmt').primaryKey().$defaultFn(() => generateTypeId('cmt')),
+		docId: typeid('doc').notNull().references(() => document.id, { onDelete: 'cascade' }),
+		/** null: the thread's first comment */
+		threadId: text('threadId'),
+		authorId: typeid('user').notNull().references(() => user.id, { onDelete: 'cascade' }),
+		body: text('body').notNull(),
+		/** JSON, first comments only: { x, y, node?, page? } in page coordinates */
+		anchor: text('anchor'),
+		createdAt: timestamp('createdAt').notNull(),
+		editedAt: timestamp('editedAt'),
+		resolvedAt: timestamp('resolvedAt'),
+		resolvedBy: text('resolvedBy'),
+	},
+	(t) => [index('comment_doc_idx').on(t.docId, t.createdAt), index('comment_thread_idx').on(t.threadId)],
 )

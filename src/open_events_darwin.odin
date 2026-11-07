@@ -25,6 +25,11 @@ app_open_urls :: proc "c" (self: NS.id, cmd: NS.SEL, application: NS.id, urls: ^
 	for i in 0 ..< int(urls->count()) {
 		url := urls->objectAs(NS.UInteger(i), ^NS.URL)
 		if url == nil do continue
+		// agentic-design://open?doc=<id>: a cloud document (the site's Open in app)
+		if scheme := intrinsics.objc_send(^NS.String, url, "scheme"); scheme != nil && scheme->odinString() == "agentic-design" {
+			if abs := intrinsics.objc_send(^NS.String, url, "absoluteString"); abs != nil do append(&pf.open_requests, strings.clone(abs->odinString()))
+			continue
+		}
 		path := intrinsics.objc_send(^NS.String, url, "path")
 		if path == nil do continue
 		append(&pf.open_requests, strings.clone(path->odinString()))
@@ -40,6 +45,10 @@ handle_open_requests :: proc() {
 		clear(&pf.open_requests)
 	}
 	for p in pf.open_requests {
+		if strings.has_prefix(p, "agentic-design:") {
+			cloud_open_url(p)
+			continue
+		}
 		if !strings.has_suffix(strings.to_lower(p, context.temp_allocator), ".pen") {
 			set_status("Not a .pen document: %s", p)
 			continue

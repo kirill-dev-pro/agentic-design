@@ -78,6 +78,13 @@
       "when": 1793837862995,
       "tag": "0010_magenta_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794086049402,
+      "tag": "0011_narrow_nicolaos",
+      "breakpoints": true
     }
   ]
 }

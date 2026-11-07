@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — Agentic Design</title>
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/app.css">
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body data-page="files">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+	<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+	<symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+	<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+	<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+	<symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+	<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+	<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+	<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+	<symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+	<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+</defs></svg>
+<header class="nav">
+	<div class="nav-in">
+		<a class="logo" href="/" aria-label="Agentic Design, home">
+			<img class="mark light" src="/img/logo-32.png" srcset="/img/logo-64.png 2x, /img/logo-96.png 3x" width="32" height="32" alt=""><img class="mark dark" src="/img/logo-32-dark.png" srcset="/img/logo-64-dark.png 2x, /img/logo-96-dark.png 3x" width="32" height="32" alt="">
+			<span class="word">Agentic Design</span>
+		</a>
+		<nav class="links" aria-label="Pages">
+			<a href="/view/">Viewer</a>
+			<a href="/dashboard" data-signed-in hidden>Dashboard</a>
+		</nav>
+		<div class="nav-end">
+			<button class="theme" type="button" aria-label="Switch to dark theme" title="Light or dark">
+				<svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+				<svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+			</button>
+			<a class="btn ghost small" href="/account" data-signed-in hidden id="nav-account">Account</a>
+			<a class="btn ghost small" href="/signin" data-signed-out hidden>Sign in</a>
+		</div>
+	</div>
+</header>
+<main id="main" class="app">
+	<section class="files">
+		<div class="dash-bar">
+			<div class="seg" role="group" aria-label="Show">
+				<button type="button" data-filter="all" aria-pressed="true"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg>All files</button>
+				<button type="button" data-filter="recent" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Recents</button>
+			</div>
+			<label class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="files-search" type="search" placeholder="Find files" aria-label="Find files" autocomplete="off"></label>
+			<select id="files-sort" aria-label="Sort by"><option value="updated">Last modified</option><option value="name">Name</option></select>
+			<a class="btn primary" href="/view/"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Share a file</a>
+		</div>
+		<div class="files-head">
+			<h1>Dashboard</h1>
+			<p class="usage" id="files-usage"></p>
+		</div>
+		<p class="form-error" id="files-error" role="alert" hidden></p>
+		<div id="files-empty" class="card empty" hidden>
+			<h2>No cloud files yet</h2>
+			<p class="sub">Put a .pen in the cloud from the Mac app (Copy to cloud on its Dashboard, or Share), or from the viewer here. Then open it from this page in the browser or in the app, invite people to view, comment or edit, and work on it together live.</p>
+			<div class="row"><a class="btn primary" href="/view/">Open the viewer</a> <a class="btn secondary" href="/cloud/">How the cloud works</a></div>
+		</div>
+		<p class="sub" id="files-none" hidden>No file matches.</p>
+		<ul id="files-list" class="files-grid"></ul>
+		<section id="shared-section" hidden>
+			<h2 class="shared-title">Shared with you</h2>
+			<ul id="shared-list" class="files-grid"></ul>
+		</section>
+	</section>
+
+	<dialog id="guide-dialog" class="guide-dialog" aria-labelledby="guide-title">
+		<form method="dialog">
+			<h2 id="guide-title" tabindex="-1" autofocus>How it works</h2>
+			<p class="sub">Four things to know.</p>
+			<ol class="guide-cards">
+				<li><h3>Your cloud files</h3><p>Put a .pen in the cloud from the Mac app (Copy to cloud, or Share) or from the viewer here. It is private: only you see it until you invite someone or make a link.</p></li>
+				<li><h3>Open it live</h3><p>Open a file from here in the browser, or in the app with Open in app. Everyone in it sees each other's cursors and changes as they happen.</p></li>
+				<li><h3>Invite people</h3><p>A file's People: an email and Can view, Can comment or Can edit. They open the invitation signed in with that address. You can change their access or remove them at any time.</p></li>
+				<li><h3>Comment</h3><p>The comment button beside the tool bar pins a comment to a point of the design. Others reply under it; the author, an editor or you resolve it.</p></li>
+			</ol>
+			<div class="guide-end"><button class="btn primary" value="done">Got it</button></div>
+		</form>
+	</dialog>
+
+	<dialog id="people-dialog" class="links-dialog">
+		<form method="dialog" class="links-top"><h2 id="people-title">People</h2><button class="btn ghost small" value="close">Close</button></form>
+		<p class="sub">Invite someone by email. They open the invitation signed in with that address. <b>Can view</b>: looks and follows along. <b>Can comment</b>: also leaves comments and replies. <b>Can edit</b>: also changes the design, live with everyone in it.</p>
+		<form id="invite-form" class="invite-row">
+			<input id="invite-email" type="email" placeholder="name@example.com" aria-label="Email" required autocomplete="off">
+			<select id="invite-role" aria-label="Access"><option value="viewer">Can view</option><option value="commenter">Can comment</option><option value="editor">Can edit</option></select>
+			<button class="btn primary" type="submit">Invite</button>
+		</form>
+		<p class="form-ok" id="invite-ok" hidden></p>
+		<p class="form-error" id="people-error" role="alert" hidden></p>
+		<ul id="people-list" class="links-list"></ul>
+	</dialog>
+
+	<dialog id="links-dialog" class="links-dialog">
+		<form method="dialog" class="links-top"><h2 id="links-title">Links</h2><button class="btn ghost small" value="close">Close</button></form>
+		<p class="sub">Anyone with a link can view the file, without an account. Revoking a link stops it at once.</p>
+		<ul id="links-list" class="links-list"></ul>
+		<p class="form-error" id="links-error" role="alert" hidden></p>
+		<button class="btn secondary" type="button" id="link-new"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Create a new link</button>
+	</dialog>
+</main>
+<script src="/main.js" defer></script>
+<script src="/app.js" defer></script>
+</body>
+</html>

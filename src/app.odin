@@ -236,6 +236,7 @@ app_frame :: proc() {
 	update_tick()
 	share_tick()
 	dash_cloud_tick()
+	cloud_open_tick() // a cloud document downloaded for its tab (cloud_open.odin)
 	if app.needs_layout do engine.layout_invalidate()
 	if ran || app.needs_layout {
 		engine.layout_document(&app.doc)
@@ -247,6 +248,12 @@ app_frame :: proc() {
 	handle_drops()
 	handle_open_requests()
 	handle_input()
+	if app.needs_layout {
+		engine.layout_invalidate()
+		engine.layout_document(&app.doc)
+		app.needs_layout = false
+	}
+	live_tick() // a live cloud document: our edits out, others' in (cloud_live.odin)
 	if app.needs_layout {
 		engine.layout_invalidate()
 		engine.layout_document(&app.doc)
@@ -462,6 +469,7 @@ push_undo :: proc() {
 		mark_dirty()
 		return
 	}
+	undo_pushes += 1
 	append(&app.undo_stack, engine.doc_snapshot(&app.doc))
 	if len(app.undo_stack) > 200 {
 		engine.free_snapshot(app.undo_stack[0])
@@ -473,7 +481,14 @@ push_undo :: proc() {
 	agent_user_edit(app.file_path) // the user's own change ends an agent run's undo step here
 }
 
+// Undo steps begun so far (a live document groups its batches by them, cloud_live.odin).
+undo_pushes: int
+
 undo :: proc() {
+	if live_is_current() {
+		live_undo() // our own steps only, sent to the room
+		return
+	}
 	if len(app.undo_stack) == 0 do return
 	app.needs_layout = true
 	append(&app.redo_stack, engine.doc_snapshot(&app.doc))
@@ -485,6 +500,10 @@ undo :: proc() {
 }
 
 redo :: proc() {
+	if live_is_current() {
+		live_undo(redo = true)
+		return
+	}
 	if len(app.redo_stack) == 0 do return
 	app.needs_layout = true
 	append(&app.undo_stack, engine.doc_snapshot(&app.doc))
@@ -591,6 +610,7 @@ draw_canvas :: proc() {
 	draw_presence_effects(vg) // what agents touch flashes; placeholder frames glow
 	draw_annotations(vg) // the user's marks for the agent
 	draw_canvas_overlays(vg)
+	draw_comments(vg) // a live document's comment pins and the open thread
 }
 
 // The grid and the document: what the canvas cache holds.

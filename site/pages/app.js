@@ -1,5 +1,5 @@
 "use strict";
-// The site's account pages (/signin, /signup, /account, /files): plain fetches to the API
+// The site's account pages (/signin, /signup, /account, /dashboard): plain fetches to the API
 // on this origin (docs: the M1 API contract, shared by the cloud agent). Auth is Better
 // Auth under /api/auth/*, with a cookie session; errors come back as { message, code }
 // (auth) or { error, code, details: { reason } } (the rest of /api).
@@ -42,7 +42,7 @@ const App = (() => {
 	}
 
 	// ?next= keeps where to go after signing in: a path on this site only.
-	function nextPath(fallback = "/files") {
+	function nextPath(fallback = "/dashboard") {
 		const n = new URLSearchParams(location.search).get("next") || "";
 		return n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") ? n : fallback;
 	}
@@ -256,18 +256,21 @@ const App = (() => {
 		EMAIL_NOT_VERIFIED: "A public link needs a verified email. Links shared by URL work without it.",
 		QUOTA_EXCEEDED: "Your account allows no more links right now.",
 	};
-	// The viewer URL of the owner's own copy (cookie, same origin; the contract, §3)
-	const ownerUrl = (f) => "/view/?file=" + encodeURIComponent(f.docUrl || `/api/docs/${f.id}/v/${f.versionId}/doc.pen`);
 	const tokenOf = (url) => (url || "").split("/s/")[1] || "";
+	// a cloud file opens live: in the browser editor, or in the app (agentic-design://)
+	const liveUrl = (f) => `/d/${encodeURIComponent(f.id)}`;
+	const appUrl = (f) => `agentic-design://open?doc=${encodeURIComponent(f.id)}`;
+	const ROLES = { owner: "Owner", editor: "Can edit", commenter: "Can comment", viewer: "Can view" };
 
 	// The short guide on My files: opened once for an account (/api/me says onboarding.done is
-	// false), and again from the Account page (/files?guide). Closing it, by any way, counts as
+	// false), and again from the Account page (/dashboard?guide). Closing it, by any way, counts as
 	// done; if telling the server fails it asks again next time.
 	function guide(m) {
 		const dlg = $("#guide-dialog");
 		if (!dlg || typeof dlg.showModal !== "function") return;
 		const first = !!(m.onboarding && m.onboarding.done === false);
 		if (!first && !new URLSearchParams(location.search).has("guide")) return;
+		if (new URLSearchParams(location.search).has("people")) return; // straight to a file's People
 		dlg.addEventListener("close", () => {
 			if (first) api("POST", "/api/me/onboarding").catch(() => {});
 			if (new URLSearchParams(location.search).has("guide")) history.replaceState(null, "", location.pathname);
@@ -308,16 +311,17 @@ const App = (() => {
 		}
 
 		function sharedCard(f) {
-			const role = f.shared && f.shared.role === "editor" ? "Can edit" : "Can view";
+			const role = ROLES[f.shared && f.shared.role] || "Can view";
 			const owner = f.shared && f.shared.owner && (f.shared.owner.name || f.shared.owner.email) || "someone";
-			const open = el("a", { role: "menuitem", href: ownerUrl(f), textContent: "Open" });
+			const open = el("a", { role: "menuitem", href: liveUrl(f), textContent: "Open in browser" });
+			const inApp = el("a", { role: "menuitem", href: appUrl(f), textContent: "Open in app" });
 			const leave = el("button", { type: "button", role: "menuitem", className: "danger", textContent: "Leave" });
 			leave.addEventListener("click", async () => {
 				closeMenu();
 				if (!confirm(`Leave “${f.name}”? You will no longer see it.`)) return;
 				try { await api("DELETE", `/api/docs/${f.id}/people/${m.user.id}`); load(); } catch (e) { showError(say(e)); }
 			});
-			const menu = el("div", { className: "cmenu", role: "menu", hidden: true }, open, m.user && m.user.id ? leave : null);
+			const menu = el("div", { className: "cmenu", role: "menu", hidden: true }, open, inApp, m.user && m.user.id ? leave : null);
 			const more = el("button", { type: "button", className: "more", title: "Actions", innerHTML: '<svg class="ic" aria-hidden="true"><use href="#i-more"/></svg>' });
 			more.setAttribute("aria-label", `Actions for ${f.name}`);
 			more.setAttribute("aria-haspopup", "menu");
@@ -328,7 +332,7 @@ const App = (() => {
 				closeMenu();
 				if (!was) { menu.hidden = false; more.setAttribute("aria-expanded", "true"); openMenu = { menu, button: more }; }
 			});
-			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
+			const thumb = el("a", { className: "thumb", href: liveUrl(f), title: "Open" },
 				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null,
 				el("span", { className: "badge-cloud" }, icon("cloud"), "Cloud"));
 			const li = el("li", { className: "file" },
@@ -383,7 +387,9 @@ const App = (() => {
 				} catch (e) { showError(say(e)); }
 			});
 			const menu = el("div", { className: "cmenu", role: "menu", hidden: true },
-				el("a", { role: "menuitem", href: ownerUrl(f), textContent: "Open" }),
+				el("a", { role: "menuitem", href: liveUrl(f), textContent: "Open in browser" }),
+				el("a", { role: "menuitem", href: appUrl(f), textContent: "Open in app" }),
+				act("People…", () => people(f)),
 				copy,
 				act("Links…", () => links(f, load)),
 				el("a", { role: "menuitem", href: `/view/?update=${encodeURIComponent(f.id)}&name=${encodeURIComponent(f.name)}`, textContent: "New version", title: "Open the new version in the viewer and press Share" }),
@@ -406,14 +412,14 @@ const App = (() => {
 				closeMenu();
 				if (!was) { menu.hidden = false; more.setAttribute("aria-expanded", "true"); openMenu = { menu, button: more }; }
 			});
-			const thumb = el("a", { className: "thumb", href: ownerUrl(f), title: "Open" },
+			const thumb = el("a", { className: "thumb", href: liveUrl(f), title: "Open" },
 				f.thumbUrl ? el("img", { src: f.thumbUrl, alt: "", loading: "lazy" }) : null,
 				el("span", { className: "badge-cloud" }, icon("cloud"), "Cloud"));
 			const li = el("li", { className: "file" },
 				el("div", { className: "file-top" },
 					el("div", { className: "meta" },
 						el("span", { className: "name", textContent: f.name, title: f.name }),
-						el("span", { className: "when" }, icon("cloud"), `Uploaded · ${when(f.updatedAt)} · ${bytes(f.sizeBytes)}`)),
+						el("span", { className: "when" }, icon("cloud"), `Updated · ${when(f.updatedAt)} · ${bytes(f.sizeBytes)}`)),
 					el("div", { className: "more-wrap" }, more, menu)),
 				thumb,
 				el("div", { className: "linkstate" }, icon("link"), nLinks ? `${views} ${views === 1 ? "view" : "views"} · link on` : "Link off"));
@@ -422,6 +428,68 @@ const App = (() => {
 		}
 
 		await load();
+		// /dashboard?people=<id>: the editor page's Share opens it here
+		const ask = new URLSearchParams(location.search).get("people");
+		const f = ask && all.find((x) => x.id === ask);
+		if (f) people(f);
+	}
+
+	// Who has access to one of the owner's files: invite by email with a role, change a role,
+	// remove someone, copy or withdraw an open invitation (src/invites.ts).
+	function people(f) {
+		const dlg = $("#people-dialog");
+		$("#people-title").textContent = `People · ${f.name}`;
+		const err = (t) => { $("#people-error").textContent = t || ""; $("#people-error").hidden = !t; };
+		const ok = (t) => { $("#invite-ok").textContent = t || ""; $("#invite-ok").hidden = !t; };
+		const roleSelect = (value, onChange) => {
+			const s = el("select", { "aria-label": "Access" });
+			for (const r of ["viewer", "commenter", "editor"]) s.append(el("option", { value: r, textContent: ROLES[r], selected: r === value }));
+			s.addEventListener("change", () => onChange(s.value));
+			return s;
+		};
+		async function render() {
+			let p;
+			try { p = await api("GET", `/api/docs/${f.id}/people`); } catch (e) { return err(say(e)); }
+			const rows = [];
+			if (p.owner) rows.push(el("li", { className: "person" }, el("span", { className: "who" }, el("b", { textContent: p.owner.name || p.owner.email }), el("span", { className: "sub", textContent: p.owner.email })), el("span", { className: "role", textContent: "Owner" })));
+			for (const mbr of p.members) {
+				const remove = el("button", { type: "button", className: "btn ghost small danger", textContent: "Remove" });
+				remove.addEventListener("click", async () => {
+					if (!confirm(`Remove ${mbr.name || mbr.email} from “${f.name}”? They lose access at once.`)) return;
+					try { await api("DELETE", `/api/docs/${f.id}/people/${mbr.userId}`); render(); } catch (e) { err(say(e)); }
+				});
+				rows.push(el("li", { className: "person" },
+					el("span", { className: "who" }, el("b", { textContent: mbr.name || mbr.email }), el("span", { className: "sub", textContent: mbr.email })),
+					roleSelect(mbr.role, async (r) => { try { await api("PATCH", `/api/docs/${f.id}/people/${mbr.userId}`, { role: r }); ok(`${mbr.name || mbr.email}: ${ROLES[r]}`); } catch (e) { err(say(e)); render(); } }),
+					remove));
+			}
+			for (const inv of p.invites) {
+				const copy = el("button", { type: "button", className: "btn ghost small", textContent: "Copy link" });
+				copy.addEventListener("click", async () => { try { await navigator.clipboard.writeText(inv.url); ok("The invitation link is copied: send it to them."); } catch (e) { err("Copy the link: " + inv.url); } });
+				const revoke = el("button", { type: "button", className: "btn ghost small danger", textContent: "Withdraw" });
+				revoke.addEventListener("click", async () => { try { await api("DELETE", `/api/docs/${f.id}/invites/${inv.id}`); render(); } catch (e) { err(say(e)); } });
+				rows.push(el("li", { className: "person invited" },
+					el("span", { className: "who" }, el("b", { textContent: inv.email }), el("span", { className: "sub", textContent: `Invited · until ${new Date(inv.expiresAt).toLocaleDateString()}` })),
+					roleSelect(inv.role, async (r) => { try { await api("PATCH", `/api/docs/${f.id}/invites/${inv.id}`, { role: r }); } catch (e) { err(say(e)); render(); } }),
+					copy, revoke));
+			}
+			$("#people-list").replaceChildren(...rows);
+		}
+		$("#invite-form").onsubmit = async (e) => {
+			e.preventDefault();
+			err(""); ok("");
+			const email = $("#invite-email").value.trim();
+			try {
+				const inv = await api("POST", `/api/docs/${f.id}/invites`, { email, role: $("#invite-role").value });
+				$("#invite-email").value = "";
+				try { await navigator.clipboard.writeText(inv.url); ok(`Invited ${email}. The link is copied: send it to them (no email is sent yet).`); }
+				catch (x) { ok(`Invited ${email}. Send them this link: ${inv.url}`); }
+				render();
+			} catch (x) { err(say(x)); }
+		};
+		err(""); ok("");
+		render();
+		dlg.showModal();
 	}
 
 	// The links of one file: copy, settings, expiry, revoke, a new one.

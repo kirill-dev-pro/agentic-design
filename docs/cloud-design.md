@@ -1,6 +1,6 @@
 # Cloud design: accounts, cloud documents, share links, multiplayer
 
-Status: **approved, November 2026; M1 in progress.** The decisions taken on the proposal
+Status: **approved, November 2026; M1 done, live documents (M2–M4) in progress.** The decisions taken on the proposal
 are listed under [Decisions](#decisions); §9 lists what is still open.
 
 This page describes how Agentic Design gets:
@@ -115,6 +115,36 @@ parallel with the site; execution plan with Dev and Web):
     person's address with a password before that person signs in with Google keeps the
     password. Revisit when email verification works.
 
+
+**Owner's decisions of 2026-11-07** (the site and the live document):
+
+18. **Three levels of access, and the owner.** A person invited to a document is a viewer, a
+    commenter or an editor:
+
+    | | Viewer | Commenter | Editor | Owner |
+    | --- | --- | --- | --- | --- |
+    | See the document live, with everyone's cursors | yes | yes | yes | yes |
+    | Start a comment thread, reply | | yes | yes | yes |
+    | Change or delete their own comment | | yes | yes | yes |
+    | Delete anyone's comment, resolve a thread | | | yes | yes |
+    | Edit the document | | | yes | yes |
+    | Invite, change roles, remove people, links | | | | yes |
+
+    The thread's author may resolve it too. Deleting a thread's first comment deletes the
+    thread. The room refuses batches from viewers and commenters (`FORBIDDEN`) and drops
+    their selections from presence; the clients do not let them edit.
+19. **Comments live in the database, not in the .pen** (`comment`, site/src/comments.ts):
+    threads of comments, the first one pinned to a point of the page (and the layer under
+    it). They survive any edit and never reach a downloaded file. After a change the Worker
+    tells the room (`/notify`), and the room tells everyone in it to fetch them again.
+20. **The site: /cloud, /dashboard, /d/<id>.** The landing links /cloud (what the cloud is)
+    and has Sign in, then Dashboard. /dashboard (was /files) lists the account's cloud files
+    and those shared with it; a file opens live at /d/<id>, the browser editor joined to the
+    room, or in the app (agentic-design://open?doc=<id>), which downloads its latest version
+    into its cache and joins the same room. Both run the same client (src/cloud_live.odin):
+    their edits as operations every 100 ms, others' applied as they arrive, undo of one's
+    own steps only, pointers as people's cursors. Live editing in the app is macOS only for
+    now (NSURLSessionWebSocketTask); Windows and Linux open cloud files in the browser.
 
 ---
 

@@ -59,6 +59,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 			<dict><key>public.filename-extension</key><array><string>pen</string></array></dict>
 		</dict>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key><string>dev.kcrz.agentic-design.cloud</string>
+			<key>CFBundleURLSchemes</key><array><string>agentic-design</string></array>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

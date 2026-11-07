@@ -24,9 +24,14 @@
 	<span class="beta">beta</span>
 	<span id="saved" role="status" hidden></span>
 	<span class="spacer"></span>
-	<label class="btn" id="open-label">Open…<input id="open-files" type="file" multiple hidden></label>
-	<button id="open-folder" class="btn" type="button" hidden title="Edit the files of a folder in place">Open folder…</button>
-	<button id="new" class="btn" type="button">New</button>
+	<span id="people" class="cloud-only" aria-label="Also here"></span>
+	<span id="role" class="cloud-only role" hidden></span>
+	<a id="people-link" class="btn" href="#" style="display:none">People</a>
+	<a id="open-app" class="btn cloud-only" href="#" title="Open this file in the Agentic Design app">Open in app</a>
+	<a class="btn cloud-only" href="/dashboard">Dashboard</a>
+	<label class="btn local-only" id="open-label">Open…<input id="open-files" type="file" multiple hidden></label>
+	<button id="open-folder" class="btn local-only" type="button" hidden title="Edit the files of a folder in place">Open folder…</button>
+	<button id="new" class="btn local-only" type="button">New</button>
 	<button id="download" class="btn primary" type="button" disabled>Download .pen</button>
 </header>
 

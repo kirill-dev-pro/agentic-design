@@ -13,7 +13,8 @@ import { appUrl, secretOf, type App } from './blobs'
 import { randomToken, seal, sha256Hex, unseal } from './crypto'
 import { docInvite, docMember, document, member, user } from './schema'
 
-export type Role = 'owner' | 'editor' | 'viewer'
+export type Role = 'owner' | 'editor' | 'commenter' | 'viewer'
+export type MemberRole = Exclude<Role, 'owner'>
 type Doc = typeof document.$inferSelect
 
 const INVITE_DAYS = 14
@@ -45,7 +46,7 @@ export async function sharedWith(db: App['db'], userId: string) {
 		.innerJoin(document, eq(document.id, docMember.docId))
 		.innerJoin(user, eq(user.id, document.createdBy))
 		.where(and(eq(docMember.userId, userId), isNull(document.deletedAt)))
-		.orderBy(desc(document.updatedAt))) as { doc: Doc; role: 'viewer' | 'editor'; owner: string }[]
+		.orderBy(desc(document.updatedAt))) as { doc: Doc; role: MemberRole; owner: string }[]
 }
 
 const fail = (code: 'BAD_REQUEST' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT', reason: string, message: string): never => {
@@ -61,21 +62,24 @@ async function ownerOnly(app: App, userId: string, docId: string) {
 
 const normEmail = (e: string) => e.trim().toLowerCase()
 const email = v.pipe(v.string(), v.trim(), v.maxLength(254), v.email())
-const role = v.picklist(['viewer', 'editor'])
+const role = v.picklist(['viewer', 'commenter', 'editor'])
 
 type RoomNs = { idFromName(n: string): unknown; get(id: unknown): { fetch(i: string, init?: RequestInit): Promise<Response> } }
 
-/** Close a person's sockets in an open room after their role changed or was removed. */
-async function kick(docId: string, userId: string, reason: 'ROLE_CHANGED' | 'REVOKED') {
+/** A request to a document's room (kick, notify); a room that is not running has nobody to tell. */
+export async function tellRoom(docId: string, path: '/kick' | '/notify', body: unknown) {
 	// The room's namespace is a Worker binding, not an env string: from the isolate's registered env.
 	const ns = (registeredWorker()?.env as { DOC_ROOM?: RoomNs } | undefined)?.DOC_ROOM
 	if (!ns) return
 	try {
-		await ns.get(ns.idFromName(docId)).fetch('https://room/kick', { method: 'POST', body: JSON.stringify({ userId, reason }) })
+		await ns.get(ns.idFromName(docId)).fetch(`https://room${path}`, { method: 'POST', body: JSON.stringify(body) })
 	} catch {
-		// a room that is not running has no sockets to close
+		// nobody to tell
 	}
 }
+
+/** Close a person's sockets in an open room after their role changed or was removed. */
+const kick = (docId: string, userId: string, reason: 'ROLE_CHANGED' | 'REVOKED') => tellRoom(docId, '/kick', { userId, reason })
 
 async function inviteJson(app: App, row: typeof docInvite.$inferSelect, request?: Request) {
 	const token = await unseal(secretOf(app), 'doc-invite-v1', row.tokenSealed)
@@ -278,7 +282,7 @@ export async function handleInvitePage(app: App & { auth: any }, request: Reques
 	if (!session?.user) {
 		return new Response(null, { status: 302, headers: { location: `/signin?next=${encodeURIComponent(url.pathname)}`, 'cache-control': 'no-store' } })
 	}
-	const what = `<b>${esc(r.doc.name)}</b> from ${esc(r.inviter)}, as ${r.invite.role === 'editor' ? 'an editor' : 'a viewer'}`
+	const what = `<b>${esc(r.doc.name)}</b> from ${esc(r.inviter)}, as ${r.invite.role === 'editor' ? 'an editor' : r.invite.role === 'commenter' ? 'a commenter' : 'a viewer'}`
 	if (normEmail(session.user.email) !== r.invite.email)
 		return page(
 			403,
@@ -292,5 +296,5 @@ export async function handleInvitePage(app: App & { auth: any }, request: Reques
 		return page(403, '<h1>Not allowed</h1>')
 	const done = await acceptInvite(app, token, session.user)
 	if (typeof done === 'string') return page(410, '<h1>This invitation no longer works</h1>')
-	return new Response(null, { status: 303, headers: { location: `/files?doc=${encodeURIComponent(done.docId)}`, 'cache-control': 'no-store' } })
+	return new Response(null, { status: 303, headers: { location: `/d/${encodeURIComponent(done.docId)}`, 'cache-control': 'no-store' } })
 }

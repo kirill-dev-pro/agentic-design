@@ -43,6 +43,11 @@ handle_input :: proc() {
 		if pf.smart do smart_zoom(m)
 	}
 
+	// a live document's comments: placing a thread, closing a card (comments_ui.odin)
+	if comments_input(over_canvas, page) {
+		update_cursor(false)
+		return
+	}
 	// the marks toolbar is open: the pointer draws marks for the agent (annotations.odin)
 	if annotate_input(over_canvas, page) {
 		update_cursor(false)

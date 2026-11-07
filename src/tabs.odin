@@ -236,6 +236,7 @@ recents_save :: proc() {
 
 recents_touch :: proc(path: string) {
 	if pf.quiet do return // test windows leave the user's recent files alone
+	if cloud_cache_path(path) do return // a cloud document lives in the cloud, not in Recents
 	for r, i in recents {
 		if r.path == path {
 			ordered_remove(&recents, i)

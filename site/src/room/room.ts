@@ -21,7 +21,10 @@ export type Op =
 
 export type Agent = { client: string; session: string; name?: string; color?: string }
 export type Batch = { batch: string; base: number; ops: Op[]; agent?: Agent | null }
-export type Principal = { userId: string; name: string; role: 'viewer' | 'editor' | 'owner' }
+export type Principal = { userId: string; name: string; role: 'viewer' | 'commenter' | 'editor' | 'owner' }
+
+/** Whether a role may change the document (viewers and commenters may not). */
+export const canEdit = (role: Principal['role']) => role === 'editor' || role === 'owner'
 
 export type Ack = { t: 'ack'; batch: string; seq: number; skipped?: number[]; rewritten?: { op: number; parent: string }[] }
 export type Nack = { t: 'nack'; batch: string; reason: string; detail?: Record<string, unknown> }
@@ -85,7 +88,7 @@ export class Room {
 		})
 		const seen = this.batches.get(b.batch) ?? this.opts.lookupBatch?.(b.batch)
 		if (seen !== undefined) return { reply: { t: 'ack', batch: b.batch, seq: seen } }
-		if (who.role === 'viewer') return nack('FORBIDDEN')
+		if (!canEdit(who.role)) return nack('FORBIDDEN')
 		if (b.agent && this.opts.agentsOff) return nack('AGENTS_OFF')
 		if (!Array.isArray(b.ops) || b.ops.length === 0) return nack('BAD_OP')
 		if (b.ops.length > this.opts.maxOpsPerBatch) return nack('TOO_LARGE', { max: this.opts.maxOpsPerBatch })

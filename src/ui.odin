@@ -1188,6 +1188,7 @@ field_commit :: proc() {
 field_apply :: proc() {
 	text := strings.to_string(ui.buf)
 	if ui.focus_uid == 0 {
+		if comments_field_apply(ui.focus) do return
 		if variables_table_apply(ui.focus, text) do return
 		if settings_field_apply(ui.focus, text) do return
 		if dash_field_apply(ui.focus, text) do return

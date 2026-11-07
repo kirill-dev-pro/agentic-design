@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Design Cloud: design together, live</title>
+<meta name="description" content="Put a .pen in the Agentic Design cloud and open it in the app or the browser: everyone in it sees each other's cursors and changes live. Invite people to view, comment or edit.">
+<link rel="canonical" href="https://agentic-design.kcrz.dev/cloud/">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0E0F12">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Agentic Design">
+<meta property="og:url" content="https://agentic-design.kcrz.dev/cloud/">
+<meta property="og:title" content="Agentic Design Cloud">
+<meta property="og:description" content="Design together, live: the app and the browser on one document, with cursors, comments and three levels of access.">
+<meta property="og:image" content="https://agentic-design.kcrz.dev/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/landing.css">
+</head>
+<body class="dl-page cl-page">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<defs>
+		<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5"/></symbol>
+		<symbol id="i-code" viewBox="0 0 24 24"><path d="M18 16l4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16"/></symbol>
+		<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+		<symbol id="i-apple" viewBox="0 0 24 24"><path d="M12 6.528V3a1 1 0 0 1 1-1h0"/><path d="M18.237 21A15 15 0 0 0 22 11a6 6 0 0 0-10-4.472A6 6 0 0 0 2 11a15.1 15.1 0 0 0 3.763 10 3 3 0 0 0 3.648.648 5.5 5.5 0 0 1 5.178 0A3 3 0 0 0 18.237 21"/></symbol>
+		<symbol id="i-windows" viewBox="0 0 24 24"><path d="M3 5.5 10.5 4.5v7H3zM13 4.2 21 3v8.5h-8zM3 13h7.5v7L3 19zM13 13h8v8l-8-1.2z"/></symbol>
+		<symbol id="i-terminal" viewBox="0 0 24 24"><path d="M12 19h8M4 17l6-6-6-6"/></symbol>
+		<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+		<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+		<symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+		<symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+		<symbol id="i-message" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+		<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+		<symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+		<symbol id="i-pointer" viewBox="0 0 24 24"><path d="M4.04 4.04 10.5 21l2.43-7.07L20 11.5z"/></symbol>
+	</defs>
+</svg>
+
+<header class="nav">
+	<div class="wrap nav-in">
+		<a class="logo" href="/" aria-label="Agentic Design home">
+			<img src="/img/logo-32.png" srcset="/img/logo-64.png 2x, /img/logo-96.png 3x" alt="" width="32" height="32">
+			<span>Agentic Design</span>
+		</a>
+		<nav class="nav-links" aria-label="Sections">
+			<a href="/#modes">Modes</a>
+			<a href="/#agents">Agents</a>
+			<a href="/#connect">MCP tools</a>
+			<a href="/#files">Files</a>
+			<a href="/cloud/" aria-current="page">Cloud</a>
+			<a href="/download/">Download</a>
+		</nav>
+		<div class="nav-end">
+		<a class="btn btn-ghost btn-sm nav-viewer" href="/view/">
+			<svg class="ic ic-16"><use href="#i-eye"/></svg>Viewer
+		</a>
+		<a class="btn btn-ghost btn-sm nav-viewer" href="https://github.com/kirill-dev-pro/agentic-design">
+			<svg class="ic ic-16"><use href="#i-code"/></svg>Source
+		</a>
+		<a class="btn btn-ghost btn-sm" href="/signin?next=/dashboard" data-signed-out>Sign in</a>
+		<a class="btn btn-glow btn-sm" href="/dashboard" data-signed-in hidden>Dashboard</a>
+		</div>
+	</div>
+</header>
+
+<main id="top">
+	<section class="hero dl-hero">
+		<div class="wrap hero-in">
+			<span class="badge">Cloud · free while in preview</span>
+			<h1>Design together, live</h1>
+			<p class="lede">Put a .pen in the Agentic Design cloud and open it in the app or in your browser. Everyone in it sees each other's cursors and changes as they happen, and what your agent changes reaches them too. Invite people to view, comment or edit.</p>
+			<div class="ctas">
+				<a class="btn btn-glow" href="/signup?next=/dashboard" data-signed-out><svg class="ic"><use href="#i-cloud"/></svg>Create an account</a>
+				<a class="btn btn-glow" href="/dashboard" data-signed-in hidden><svg class="ic"><use href="#i-cloud"/></svg>Open your dashboard</a>
+				<a class="btn btn-secondary" href="/signin?next=/dashboard" data-signed-out>Sign in</a>
+				<a class="btn btn-secondary" href="/download/"><svg class="ic"><use href="#i-download"/></svg>Get the app</a>
+			</div>
+			<p class="fine">Your own files stay where they are: a file goes to the cloud only when you put it there.</p>
+		</div>
+	</section>
+
+	<section class="section">
+		<div class="wrap">
+			<div class="cl-grid">
+				<article class="card cl-card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-pointer"/></svg></span>
+					<h3>Live, with cursors</h3>
+					<p>Edits reach everyone at once, and everyone's pointer is on the canvas with their name. Two people change different things and both changes stay; undo takes back only your own steps.</p>
+				</article>
+				<article class="card cl-card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-monitor"/></svg></span>
+					<h3>In the app or the browser</h3>
+					<p>The same editor either way. Open a file from your dashboard in the browser, or press Open in app. Agents connected to the Mac app work on cloud files too: their changes reach everyone, like yours.</p>
+				</article>
+				<article class="card cl-card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-message"/></svg></span>
+					<h3>Comments in threads</h3>
+					<p>Pin a comment to any point of the design. Others reply under it; whoever started the thread, an editor or the owner resolves it when it is done.</p>
+				</article>
+				<article class="card cl-card">
+					<span class="tile"><svg class="ic ic-22"><use href="#i-shield"/></svg></span>
+					<h3>Private by default</h3>
+					<p>A cloud file is yours until you invite someone by email, or make a view link. Removing someone, or changing their access, takes effect at once, even mid-session.</p>
+				</article>
+			</div>
+		</div>
+	</section>
+
+	<section class="section" id="access">
+		<div class="wrap">
+			<div class="sec-head narrow">
+				<p class="eyebrow">Access</p>
+				<h2>Three levels, and the owner</h2>
+				<p class="sec-lede">Each person you invite gets one of them. You can change it whenever you like.</p>
+			</div>
+			<div class="cl-table-wrap">
+				<table class="cl-table">
+					<thead><tr><th></th><th scope="col">Can view</th><th scope="col">Can comment</th><th scope="col">Can edit</th><th scope="col">Owner</th></tr></thead>
+					<tbody>
+					<tr><th scope="row">See the design, and who is in it, live</th><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					<tr><th scope="row">Download a copy (.pen)</th><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					<tr><th scope="row">Leave comments and reply in threads</th><td class="no">·</td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					<tr><th scope="row">Change or delete your own comments</th><td class="no">·</td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					<tr><th scope="row">Delete anyone's comments, resolve threads</th><td class="no">·</td><td class="no">·</td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					<tr><th scope="row">Edit the design</th><td class="no">·</td><td class="no">·</td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					<tr><th scope="row">Invite people, change their access</th><td class="no">·</td><td class="no">·</td><td class="no">·</td><td class="yes"><svg class="ic ic-16"><use href="#i-check"/></svg><span class="sr">yes</span></td></tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</section>
+
+	<section class="section">
+		<div class="wrap">
+			<div class="sec-head narrow">
+				<p class="eyebrow">How it works</p>
+				<h2>Three steps</h2>
+			</div>
+			<ol class="cl-steps">
+				<li><b>Put a file in the cloud.</b> In the Mac app, Copy to cloud on its Dashboard (or Share on an open file). In the browser, open the file in the <a href="/view/">viewer</a> and press Share.</li>
+				<li><b>Invite people.</b> On your <a href="/dashboard">dashboard</a>, a file's People: an email and Can view, Can comment or Can edit. They get a link to open signed in with that address.</li>
+				<li><b>Open it together.</b> Everyone opens the file from their dashboard, in the browser or in the app, and works on it at the same time.</li>
+			</ol>
+			<p class="fine cl-note">The browser editor runs on WebGPU: Chrome and Edge 113 or later, Safari 26 or later, Firefox 141 or later on Windows. Live editing in the app is on macOS for now; on Windows and Linux, open cloud files in the browser.</p>
+		</div>
+	</section>
+</main>
+
+<footer class="footer">
+	<div class="wrap footer-in">
+		<div class="footer-brand">
+			<a class="logo" href="/">
+				<img src="/img/logo-32.png" srcset="/img/logo-64.png 2x, /img/logo-96.png 3x" alt="" width="32" height="32">
+				<span>Agentic Design</span>
+			</a>
+			<p>Free and open. Written in Odin, drawn with NanoVG.</p>
+		</div>
+		<nav class="footer-links" aria-label="Links">
+			<a href="/view/">Viewer</a>
+			<a href="/edit/">Editor (beta)</a>
+			<a href="/cloud/">Cloud</a>
+			<a href="/dashboard">Dashboard</a>
+			<a href="https://github.com/kirill-dev-pro/agentic-design/tree/main/docs">Docs</a>
+			<a href="https://github.com/kirill-dev-pro/agentic-design/releases">Releases</a>
+			<a href="https://pencil.design">pencil.design</a>
+			<a href="https://odin-lang.org">Odin</a>
+		</nav>
+	</div>
+</footer>
+
+<script src="/nav.js" defer></script>
+</body>
+</html>

@@ -125,7 +125,7 @@ api_people :: proc(req: ^Request, params: json.Object, agent: json.Object, metho
 	email := strings.to_lower(strings.trim_space(string(params["email"].(json.String) or_else "")), context.temp_allocator)
 	role := string(params["role"].(json.String) or_else "viewer")
 	if method != "people" && (email == "" || !strings.contains(email, "@")) do return api_error("pass \"email\": the person's email address"), false
-	if role != "viewer" && role != "editor" do return api_error("role: viewer (sees the file) or editor (can change it)"), false
+	if role != "viewer" && role != "commenter" && role != "editor" do return api_error("role: viewer (sees the file), commenter (sees it and comments) or editor (can change it)"), false
 	if app.dirty do save_document(app.file_path)
 	agent_share.req = req
 	agent_share.path = strings.clone(app.file_path)
@@ -138,7 +138,7 @@ api_people :: proc(req: ^Request, params: json.Object, agent: json.Object, metho
 	if who == "" do who = "An agent"
 	agent_share.who = strings.clone(who)
 	if method == "invite" {
-		dialog_open("agent.share", fmt.tprintf("Invite %s?", email), fmt.tprintf("%s wants to give %s access to “%s” as %s. The file goes to your Agentic Design cloud if it is not there yet; they open it with an invitation link, signed in with that email.", agent_share.who, email, agent_share.name, "an editor (can change it)" if role == "editor" else "a viewer"), {"Don't allow", "Invite"})
+		dialog_open("agent.share", fmt.tprintf("Invite %s?", email), fmt.tprintf("%s wants to give %s access to “%s” as %s. The file goes to your Agentic Design cloud if it is not there yet; they open it with an invitation link, signed in with that email.", agent_share.who, email, agent_share.name, "an editor (can change it)" if role == "editor" else ("a commenter (can comment)" if role == "commenter" else "a viewer")), {"Don't allow", "Invite"})
 		agent_share.stage = .Confirm
 		return "", true
 	}

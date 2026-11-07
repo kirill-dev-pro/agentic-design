@@ -18,6 +18,7 @@ import { cleanup } from './cleanup'
 import { secureLinkedAccount } from './linking'
 import { DocRoom } from './room/doc-room'
 import { fileRoutes } from './files'
+import { commentRoutes } from './comments'
 import { inviteRoutes } from './invites'
 import * as schema from './schema'
 import { countView, manifestOf, resolveToken, shareJson, tokenOfShareUrl } from './share'
@@ -90,6 +91,7 @@ export const backend = workerstack({
 	api: (o) => ({
 		...fileRoutes(o),
 		...inviteRoutes(o),
+		...commentRoutes(o),
 
 		share: o.public
 			.route({ method: 'GET', path: '/api/share/{token}' })

@@ -7,7 +7,7 @@
 //   network; the cached copy is used only offline ("the last version you opened").
 // - Files shared to the installed app (Android's share sheet, the manifest's
 //   share_target) are kept for the viewer, which opens them (/view/?shared).
-// - Everything else (the landing page, /files, /api) is not touched.
+// - Everything else (the landing page, /dashboard, /api) is not touched.
 // site/build.mjs fills in BUILD and ASSETS (the viewer's hashed files).
 const BUILD = "__BUILD__";
 const ASSETS = __ASSETS__;

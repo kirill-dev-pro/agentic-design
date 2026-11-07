@@ -27,4 +27,5 @@ export const access = defineAccess(schema, {
 	authTrace: closed,
 	docMember: closed,
 	docInvite: closed,
+	comment: closed,
 })

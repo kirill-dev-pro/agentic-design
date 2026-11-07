@@ -3,7 +3,7 @@
 	"name": "Agentic Design",
 	"short_name": "Agentic Design",
 	"description": "View and share .pen design files. Files you open stay on your device.",
-	"start_url": "/files",
+	"start_url": "/dashboard",
 	"scope": "/",
 	"display": "standalone",
 	"background_color": "#1e1e1e",

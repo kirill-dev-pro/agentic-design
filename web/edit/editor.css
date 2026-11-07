@@ -66,3 +66,13 @@ button, input { font: inherit; color: inherit; }
 .recent-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-when { flex: none; color: var(--muted); font-size: 12px; }
 .recent-del { flex: none; width: 28px; height: 28px; background: none; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; font-size: 16px; }
+
+/* a cloud document (/d/<id>): who is here, our role; the local file buttons go */
+.cloud-only { display: none; }
+body.cloud .cloud-only { display: inline-flex; }
+body.cloud .local-only { display: none !important; }
+#people { gap: 0; align-items: center; }
+#people .avatar { width: 26px; height: 26px; border-radius: 50%; color: #fff; font: 600 12px/26px system-ui, sans-serif; text-align: center; margin-left: -6px; border: 2px solid #1e1e1e; display: inline-block; }
+#people .avatar:first-child { margin-left: 0; }
+#people .avatar.more { background: #444; font-size: 11px; }
+.role { font-size: 12px; color: #aaa; padding: 3px 8px; border: 1px solid #3a3a3a; border-radius: 999px; align-items: center; }

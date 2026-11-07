@@ -59,6 +59,9 @@ resources:
       - exportName: _system.files
         physicalName: bunderstack_file_meta
         system: true
+      - exportName: comment
+        physicalName: comment
+        system: false
       - exportName: docInvite
         physicalName: doc_invite
         system: false
@@ -112,11 +115,21 @@ environment:
     sensitive: true
 api:
   operations:
+    - handle: addComment
+      operationId: addComment
+      effect: mutation
+      method: POST
+      path: /api/docs/{docId}/comments
     - handle: appToken
       operationId: appToken
       effect: mutation
       method: POST
       path: /api/app-auth/token
+    - handle: changeComment
+      operationId: changeComment
+      effect: mutation
+      method: PATCH
+      path: /api/docs/{docId}/comments/{commentId}
     - handle: changeInvite
       operationId: changeInvite
       effect: mutation
@@ -147,6 +160,11 @@ api:
       effect: mutation
       method: POST
       path: /api/account/delete
+    - handle: deleteComment
+      operationId: deleteComment
+      effect: mutation
+      method: DELETE
+      path: /api/docs/{docId}/comments/{commentId}
     - handle: deleteFile
       operationId: deleteFile
       effect: mutation
@@ -162,6 +180,11 @@ api:
       effect: mutation
       method: POST
       path: /api/docs/{docId}/invites
+    - handle: listComments
+      operationId: listComments
+      effect: read
+      method: GET
+      path: /api/docs/{docId}/comments
     - handle: listFiles
       operationId: listFiles
       effect: read
