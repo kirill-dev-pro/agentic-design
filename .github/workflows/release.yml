@@ -137,12 +137,15 @@ jobs:
           ZIP="dist/Agentic-Design-$VERSION-arm64.zip"
           # the ticket comes from Apple's CloudKit, which sometimes drops the connection right
           # after notarization: stapling is tried a few times, a little apart
+          # Apple's queue is usually a minute or two; a submission stuck for longer fails the step
+          # rather than holding the release for hours: re-run the job (the Linux and Windows
+          # builds are kept)
           staple() { for i in 1 2 3 4 5 6; do xcrun stapler staple "$1" && return 0; echo "staple failed, try $i of 6"; sleep 20; done; return 1; }
-          xcrun notarytool submit "$ZIP" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun notarytool submit "$ZIP" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait --timeout 45m
           staple "dist/Agentic Design.app"
           PACK_ONLY=1 tools/release/bundle.sh build/release/agentic-design dist
           DMG="dist/Agentic-Design-$VERSION-arm64.dmg"
-          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait --timeout 45m
           staple "$DMG"
 
       - name: The Linux and Windows builds
