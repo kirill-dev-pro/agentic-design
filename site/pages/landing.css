@@ -123,35 +123,15 @@ h1 {
 .ctas.left { justify-content: flex-start; }
 .cta-beam-anchor { position: relative; display: inline-flex; }
 
-/* The flow: light gathers from the whole width of the app window and rises in a narrowing
-   stream into Download. landing.js measures the gap and sets --fl, --ft, --fw, --fh (the box
+/* The flow: light pours out of Download and widens into the whole width of the app window. landing.js measures the gap and sets --fl, --ft, --fw, --fh (the box
    from the button to the window) and --cx (the button's centre in that box). */
 .hero-in { position: relative; }
 .flow { position: absolute; left: var(--fl, 0); top: var(--ft, 0); width: var(--fw, 100%); height: var(--fh, 0); pointer-events: none; z-index: 1; }
 .flow i, .flow span { position: absolute; display: block; }
-.fx { position: absolute; left: 0; top: 0; overflow: visible; }
-.fx-halo { filter: blur(30px); opacity: .95; }
-.fx-tint { filter: blur(16px); opacity: .8; mix-blend-mode: screen; }
-.fx-flare { filter: blur(5px); }
-/* the flash where the light lands on the window */
-.flow-base { left: calc(var(--cx) - 45%); width: 90%; bottom: -18px; height: 36px; border-radius: 50%;
-	background: radial-gradient(closest-side, #FFFFFF, #FFD3BFcc 30%, #E8876A66 65%, #E8876A00); filter: blur(7px); }
-.fx-sharp { filter: blur(.6px); }
-/* the column: a white-hot line in a clay glow, with light running up it */
-.flow-core { left: calc(var(--cx) - 1.5px); top: 0; width: 3px; height: 100%; overflow: hidden; border-radius: 2px;
-	background: linear-gradient(180deg, #FFE6DA, #FFFFFF 70%, #FFFFFF); box-shadow: 0 0 8px 2px #FFC7AE, 0 0 26px 8px #E8876A88, 0 0 70px 18px #E8876A44; }
-.flow-core::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; background: linear-gradient(180deg, #fff0, #fff, #fff0); animation: pour 1.3s cubic-bezier(.5, 0, .9, .6) infinite; }
-.flow-spot { left: calc(var(--cx) - 170px); top: -70px; width: 340px; height: 110px; border-radius: 50%; background: radial-gradient(closest-side, #E8876A99, #E8876A00); filter: blur(16px); }
+/* the still light, baked into one image (landing.js), and the moving light over it */
+.flow-bake { position: absolute; max-width: none; }
 .flow-dust { inset: 0 0 -6px; overflow: hidden; }
-/* a particle rises (the outer element) while it drifts to the centre (the inner one), so
-   the paths bend inwards and meet in the stream */
 .streams { position: absolute; left: 0; top: 0; }
-.streams .st, .streams .tw { fill: none; stroke-width: 1; stroke-linecap: round; }
-.streams .tw { stroke-width: var(--sw, 1.4); opacity: 0; animation: tw var(--d) linear var(--del) infinite; }
-@keyframes tw { 0% { stroke-dashoffset: var(--L); opacity: 0; } 22% { opacity: 0; } 42% { opacity: var(--o); } 72% { opacity: var(--o); } 100% { stroke-dashoffset: -100; opacity: 0; } }
-.streams .sp { fill: #FFF1EA; animation: twinkle var(--d) ease-in-out var(--del) infinite; }
-@keyframes twinkle { 0%, 100% { opacity: .1; } 50% { opacity: .9; } }
-@keyframes pour { from { top: -60px; } to { top: 100%; } }
 /* paused off screen */
 .offscreen *, .offscreen *::before, .offscreen *::after { animation-play-state: paused !important; }
 @keyframes breathe { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
@@ -167,10 +147,11 @@ h1 {
 /* the window's top edge, lit across its width from where the light lands (--cx from landing.js) */
 .window-edge { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 2px;
 	background: radial-gradient(farthest-side at var(--cx, 50%) 50%, #FFFFFF, #FFE3D6 35%, #FFB48F 70%, #E8876A99); box-shadow: 0 0 10px 1px #FFB48F, 0 0 28px 4px #E8876A88; }
-@property --sweep { syntax: "<length>"; inherits: false; initial-value: 0px; }
-.window-edge::before { content: ""; position: absolute; inset: -3px 0; animation: sweep 2.4s cubic-bezier(.2, .6, .4, 1) infinite;
-	background: radial-gradient(60px 4px at calc(var(--cx, 50%) - var(--sweep)) 50%, #fff, #fff0), radial-gradient(60px 4px at calc(var(--cx, 50%) + var(--sweep)) 50%, #fff, #fff0); }
-@keyframes sweep { from { --sweep: 0px; opacity: 1; } 80% { opacity: .8; } to { --sweep: 640px; opacity: 0; } }
+/* glints running outwards along it from there (transform and opacity only) */
+.window-edge b { position: absolute; left: calc(var(--cx, 50%) - 60px); top: -3px; width: 120px; height: 8px; background: radial-gradient(closest-side, #fff, #fff0); animation: glint 2.4s cubic-bezier(.2, .6, .4, 1) infinite; }
+.window-edge b + b { animation-name: glint-r; }
+@keyframes glint { from { transform: translateX(0); opacity: 1; } 80% { opacity: .8; } to { transform: translateX(-640px); opacity: 0; } }
+@keyframes glint-r { from { transform: translateX(0); opacity: 1; } 80% { opacity: .8; } to { transform: translateX(640px); opacity: 0; } }
 .window.pour img { clip-path: inset(0 0 100% 0); filter: brightness(1.8) saturate(.6); transition: clip-path 1.5s cubic-bezier(.3, .1, .2, 1), filter 2.2s ease; }
 .window.poured img { clip-path: inset(0 0 0 0); filter: none; }
 .window-edge::after { content: ""; position: absolute; left: calc(var(--cx, 50%) - 45%); width: 90%; top: 0; height: 140px;
@@ -220,18 +201,13 @@ h2 { font-size: var(--size-h2); font-weight: 700; line-height: 1.1; letter-spaci
 .mbeam { position: absolute; top: 50%; height: 180px; margin-top: -90px; width: 50vw; max-width: 640px; pointer-events: none; transition: opacity .4s ease; }
 .mbeam-l { right: calc(50% + 113px); --c: 133,146,255; }
 .mbeam-r { left: calc(50% + 113px); --c: 232,135,106; transform: scaleX(-1); }
-.mbeam::before { content: ""; position: absolute; right: 0; top: 50%; width: 100%; height: 70px; margin-top: -35px; background: radial-gradient(farthest-side at 100% 50%, rgba(var(--c), .6), rgba(var(--c), 0)); filter: blur(14px); }
-.mstreams { position: absolute; inset: 0; }
-.mstreams .st, .mstreams .tw { fill: none; stroke-width: 1; stroke-linecap: round; }
-.mstreams .tw { stroke-width: var(--sw, 1.4); opacity: 0; animation: tw-in var(--d) linear var(--del) infinite; }
-@keyframes tw-in { 0% { stroke-dashoffset: -100; opacity: 0; } 35% { opacity: var(--o); } 90% { opacity: var(--o); } 100% { stroke-dashoffset: var(--L); opacity: 0; } }
-.mstreams .sp { animation: twinkle var(--d) ease-in-out var(--del) infinite; }
+.mstreams, .mbake { position: absolute; left: 0; top: 0; }
 /* the core: white-hot by the pill, fading out far away, light running in */
 .mcore { position: absolute; right: 0; top: 50%; width: 100%; height: 2px; margin-top: -1px; overflow: hidden;
 	background: linear-gradient(90deg, rgba(var(--c), 0), rgba(var(--c), .7) 45%, #fff); box-shadow: 0 0 8px 1px rgba(var(--c), .9), 0 0 22px 4px rgba(var(--c), .45); }
-.mcore::after { content: ""; position: absolute; top: 0; height: 2px; width: 120px; background: linear-gradient(90deg, #fff0, #fff, #fff0); animation: streak 2.2s cubic-bezier(.5, 0, .7, 1) infinite; }
+.mcore::after { content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 120px; background: linear-gradient(90deg, #fff0, #fff, #fff0); transform: translateX(-120px); animation: streak 2.2s cubic-bezier(.5, 0, .7, 1) infinite; }
 .mbeam-r .mcore::after { animation-delay: -1.1s; }
-@keyframes streak { from { left: -120px; } to { left: 100%; } }
+@keyframes streak { from { transform: translateX(-120px); } to { transform: translateX(640px); } }
 
 .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
 .mode-card {
