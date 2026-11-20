@@ -15,6 +15,7 @@ import "../engine"
 //   pc_apply(h, batch, batch_len) -> ptr                  {"ok", "reason"?, "skipped": [i], "deleted": [ids], "ops": [as applied]}
 //   pc_serialize(h) -> ptr                                the .pen bytes
 //   pc_state(h) -> ptr                                    {"nodes": {id: {"parent", "sort", "slot"}}}
+//   pc_diff(h, pen, pen_len) -> ptr                       {"ok", "reason"?, "ops": [...]}: what turns h into that .pen
 //   pc_close(h)
 //   pc_result_len() -> int                                the byte length of the last returned ptr
 //
@@ -148,6 +149,38 @@ pc_apply :: proc "contextless" (h: int, batch: [^]u8, batch_len: int) -> rawptr 
 			if k > 0 do strings.write_byte(&b, ',')
 			engine.op_write(&b, c)
 		}
+	}
+	strings.write_string(&b, "]}")
+	return give(strings.to_string(b))
+}
+
+// The ops that turn document h into `pen` (a new upload of a live document: the room applies
+// them as batches, so everyone in it gets the upload as an edit). Nodes match by id;
+// sort keys for new and moved nodes come from h's. h itself does not change.
+@(export)
+pc_diff :: proc "contextless" (h: int, pen: [^]u8, pen_len: int) -> rawptr {
+	context = ctx()
+	defer free_all(context.temp_allocator)
+	e, found := docs[h]
+	if !found do return give(`{"ok":false,"reason":"NO_DOCUMENT","ops":[]}`)
+	target: engine.Document
+	if !engine.doc_load(&target, strings.clone(string(pen[:pen_len]))) do return give(`{"ok":false,"reason":"BAD_PEN","ops":[]}`)
+	defer engine.doc_clear(&target)
+	// the diff writes the keys it hands out into a state (a copy: applying the ops sets them
+	// for real), and clones them: all of it in this call's temporary memory
+	keys := engine.Cloud_State{}
+	keys.sorts = make(map[string]string, len(e.state.sorts), context.temp_allocator)
+	for k, v in e.state.sorts do keys.sorts[k] = v
+	ops: [dynamic]engine.Op
+	{
+		context.allocator = context.temp_allocator
+		ops = engine.ops_diff(e.doc.nodes[:], target.nodes[:], e.doc.header[:], target.header[:], &keys)
+	}
+	b := strings.builder_make(context.temp_allocator)
+	strings.write_string(&b, `{"ok":true,"ops":[`)
+	for op, k in ops {
+		if k > 0 do strings.write_byte(&b, ',')
+		engine.op_write(&b, op)
 	}
 	strings.write_string(&b, "]}")
 	return give(strings.to_string(b))

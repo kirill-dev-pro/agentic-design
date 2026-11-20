@@ -4,6 +4,7 @@
 import { and, desc, eq, inArray, isNotNull, isNull, sum, count } from 'drizzle-orm'
 import * as v from 'valibot'
 import { WorkerstackError } from 'workerstack'
+import { registeredWorker } from 'workerstack/workers'
 
 import { blobKey, bucket, secretOf, sniffOk, TYPES, uploadTarget, appUrl, type App } from './blobs'
 import { randomToken, seal, sha256Hex, unseal } from './crypto'
@@ -227,7 +228,39 @@ async function startUpload(app: App, request: Request, ws: Workspace, userId: st
 	return { docId, versionId: ver.id as string, uploads }
 }
 
-async function commit(app: App, request: Request, ws: Workspace, docId: string, versionId: string, name?: string) {
+type RoomNs = { idFromName(n: string): unknown; get(id: unknown): { fetch(i: string, init?: RequestInit): Promise<Response> } }
+
+/**
+ * A new upload of a live document (its room has started; cloud-design decision 21): the room's
+ * document becomes the upload before the head moves, as an edit by the uploader that everyone
+ * with the file open gets. Without this the room kept its own document, and the head showed for a
+ * moment until the room's replaced it. Safe to repeat: the room diffs from what it has.
+ */
+async function replaceInRoom(app: App, ws: Workspace, docId: string, versionId: string, m: Manifest, by: { id: string; name?: string }) {
+	// the room's namespace is a Worker binding, not an env string: from the isolate's registered env
+	const ns = (registeredWorker()?.env as { DOC_ROOM?: RoomNs } | undefined)?.DOC_ROOM
+	if (!ns) return // no rooms here, so nothing is live
+	const unavailable = (why?: string) =>
+		fail('CONFLICT', 'ROOM_UNAVAILABLE', `The live file could not take this version${why ? ` (${why})` : ''}; try again`)
+	const blob = await bucket(app).get(blobKey(ws.id, m.pen.hash))
+	if (!blob.ok) unavailable()
+	const pen = await blob.text()
+	let res: Response | null = null
+	try {
+		res = await ns.get(ns.idFromName(docId)).fetch('https://room/replace', {
+			method: 'POST',
+			body: JSON.stringify({ pen, versionId, userId: by.id, name: by.name, assets: m.assets }),
+		})
+	} catch (error) {
+		console.error('[files] the room did not answer', String(error))
+	}
+	if (!res?.ok) {
+		const body = (res ? await res.json().catch(() => ({})) : {}) as { reason?: string }
+		unavailable(body.reason)
+	}
+}
+
+async function commit(app: App, request: Request, ws: Workspace, docId: string, versionId: string, by: { id: string; name?: string }, name?: string) {
 	const doc = await ownDoc(app, ws, docId)
 	const [ver] = await app.db
 		.select()
@@ -280,6 +313,7 @@ async function commit(app: App, request: Request, ws: Workspace, docId: string, 
 	if (incomplete.length) fail('BAD_REQUEST', 'UPLOAD_INCOMPLETE', 'Some files were not uploaded', { missing: incomplete })
 	const usage = await usageOf(app, ws.id)
 	if (usage.storageBytes > ws.entitlements.storageBytes) fail('FORBIDDEN', 'QUOTA_EXCEEDED', 'The plan has no room for these files')
+	if (doc.kind === 'cloud') await replaceInRoom(app, ws, docId, versionId, m, by)
 	const now = new Date()
 	await app.db.update(version).set({ status: 'committed', committedAt: now }).where(eq(version.id, versionId))
 	const [updated] = await app.db
@@ -365,8 +399,8 @@ export function fileRoutes(o: any) {
 			.route({ method: 'POST', path: '/api/docs/{docId}/versions/{versionId}/commit' })
 			.input(v.object({ docId: v.string(), versionId: v.string() }))
 			.handler(async ({ input, context }: any) => {
-				const [app, ws] = await ctxWs(context)
-				return commit(app, context.request, ws, input.docId, input.versionId)
+				const [app, ws, userId] = await ctxWs(context)
+				return commit(app, context.request, ws, input.docId, input.versionId, { id: userId, name: context.user.name })
 			}),
 
 		renameFile: o.protected

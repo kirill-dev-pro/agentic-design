@@ -36,6 +36,8 @@ export type Pencore = {
 	apply(h: number, batch: { ops: Op[] }): { ok: boolean; reason?: string; skipped?: number[]; deleted?: string[]; ops?: Op[] }
 	serialize(h: number): string
 	state(h: number): { nodes: Record<string, { parent: string; sort: string; slot: string }> }
+	/** The ops that turn document h into `pen` (h does not change). */
+	diff(h: number, pen: string): { ok: boolean; reason?: string; ops: Op[] }
 	close(h: number): void
 }
 
@@ -128,6 +130,40 @@ export class Room {
 			reply: ack,
 			broadcast: { t: 'ops', seq: this.seq, batch: b.batch, author: who.userId, agent: b.agent ?? null, ops: r.ops ?? ops },
 		}
+	}
+
+	/**
+	 * A new upload of the document (the owner shared the local file again): the ops that turn the
+	 * room's document into `pen`, submitted by `who` as ordinary batches, so that everyone in the
+	 * room gets the upload as an edit and the log and checkpoints carry it. Batches hold at most
+	 * `maxBytes` of ops each (the op log's rows and the socket's messages have limits); each is
+	 * applied whole, in order. A retry is safe: the diff starts from what the room has, and an
+	 * upload already in it is no ops at all.
+	 */
+	upload(who: Principal, pen: string, id: string, maxBytes = 512 * 1024): { ok: true; broadcasts: Broadcast[] } | { ok: false; reason: string; broadcasts: Broadcast[] } {
+		const d = this.pc.diff(this.h, pen)
+		if (!d.ok) return { ok: false, reason: d.reason ?? 'BAD_PEN', broadcasts: [] }
+		const chunks: Op[][] = []
+		let cur: Op[] = []
+		let bytes = 0
+		for (const op of d.ops) {
+			const n = JSON.stringify(op).length + 1
+			if (cur.length && (bytes + n > maxBytes || cur.length >= this.opts.maxOpsPerBatch)) {
+				chunks.push(cur)
+				cur = []
+				bytes = 0
+			}
+			cur.push(op)
+			bytes += n
+		}
+		if (cur.length) chunks.push(cur)
+		const broadcasts: Broadcast[] = []
+		for (const ops of chunks) {
+			const { reply, broadcast } = this.submit(who, { batch: `${id}:${this.seq}`, base: this.seq, ops, agent: null })
+			if (reply.t === 'nack') return { ok: false, reason: reply.reason, broadcasts }
+			if (broadcast) broadcasts.push(broadcast)
+		}
+		return { ok: true, broadcasts }
 	}
 
 	/** What the room needs to start again after an eviction: its text, sort keys, tombstones and seq. */

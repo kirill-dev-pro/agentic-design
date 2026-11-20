@@ -96,7 +96,8 @@ parallel with the site; execution plan with Dev and Web):
     it creates a cloud document, opens it and gives its link. The local file is not linked
     to the copy, and the two may diverge. This retires M1's "upload a new version behind
     the same link": M1 shared files become cloud documents (their latest upload is the
-    first checkpoint, their links keep working).
+    first checkpoint, their links keep working). Amended by 21: sharing a file again
+    updates the cloud file it went to, live.
 15. **The hosted cloud agent is paid.** It runs on the service's side with its own LLM
     provider: the agent input in the web editor, and one of the choices in the Mac app. It
     is metered per account and checked against an entitlement. People's own agents (Claude
@@ -148,6 +149,20 @@ parallel with the site; execution plan with Dev and Web):
     selection travels with their pointer and is outlined in their colour on the others'
     canvases, for every role. Live editing in the app is macOS only for
     now (NSURLSessionWebSocketTask); Windows and Linux open cloud files in the browser.
+
+**Owner's decision of 2026-11-20** (amends 14):
+
+21. **Sharing a local file again updates its cloud file, live.** The app remembers which
+    cloud file a local file went to (`shared.json`), and sharing it again uploads a new
+    version of that file. When the file is live (its room has started), the room's document
+    becomes the upload before the head moves: the Worker hands the .pen to the room
+    (`/replace`), the room diffs it against its document (pencore's `pc_diff`, the
+    engine's `ops_diff`) and applies the result as batches by the owner, which everyone with
+    the file open gets like any edit and the log and checkpoints carry. Edits made in the
+    cloud since are overwritten where the upload differs (they stay in the history as
+    checkpoints). If the room cannot take it, the commit fails with `ROOM_UNAVAILABLE` and
+    the head does not move. Before this the room kept its own document: `/d/<id>` showed the
+    upload for a moment, then the room's older one replaced it.
 
 ---
 

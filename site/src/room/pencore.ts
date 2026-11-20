@@ -51,6 +51,13 @@ export async function loadPencore(source: WebAssembly.Module | BufferSource): Pr
 			x.pc_free(p)
 			return r
 		},
+		diff(h, pen) {
+			if (typeof x.pc_diff !== 'function') return { ok: false, reason: 'ENGINE_TOO_OLD', ops: [] }
+			const [p, l] = put(pen)
+			const r = JSON.parse(take(x.pc_diff(h, p, l)))
+			x.pc_free(p)
+			return r
+		},
 		serialize: (h) => take(x.pc_serialize(h)),
 		state: (h) => JSON.parse(take(x.pc_state(h))),
 		close: (h) => x.pc_close(h),

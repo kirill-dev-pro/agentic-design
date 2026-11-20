@@ -14,7 +14,7 @@
 import { DurableObject, type HibernatableWebSocket } from 'workerstack/durable'
 
 import { loadPencore } from './pencore'
-import { Room, type Batch, type Op, type Principal } from './room'
+import { Room, type Batch, type Broadcast, type Op, type Principal } from './room'
 
 const WIRE = 1
 const MAX_MESSAGE = 1024 * 1024
@@ -158,6 +158,30 @@ export class DocRoom extends DurableObject {
 					}
 			return Response.json({ sent })
 		}
+		if (url.pathname === '/replace' && request.method === 'POST') {
+			// The Worker before a new upload of a live document becomes its head (src/files.ts): the
+			// room's document becomes the upload, as batches by the owner that everyone here gets
+			// like any edit. A room that never started has nothing to change (it starts from the head).
+			if (!this.snapshotRow()) return Response.json({ ok: true, live: false })
+			const { pen, versionId, userId, name, assets = [] } = (await request.json()) as {
+				pen: string
+				versionId: string
+				userId: string
+				name?: string
+				assets?: { path: string; hash: string; size: number; type: string }[]
+			}
+			const room = await this.load()
+			if (!room) return Response.json({ ok: true, live: false })
+			const r = room.upload({ userId, name: name ?? 'Someone', role: 'owner' }, pen, `upload:${versionId}`)
+			// what was applied is logged and sent, even when a later batch was refused
+			for (const b of r.broadcasts) this.logBatch(b)
+			for (const a of assets)
+				this.ctx.storage.sql.exec('INSERT OR REPLACE INTO room_assets (path, hash, size, type) VALUES (?, ?, ?, ?)', a.path, a.hash, a.size, a.type)
+			if (r.broadcasts.length) await this.batchDone()
+			for (const b of r.broadcasts) this.broadcast(null, b)
+			if (!r.ok) return Response.json({ ok: false, reason: r.reason, seq: room.seq }, { status: 409 })
+			return Response.json({ ok: true, live: true, batches: r.broadcasts.length, seq: room.seq })
+		}
 		if (url.pathname === '/init' && request.method === 'POST') {
 			if (this.snapshotRow()) return Response.json({ ok: true, already: true })
 			const { pen, docId, assets = [] } = (await request.json()) as {
@@ -251,26 +275,8 @@ export class DocRoom extends DurableObject {
 			if (typeof b.batch !== 'string' || !Array.isArray(b.ops)) return send(socket, { t: 'nack', batch: b.batch, reason: 'BAD_OP' })
 			const { reply, broadcast } = room.submit(att.who, b)
 			if (broadcast) {
-				this.ctx.storage.sql.exec(
-					'INSERT INTO ops (seq, batch, author, agent, at, ops) VALUES (?, ?, ?, ?, ?, ?)',
-					broadcast.seq,
-					broadcast.batch,
-					broadcast.author,
-					broadcast.agent ? JSON.stringify(broadcast.agent) : null,
-					Date.now(),
-					JSON.stringify(broadcast.ops),
-				)
-				for (const op of broadcast.ops)
-					if (op.op === 'asset')
-						this.ctx.storage.sql.exec(
-							`INSERT INTO room_assets (path, hash, size, type) VALUES (?, ?, 0, ?)
-							 ON CONFLICT(path) DO UPDATE SET hash = excluded.hash, type = excluded.type`,
-							op.path,
-							op.hash,
-							op.type,
-						)
-				this.setMeta('lastBatchAt', Date.now())
-				if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + SNAPSHOT_AFTER_MS)
+				this.logBatch(broadcast)
+				await this.batchDone()
 			}
 			// The ops row is written before either message leaves (the output gate holds them until it is durable).
 			send(socket, reply)
@@ -346,11 +352,41 @@ export class DocRoom extends DurableObject {
 
 	// ------------------------------------------------------------ helpers
 
-	private others(socket: HibernatableWebSocket) {
+	/** An acknowledged batch into the op log (and its assets into the room's manifest). */
+	private logBatch(broadcast: Broadcast) {
+		const sql = this.ctx.storage.sql
+		sql.exec(
+			'INSERT INTO ops (seq, batch, author, agent, at, ops) VALUES (?, ?, ?, ?, ?, ?)',
+			broadcast.seq,
+			broadcast.batch,
+			broadcast.author,
+			broadcast.agent ? JSON.stringify(broadcast.agent) : null,
+			Date.now(),
+			JSON.stringify(broadcast.ops),
+		)
+		for (const op of broadcast.ops)
+			if (op.op === 'asset')
+				sql.exec(
+					`INSERT INTO room_assets (path, hash, size, type) VALUES (?, ?, 0, ?)
+					 ON CONFLICT(path) DO UPDATE SET hash = excluded.hash, type = excluded.type`,
+					op.path,
+					op.hash,
+					op.type,
+				)
+	}
+
+	/** After logged batches: the snapshot soon, the checkpoint once the document rests. */
+	private async batchDone() {
+		this.setMeta('lastBatchAt', Date.now())
+		if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + SNAPSHOT_AFTER_MS)
+	}
+
+	/** Every socket but `socket` (all of them for null). */
+	private others(socket: HibernatableWebSocket | null) {
 		return (this.ctx.getWebSockets() as HibernatableWebSocket[]).filter((s) => s !== socket)
 	}
 
-	private broadcast(from: HibernatableWebSocket, msg: unknown) {
+	private broadcast(from: HibernatableWebSocket | null, msg: unknown) {
 		const text = JSON.stringify(msg)
 		for (const peer of this.others(from))
 			if ((peer.deserializeAttachment() as Attachment | null)?.joined)
